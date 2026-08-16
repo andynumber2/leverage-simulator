@@ -13,5 +13,9 @@ declare module 'vitest/internal/browser' {
   interface BrowserCommands {
     recordMeasurement: (row: MeasurementRow) => Promise<null>
     recordEnvironment: (block: BrowserCapturedEnvironment) => Promise<null>
+    /** Task 2 (01-02): free-text reproducibility info line, keyed by `id`, printed by
+     * bench/global-setup.ts alongside the measurement table. See bench/accumulator-store.ts's
+     * `persistInfoLine` header comment for why this exists. */
+    recordInfoLine: (id: string, line: string) => Promise<null>
   }
 }

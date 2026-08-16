@@ -70,3 +70,32 @@ export async function loadCapturedEnvironment(): Promise<EnvironmentBlock | null
     return null
   }
 }
+
+/**
+ * Free-text info lines a `*.bench.test.ts` file wants printed in the run's stdout table
+ * alongside the measurement rows (e.g. bench/sweep.bench.test.ts's resolved worker count and
+ * chosen chunk count, for PERF-03 reproducibility). Not part of MeasurementRow's typed shape —
+ * this is deliberately a narrow, additive escape hatch rather than a change to the row schema.
+ * Added in Task 2 of plan 01-02 because a browser-context `console.log` does not reach
+ * `npm run bench`'s stdout under the default (non-verbose) Vitest reporter — verified
+ * empirically: the same log line appears only with `--reporter=verbose`, which this project's
+ * `bench` script does not pass. Persisted the same way as every other browser-to-Node payload in
+ * this file, for the same module-instance-boundary reason documented at the top of this file.
+ */
+export async function persistInfoLine(id: string, line: string): Promise<void> {
+  await mkdir(RAW_DIR, { recursive: true })
+  await writeFile(join(RAW_DIR, `info-${id}.json`), JSON.stringify(line), 'utf8')
+}
+
+export async function loadInfoLines(): Promise<string[]> {
+  await mkdir(RAW_DIR, { recursive: true })
+  const entries = await readdir(RAW_DIR)
+  const infoFiles = entries.filter((name) => name.startsWith('info-') && name.endsWith('.json'))
+  const lines: string[] = []
+  for (const file of infoFiles) {
+    // eslint-disable-next-line no-await-in-loop
+    const content = await readFile(join(RAW_DIR, file), 'utf8')
+    lines.push(JSON.parse(content) as string)
+  }
+  return lines.sort()
+}

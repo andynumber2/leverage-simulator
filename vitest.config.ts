@@ -1,7 +1,7 @@
 import { playwright } from '@vitest/browser-playwright'
 import { defineConfig } from 'vitest/config'
 
-import { persistEnvironment, persistMeasurement } from './bench/accumulator-store.ts'
+import { persistEnvironment, persistInfoLine, persistMeasurement } from './bench/accumulator-store.ts'
 import type { BrowserCapturedEnvironment } from './bench/environment-block.ts'
 import type { MeasurementRow } from './bench/report.ts'
 
@@ -45,6 +45,14 @@ export default defineConfig({
               },
               recordEnvironment: async (_context, block: BrowserCapturedEnvironment) => {
                 await persistEnvironment(block)
+                return null
+              },
+              // Task 2 (01-02): browser-context console.log does not reach `npm run bench`'s
+              // stdout under the default reporter (verified empirically); this command routes
+              // free-text reproducibility info (e.g. sweep worker/chunk counts) through the same
+              // filesystem-backed bridge as recordMeasurement/recordEnvironment.
+              recordInfoLine: async (_context, id: string, line: string) => {
+                await persistInfoLine(id, line)
                 return null
               },
             },

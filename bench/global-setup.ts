@@ -13,7 +13,12 @@
 import { mkdir, rename, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 
-import { loadAccumulatedRows, loadCapturedEnvironment, resetAccumulatorStore } from './accumulator-store.ts'
+import {
+  loadAccumulatedRows,
+  loadCapturedEnvironment,
+  loadInfoLines,
+  resetAccumulatorStore,
+} from './accumulator-store.ts'
 import { assertRunInvariants, buildFullRowSet, renderTable } from './report.ts'
 
 const RESULTS_DIR = join(process.cwd(), '.bench')
@@ -40,6 +45,12 @@ export default async function setup(): Promise<() => Promise<void>> {
 
     // eslint-disable-next-line no-console
     console.log(renderTable(rows, environment, totalRuntimeMs))
+
+    const infoLines = await loadInfoLines()
+    if (infoLines.length > 0) {
+      // eslint-disable-next-line no-console
+      console.log(infoLines.join('\n'))
+    }
 
     await mkdir(RESULTS_DIR, { recursive: true })
     const tmpPath = join(dirname(RESULTS_PATH), `.bench-results.json.tmp-${process.pid}`)
