@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-08-16)
 Phase: 01 (performance-spike-and-budget-lock) — EXECUTING
 Plan: 3 of 6
 Status: Ready to execute
-Last activity: 2026-08-16 - Completed quick task 260816-p8z: Make the bench calibration score canonical per run
+Last activity: 2026-08-16 - Completed quick task 260816-qae: Record the D-20 escalation for PERF-03 against the real CI baseline and correct docs citing sandbox figures
 
 Progress: [██████████] 100%
 
@@ -121,6 +121,7 @@ None yet.
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
 | 260816-p8z | Make the bench calibration score canonical per run | 2026-08-16 | e345a88 | [260816-p8z-make-the-bench-calibration-score-canonic](./quick/260816-p8z-make-the-bench-calibration-score-canonic/) |
+| 260816-qae | Record the D-20 escalation for PERF-03 against the real CI baseline and correct docs citing sandbox figures | 2026-08-16 | 8c5a250 | [260816-qae-record-the-d-20-escalation-for-perf-03-a](./quick/260816-qae-record-the-d-20-escalation-for-perf-03-a/) |
 
 ## Deferred Items
 
