@@ -52,7 +52,13 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. One command (`npm run bench`) prints every metric named in PERF-02 through PERF-09, marking not-yet-built paths as unmeasured rather than silently omitting them, so performance is checkable at any point during development.
   4. The budget file carries a numeric threshold for each of PERF-02 through PERF-09, each annotated with its perception anchor (16ms = one frame, 100ms = feels instant, 1s = holds attention). Any threshold set looser than its anchor carries a written reason and an accompanying Key Decision, and an unreachable target is escalated as an architecture change rather than relaxed automatically.
   5. A deliberately regressed commit fails CI on a budget breach, proving the gate is live rather than declared.
-**Plans**: TBD
+**Plans:** 4 plans
+
+Plans:
+- [ ] 01-01-PLAN.md: Tracer. `npm run bench` measures a real 10,000-cell Canvas repaint in headless Chromium, gates it against the locked typed budget file, and CI proves the gate goes red
+- [ ] 01-02-PLAN.md: JS compute arm. Seeded 25,000-bar series, branchy per-bar recurrence (PERF-02), and a real Worker-pool sweep of 10,000 cells (PERF-03)
+- [ ] 01-03-PLAN.md: Canvas arms. `fillRect`-per-cell versus a single `putImageData` pass on the same grid, with a paint-equivalence proof before either timing is trusted
+- [ ] 01-04-PLAN.md: Throwaway Rust WASM microbenchmark, SPIKE-RESULTS record, and the two architecture Key Decisions citing their measured figures
 
 ### Phase 2: Compiled Data Bundle
 **Goal**: Every number the app will ever show traces back to a real, dated, sourced series, and adding a symbol is a CSV drop plus a recompile
