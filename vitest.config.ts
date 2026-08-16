@@ -1,0 +1,56 @@
+import { playwright } from '@vitest/browser-playwright'
+import { defineConfig } from 'vitest/config'
+
+import { persistEnvironment, persistMeasurement } from './bench/accumulator-store.ts'
+import type { BrowserCapturedEnvironment } from './bench/environment-block.ts'
+import type { MeasurementRow } from './bench/report.ts'
+
+export default defineConfig({
+  test: {
+    projects: [
+      {
+        test: {
+          name: 'unit',
+          environment: 'node',
+          include: ['tests/**/*.test.ts'],
+        },
+      },
+      {
+        test: {
+          name: 'bench',
+          include: ['bench/**/*.bench.test.ts'],
+          // D-02/D-03: no two timed measurements ever execute concurrently, so runner noise
+          // from one measurement cannot bleed into another's wall-clock figure.
+          fileParallelism: false,
+          globalSetup: ['./bench/global-setup.ts'],
+          browser: {
+            enabled: true,
+            provider: playwright(),
+            headless: true,
+            instances: [{ browser: 'chromium' }],
+            // The browser-to-Node bridge (RESEARCH.md's preferred mechanism over the stdout
+            // marker-protocol fallback): a bench test calls `commands.recordMeasurement(row)` /
+            // `commands.recordEnvironment(block)` from inside the browser context, and these
+            // implementations — which run in the Node process hosting the browser instance —
+            // persist the payload to `.bench/.raw/` via bench/accumulator-store.ts, which
+            // bench/global-setup.ts's teardown reads back at run end. Persisting to disk (rather
+            // than an in-memory module accumulator) is required here: the command
+            // implementation and global-setup run as separate vite-node module instances even
+            // within the same OS process, so a plain in-memory array does not survive the
+            // boundary (verified empirically during implementation).
+            commands: {
+              recordMeasurement: async (_context, row: MeasurementRow) => {
+                await persistMeasurement(row)
+                return null
+              },
+              recordEnvironment: async (_context, block: BrowserCapturedEnvironment) => {
+                await persistEnvironment(block)
+                return null
+              },
+            },
+          },
+        },
+      },
+    ],
+  },
+})

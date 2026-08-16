@@ -1,0 +1,16 @@
+node_modules/
+.bench/
+dist/
+
+# Playwright local caches / artifacts
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+
+# Vitest browser-mode failure attachments (screenshots taken on a failing assertion)
+.vitest-attachments/
+**/__screenshots__/
+
+# Editor / OS noise
+.DS_Store
