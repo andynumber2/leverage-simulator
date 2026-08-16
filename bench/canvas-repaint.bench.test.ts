@@ -31,12 +31,21 @@ import {
   type RgbaColor,
 } from './canvas-grid.ts'
 import { PERF_BUDGETS } from '../perf-budgets.ts'
-import { calibrationScore, measureMinOfN, normalize, REPEAT_COUNT } from './calibration.ts'
+import { calibrationScore, measureBatchedMinOfN, normalize, REPEAT_COUNT } from './calibration.ts'
 import { captureEnvironment } from './environment-block.ts'
 import { assertWithinBudget, checkBudget, type MeasurementRow } from './report.ts'
 
 const CANVAS_WIDTH = GRID_COLS * CELL_SIZE_PX
 const CANVAS_HEIGHT = GRID_ROWS * CELL_SIZE_PX
+
+// Both arms' raw single-call cost is under measureMinOfN's MIN_MEASUREMENT_MS floor (the
+// fillRect arm's recorded normalized figure of 4.41ms against a 0.57 calibration score implies a
+// raw cost of roughly 2.5ms/call; the putImageData arm recorded a literal 0ms raw). Each arm
+// amortizes through its own batch size and divides by that same size, so the two per-call
+// figures stay directly comparable and the PERF-05 winner comparison is unchanged in meaning.
+// Tuned empirically per Task 1 Step 6.
+const FILL_RECT_BATCH_SIZE = 8
+const PUT_IMAGE_DATA_BATCH_SIZE = 500
 
 /** A background no `mapValueToRgba` output can ever equal: `mapValueToRgba` always returns
  * green=64, so any background with a different green channel is safe from a vacuous match. */
@@ -151,13 +160,13 @@ test('PERF-05: both hand-rolled canvas arms measured on the identical 10,000-cel
   const score = calibrationScore()
 
   const { ctx: fillRectCtx } = makeDisplayCanvas()
-  const fillRectRawMs = await measureMinOfN(REPEAT_COUNT, () => {
+  const fillRectRawMs = await measureBatchedMinOfN(REPEAT_COUNT, FILL_RECT_BATCH_SIZE, () => {
     paintFillRect(fillRectCtx, values)
   })
   const fillRectNormalizedMs = normalize(fillRectRawMs, score)
 
   const { ctx: putImageDataCtx } = makeDisplayCanvas()
-  const putImageDataRawMs = await measureMinOfN(REPEAT_COUNT, () => {
+  const putImageDataRawMs = await measureBatchedMinOfN(REPEAT_COUNT, PUT_IMAGE_DATA_BATCH_SIZE, () => {
     paintPutImageData(putImageDataCtx, values)
   })
   const putImageDataNormalizedMs = normalize(putImageDataRawMs, score)
@@ -187,12 +196,16 @@ test('PERF-05: both hand-rolled canvas arms measured on the identical 10,000-cel
   }
   await commands.recordMeasurement(row)
 
-  // Reproducibility (D-15): print both arms' figures and name which one the PERF-05 verdict was
-  // asserted against, so the record preserves the comparison rather than only the winner.
+  // Reproducibility (D-15, T-01-14): print both arms' figures, both batch sizes and both batch
+  // minimums, and name which one the PERF-05 verdict was asserted against, so the record
+  // preserves the comparison and the amortization rather than only the winner. Each batch minimum
+  // is recovered by multiplying its arm's per-call raw figure back out by its own batch size.
   await commands.recordInfoLine(
     'PERF-05-canvas-arms',
     `PERF-05 canvas arms: fillRect=${fillRectNormalizedMs.toFixed(2)}ms ` +
+      `(batchSize=${FILL_RECT_BATCH_SIZE} batchMinMs=${(fillRectRawMs * FILL_RECT_BATCH_SIZE).toFixed(4)}) ` +
       `putImageData=${putImageDataNormalizedMs.toFixed(2)}ms ` +
+      `(batchSize=${PUT_IMAGE_DATA_BATCH_SIZE} batchMinMs=${(putImageDataRawMs * PUT_IMAGE_DATA_BATCH_SIZE).toFixed(4)}) ` +
       `winner=${winner.name} (asserted against PERF-05) loser=${loser.name}`,
   )
 

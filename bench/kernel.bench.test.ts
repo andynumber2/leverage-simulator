@@ -8,11 +8,17 @@ import { commands } from 'vitest/browser'
 import { expect, test } from 'vitest'
 
 import { PERF_BUDGETS } from '../perf-budgets.ts'
-import { calibrationScore, measureMinOfN, normalize, REPEAT_COUNT } from './calibration.ts'
+import { calibrationScore, measureBatchedMinOfN, normalize, REPEAT_COUNT } from './calibration.ts'
 import { captureEnvironment } from './environment-block.ts'
 import { runSpikeBacktest, type SpikeKernelParams } from './kernel.ts'
 import { assertWithinBudget, checkBudget, type MeasurementRow } from './report.ts'
 import { BAR_COUNT, makeSeededGbmSeries } from './synthetic-data.ts'
+
+// A single call's raw cost (recorded at 0.09999999962747097ms in 01-SPIKE-RESULTS.md section 2)
+// is under measureMinOfN's MIN_MEASUREMENT_MS floor. 500 calls per timed unit lands near 50ms,
+// roughly five times the floor, at a total repeat cost (500 * 5 repeats) well inside
+// BENCH_TOTAL_RUNTIME_CAP_MS, tuned empirically per Task 1 Step 6.
+const PERF_02_BATCH_SIZE = 500
 
 test('PERF-02: a single full-history backtest over 25,000 bars stays under budget', async () => {
   // Series and output buffers preallocated once, outside the timed region, per D-06/F1 — the
@@ -31,12 +37,21 @@ test('PERF-02: a single full-history backtest over 25,000 bars stays under budge
   }
 
   const score = calibrationScore()
-  const rawMs = await measureMinOfN(REPEAT_COUNT, () => {
+  const rawMs = await measureBatchedMinOfN(REPEAT_COUNT, PERF_02_BATCH_SIZE, () => {
     runSpikeBacktest(params, series, outValue, outRuined)
   })
   const normalizedMs = normalize(rawMs, score)
 
   await commands.recordEnvironment(captureEnvironment(score))
+
+  // Reproducibility (T-01-14): print the batch size and the batch minimum the per-call figure
+  // was derived from, so the amortization is disclosed rather than implied. The batch minimum is
+  // recovered by multiplying the per-call figure back out: the exact inverse of the division
+  // measureBatchedMinOfN performs.
+  await commands.recordInfoLine(
+    'PERF-02-batch',
+    `PERF-02 batch: batchSize=${PERF_02_BATCH_SIZE} batchMinMs=${(rawMs * PERF_02_BATCH_SIZE).toFixed(4)} perCallMs=${rawMs.toFixed(4)}`,
+  )
 
   const budget = PERF_BUDGETS['PERF-02']
   const row: MeasurementRow = {
