@@ -5,16 +5,18 @@
  * Task 2 `<behavior>` blocks.
  */
 
-import { describe, expect, test } from 'vitest'
+import { afterEach, beforeEach, describe, expect, test } from 'vitest'
 
 import { BENCH_TOTAL_RUNTIME_CAP_MS } from '../perf-budgets.ts'
 import {
   assertRunInvariants,
+  assertWithinBudget,
   checkBudget,
   escalationTriggered,
   formatMeasured,
   renderTable,
 } from '../bench/report.ts'
+import { resolveBenchResultsDir } from '../bench/accumulator-store.ts'
 import type { EnvironmentBlock } from '../bench/environment-block.ts'
 import type { MeasurementRow } from '../bench/report.ts'
 
@@ -172,5 +174,111 @@ describe('assertRunInvariants', () => {
 
   test('a fully-measured, in-budget row set does not throw', () => {
     expect(() => assertRunInvariants(fullRowSet, 500)).not.toThrow()
+  })
+
+  test('throws when any row carries verdict fail, naming the failing budget id', () => {
+    const withFailure = fullRowSet.map((r) =>
+      r.budgetId === 'PERF-05' ? { ...r, normalizedMs: 100, verdict: 'fail' as const } : r,
+    )
+    expect(() => assertRunInvariants(withFailure, 500)).toThrow(/PERF-05/)
+    expect(() => assertRunInvariants(withFailure, 500)).toThrow(/failed budget/i)
+  })
+
+  test('two failing rows supplied in reverse budget-id order produce the same message as ascending order', () => {
+    const ascending = fullRowSet.map((r) => {
+      if (r.budgetId === 'PERF-05') return { ...r, normalizedMs: 100, verdict: 'fail' as const }
+      if (r.budgetId === 'PERF-08a') return { ...r, normalizedMs: 5000, verdict: 'fail' as const }
+      return r
+    })
+    const descending = [...ascending].reverse()
+
+    let ascendingMessage = ''
+    let descendingMessage = ''
+    try {
+      assertRunInvariants(ascending, 500)
+    } catch (error) {
+      ascendingMessage = (error as Error).message
+    }
+    try {
+      assertRunInvariants(descending, 500)
+    } catch (error) {
+      descendingMessage = (error as Error).message
+    }
+    expect(ascendingMessage).not.toBe('')
+    expect(ascendingMessage).toBe(descendingMessage)
+    // PERF-05 sorts before PERF-08a ascending, so it must appear first regardless of input order.
+    expect(ascendingMessage.indexOf('PERF-05')).toBeLessThan(ascendingMessage.indexOf('PERF-08a'))
+  })
+})
+
+describe('assertWithinBudget', () => {
+  test('throws naming the budget id, the normalized value and the budget value when over budget', () => {
+    expect(() =>
+      assertWithinBudget({ budgetId: 'PERF-05', normalizedMs: 100, budgetMs: 16 }),
+    ).toThrow(/PERF-05/)
+    expect(() =>
+      assertWithinBudget({ budgetId: 'PERF-05', normalizedMs: 100, budgetMs: 16 }),
+    ).toThrow(/100/)
+    expect(() =>
+      assertWithinBudget({ budgetId: 'PERF-05', normalizedMs: 100, budgetMs: 16 }),
+    ).toThrow(/16/)
+  })
+
+  test('does not throw for a passing verdict', () => {
+    expect(() =>
+      assertWithinBudget({ budgetId: 'PERF-05', normalizedMs: 10, budgetMs: 16 }),
+    ).not.toThrow()
+  })
+
+  test('does not throw for an unmeasured row', () => {
+    expect(() =>
+      assertWithinBudget({ budgetId: 'PERF-05', normalizedMs: null, budgetMs: 16 }),
+    ).not.toThrow()
+  })
+
+  test('does not throw at exact equality', () => {
+    expect(() =>
+      assertWithinBudget({ budgetId: 'PERF-05', normalizedMs: 16, budgetMs: 16 }),
+    ).not.toThrow()
+  })
+})
+
+describe('resolveBenchResultsDir', () => {
+  const ORIGINAL = process.env.BENCH_RESULTS_DIR
+
+  beforeEach(() => {
+    delete process.env.BENCH_RESULTS_DIR
+  })
+
+  afterEach(() => {
+    if (ORIGINAL === undefined) {
+      delete process.env.BENCH_RESULTS_DIR
+    } else {
+      process.env.BENCH_RESULTS_DIR = ORIGINAL
+    }
+  })
+
+  test('returns .bench when unset', () => {
+    expect(resolveBenchResultsDir()).toBe('.bench')
+  })
+
+  test('returns .bench when set to an empty or whitespace-only string', () => {
+    process.env.BENCH_RESULTS_DIR = '   '
+    expect(resolveBenchResultsDir()).toBe('.bench')
+  })
+
+  test('returns the trimmed relative value when set', () => {
+    process.env.BENCH_RESULTS_DIR = '  .bench/selftest  '
+    expect(resolveBenchResultsDir()).toBe('.bench/selftest')
+  })
+
+  test('throws when the value is an absolute path', () => {
+    process.env.BENCH_RESULTS_DIR = '/tmp/somewhere'
+    expect(() => resolveBenchResultsDir()).toThrow(/absolute/i)
+  })
+
+  test('throws when the value contains a parent-directory segment', () => {
+    process.env.BENCH_RESULTS_DIR = '../escape'
+    expect(() => resolveBenchResultsDir()).toThrow(/parent-directory/i)
   })
 })

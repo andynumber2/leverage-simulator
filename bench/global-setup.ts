@@ -18,11 +18,17 @@ import {
   loadCapturedEnvironment,
   loadInfoLines,
   resetAccumulatorStore,
+  resolveBenchResultsDir,
 } from './accumulator-store.ts'
 import { assertRunInvariants, buildFullRowSet, renderTable } from './report.ts'
 
-const RESULTS_DIR = join(process.cwd(), '.bench')
-const RESULTS_PATH = join(RESULTS_DIR, 'bench-results.json')
+function resultsDir(): string {
+  return join(process.cwd(), resolveBenchResultsDir())
+}
+
+function resultsPath(): string {
+  return join(resultsDir(), 'bench-results.json')
+}
 
 export default async function setup(): Promise<() => Promise<void>> {
   await resetAccumulatorStore()
@@ -52,8 +58,10 @@ export default async function setup(): Promise<() => Promise<void>> {
       console.log(infoLines.join('\n'))
     }
 
-    await mkdir(RESULTS_DIR, { recursive: true })
-    const tmpPath = join(dirname(RESULTS_PATH), `.bench-results.json.tmp-${process.pid}`)
+    const dir = resultsDir()
+    const path = resultsPath()
+    await mkdir(dir, { recursive: true })
+    const tmpPath = join(dirname(path), `.bench-results.json.tmp-${process.pid}`)
     // infoLines carries reproducibility detail that has no single-row home in `rows` (e.g.
     // 01-03's both-canvas-arm figures, of which only the winner becomes a MeasurementRow) — it
     // must land in the JSON artifact too, not only in stdout, or a figure recorded via
@@ -62,10 +70,18 @@ export default async function setup(): Promise<() => Promise<void>> {
     await writeFile(tmpPath, payload, 'utf8')
     // Write-then-rename: an interrupted run leaves either no artifact (crash before rename) or
     // a complete one (rename is atomic on the same filesystem), never a truncated one.
-    await rename(tmpPath, RESULTS_PATH)
+    await rename(tmpPath, path)
 
     // Throws on any violated invariant, which is what turns a budget/coverage/runtime problem
     // into a non-zero exit code for `npm run bench` — no separate reporting pipeline (D-03).
-    assertRunInvariants(rows, totalRuntimeMs)
+    // process.exitCode is set explicitly before rethrowing rather than relying solely on the
+    // thrown error, so the guarantee holds even in a Vitest project configuration where an
+    // uncaught error from globalSetup's teardown alone would not otherwise flip the exit code.
+    try {
+      assertRunInvariants(rows, totalRuntimeMs)
+    } catch (error) {
+      process.exitCode = 1
+      throw error
+    }
   }
 }

@@ -1,10 +1,15 @@
 /**
  * bench/report.ts — D-04: row shape, table renderer, budget checker, run-level invariants.
  *
- * Every budget check in this file is a plain, side-effect-free predicate. The actual CI gate
- * (D-03) is the ordinary `expect()` call inside each `*.bench.test.ts` file — `checkBudget` and
- * `escalationTriggered` exist to compute what the printed table and JSON artifact show, not to
- * replace the Vitest assertion that fails the run.
+ * `checkBudget` is the single numeric comparison between a normalized measurement and its
+ * budget; no other place in the codebase compares `normalizedMs` against `budgetMs` (WR-03).
+ * `assertWithinBudget` is the per-metric delegate each `*.bench.test.ts` file calls, so its
+ * failure message always comes from this one comparison. The authoritative gate is
+ * `assertRunInvariants`'s verdict check: it fails the run whenever any row carries
+ * `verdict === 'fail'`, independent of whether any individual bench file's own assertion ran or
+ * was removed. `bench/global-setup.ts`'s teardown is the only code path that can produce a
+ * non-zero exit for `npm run bench` without a test file, which is why the run-level check, not
+ * the per-file `expect()`, is what a breach can never bypass.
  */
 
 import type { BudgetId, PerfBudget, RequirementId } from '../perf-budgets.ts'
@@ -47,6 +52,26 @@ export function checkBudget(row: Pick<MeasurementRow, 'normalizedMs' | 'budgetMs
     return 'unmeasured'
   }
   return row.normalizedMs > row.budgetMs ? 'fail' : 'pass'
+}
+
+/**
+ * The single per-metric delegate every `*.bench.test.ts` file calls instead of hand-writing its
+ * own `normalizedMs > budgetMs` comparison. Throws, naming the budget id, the normalized value
+ * and the budget value, when `checkBudget` returns `fail`. Returns without throwing for `pass`
+ * and for `unmeasured` — this function only ever reports an actual budget breach, never a
+ * missing measurement. `checkBudget` remains the only place the numeric comparison itself lives
+ * (WR-03), so this function's outcome and a row's recorded `verdict` can never disagree.
+ */
+export function assertWithinBudget(
+  row: Pick<MeasurementRow, 'budgetId' | 'normalizedMs' | 'budgetMs'>,
+): void {
+  const verdict = checkBudget(row)
+  if (verdict === 'fail') {
+    throw new Error(
+      `assertWithinBudget: budget "${row.budgetId}" failed — measured ${row.normalizedMs}ms ` +
+        `exceeds budget ${row.budgetMs}ms`,
+    )
+  }
 }
 
 /**
@@ -214,6 +239,9 @@ export function renderTable(
  * - At least one row must be genuinely measured — a harness that measures nothing is broken,
  *   not passing (PERF-10's empty-input edge case).
  * - Every row's budgetId must exist in PERF_BUDGETS.
+ * - No row may carry verdict "fail". This is the authoritative gate: it has visibility into
+ *   every row regardless of which bench file recorded it, so a breach cannot be silenced by
+ *   removing or weakening a single bench file's own assertion.
  * - totalRuntimeMs must not exceed BENCH_TOTAL_RUNTIME_CAP_MS.
  */
 export function assertRunInvariants(rows: readonly MeasurementRow[], totalRuntimeMs: number): void {
@@ -237,6 +265,20 @@ export function assertRunInvariants(rows: readonly MeasurementRow[], totalRuntim
     if (!(row.budgetId in PERF_BUDGETS)) {
       throw new Error(`assertRunInvariants: row references unknown budget id "${row.budgetId}"`)
     }
+  }
+
+  // The authoritative gate (WR-03/D-09): this check has visibility into every row's verdict
+  // independent of any single bench file's own assertion, so removing or weakening one bench
+  // file's `expect()` can no longer let a breach exit 0. Sorted ascending by budget id because
+  // loadAccumulatedRows reads row files in readdir order, which is not guaranteed stable — an
+  // unsorted message would make an identical two-failure run print differently on different
+  // machines.
+  const failing = rows.filter((r) => r.verdict === 'fail')
+  if (failing.length > 0) {
+    const failingIds = failing.map((r) => r.budgetId).sort((a, b) => a.localeCompare(b))
+    throw new Error(
+      `assertRunInvariants: ${failing.length} row(s) failed budget: ${failingIds.join(', ')}`,
+    )
   }
 
   if (totalRuntimeMs > BENCH_TOTAL_RUNTIME_CAP_MS) {

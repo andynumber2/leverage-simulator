@@ -59,6 +59,20 @@ export default defineConfig({
           },
         },
       },
+      {
+        test: {
+          // D-09: the gate-liveness self-test's harness command. Reuses bench/global-setup.ts
+          // unchanged, so the deliberately over-budget fixture in bench/selftest/ goes through
+          // the identical teardown, buildFullRowSet, and assertRunInvariants that
+          // `npm run bench` uses. No browser block here — the browser plays no part in the
+          // exit-code path this project proves, and adding one would put a Playwright startup on
+          // every unit-suite run.
+          name: 'bench-selftest',
+          environment: 'node',
+          include: ['bench/selftest/*.selftest.ts'],
+          globalSetup: ['./bench/global-setup.ts'],
+        },
+      },
     ],
   },
 })
