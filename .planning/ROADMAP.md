@@ -56,7 +56,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   4. The budget file carries a numeric threshold for each of PERF-02 through PERF-09, each annotated with its perception anchor (16ms = one frame, 100ms = feels instant, 1s = holds attention). Any threshold set looser than its anchor carries a written reason and an accompanying Key Decision, and an unreachable target is escalated as an architecture change rather than relaxed automatically.
   5. A deliberately regressed commit fails CI on a budget breach, proving the gate is live rather than declared.
 
-**Plans:** 6 plans (4 executed, 2 gap closure pending)
+**Plans:** 4/6 plans executed (4 executed, 2 gap closure pending)
 
 Plans:
 **Wave 1**
@@ -202,7 +202,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Performance Spike and Budget Lock | 4/4 | In Progress|  |
+| 1. Performance Spike and Budget Lock | 4/6 | In Progress|  |
 | 2. Compiled Data Bundle | 0/TBD | Not started | - |
 | 3. Simulation Kernel and the UPRO/TQQQ Gate | 0/TBD | Not started | - |
 | 4. First Defensible Backtest in the Browser | 0/TBD | Not started | - |
