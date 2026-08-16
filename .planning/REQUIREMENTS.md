@@ -222,17 +222,99 @@ measured in CI, not an aspiration.
 
 ## Traceability
 
-Populated during roadmap creation.
-
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| (pending roadmap) | — | Pending |
+| PERF-01 | Phase 1 | Pending |
+| PERF-01a | Phase 1 | Pending |
+| PERF-02 | Phase 3 | Pending |
+| PERF-03 | Phase 7 | Pending |
+| PERF-04 | Phase 7 | Pending |
+| PERF-05 | Phase 7 | Pending |
+| PERF-06 | Phase 7 | Pending |
+| PERF-07 | Phase 4 | Pending |
+| PERF-08 | Phase 4 | Pending |
+| PERF-09 | Phase 7 | Pending |
+| PERF-10 | Phase 1 | Pending |
+| PERF-11 | Phase 1 | Pending |
+| DATA-01 | Phase 2 | Pending |
+| DATA-02 | Phase 2 | Pending |
+| DATA-03 | Phase 2 | Pending |
+| DATA-04 | Phase 2 | Pending |
+| DATA-05 | Phase 2 | Pending |
+| DATA-06 | Phase 2 | Pending |
+| DATA-07 | Phase 2 | Pending |
+| DATA-08 | Phase 4 | Pending |
+| DATA-09 | Phase 2 | Pending |
+| SIM-01 | Phase 3 | Pending |
+| SIM-02 | Phase 3 | Pending |
+| SIM-03 | Phase 3 | Pending |
+| SIM-04 | Phase 3 | Pending |
+| SIM-05 | Phase 3 | Pending |
+| SIM-06 | Phase 3 | Pending |
+| SIM-07 | Phase 3 | Pending |
+| SIM-08 | Phase 3 | Pending |
+| SIM-09 | Phase 3 | Pending |
+| SIM-10 | Phase 3 | Pending |
+| SIM-11 | Phase 3 | Pending |
+| SIM-12 | Phase 3 | Pending |
+| VALID-01 | Phase 3 | Pending |
+| VALID-02 | Phase 3 | Pending |
+| VALID-03 | Phase 3 | Pending |
+| VALID-04 | Phase 5 | Pending |
+| METR-01 | Phase 4 | Pending |
+| METR-02 | Phase 4 | Pending |
+| METR-03 | Phase 4 | Pending |
+| METR-04 | Phase 4 | Pending |
+| METR-05 | Phase 4 | Pending |
+| METR-06 | Phase 7 | Pending |
+| ATTR-01 | Phase 5 | Pending |
+| ATTR-02 | Phase 5 | Pending |
+| ATTR-03 | Phase 5 | Pending |
+| VIZ-01 | Phase 7 | Pending |
+| VIZ-02 | Phase 7 | Pending |
+| VIZ-03 | Phase 7 | Pending |
+| VIZ-04 | Phase 7 | Pending |
+| VIZ-05 | Phase 6 | Pending |
+| VIZ-06 | Phase 7 | Pending |
+| VIZ-07 | Phase 6 | Pending |
+| VIZ-08 | Phase 4 | Pending |
+| VIZ-09 | Phase 7 | Pending |
+| VIZ-10 | Phase 6 | Pending |
+| VIZ-11 | Phase 4 | Pending |
+| CRED-01 | Phase 5 | Pending |
+| CRED-02 | Phase 5 | Pending |
+| CRED-03 | Phase 5 | Pending |
+| CRED-04 | Phase 5 | Pending |
+| CRED-05 | Phase 5 | Pending |
+| SHARE-01 | Phase 4 | Pending |
+| SHARE-02 | Phase 4 | Pending |
+| SHARE-03 | Phase 4 | Pending |
+| SHARE-04 | Phase 8 | Pending |
+| SHARE-05 | Phase 8 | Pending |
+| SHARE-06 | Phase 8 | Pending |
+| APP-01 | Phase 4 | Pending |
+| APP-02 | Phase 5 | Pending |
+| APP-03 | Phase 4 | Pending |
+| APP-04 | Phase 4 | Pending |
 
 **Coverage:**
 - v1 requirements: 72 total
-- Mapped to phases: 0
-- Unmapped: 72 ⚠️
+- Mapped to phases: 72
+- Unmapped: 0
+
+**Per-phase counts:**
+
+| Phase | Name | Requirements |
+|-------|------|--------------|
+| 1 | Performance Spike and Budget Lock | 4 |
+| 2 | Compiled Data Bundle | 8 |
+| 3 | Simulation Kernel and the UPRO/TQQQ Gate | 16 |
+| 4 | First Defensible Backtest in the Browser | 16 |
+| 5 | Attribution and the Credibility Surface | 10 |
+| 6 | Heatmap Design Pass | 3 |
+| 7 | Sweep Engine and the Heatmap | 12 |
+| 8 | Export and the Canonical Arguments | 3 |
 
 ---
 *Requirements defined: 2026-08-16*
-*Last updated: 2026-08-16 after initial definition*
+*Last updated: 2026-08-16 after roadmap creation*
