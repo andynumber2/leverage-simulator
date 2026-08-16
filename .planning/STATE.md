@@ -5,15 +5,15 @@ milestone_name: milestone
 current_phase: 01
 current_phase_name: performance-spike-and-budget-lock
 status: executing
-stopped_at: Completed 01-02-PLAN.md
-last_updated: "2026-08-16T02:37:24.392Z"
+stopped_at: Completed 01-03-PLAN.md
+last_updated: "2026-08-16T02:46:09.391Z"
 last_activity: 2026-08-16
 last_activity_desc: Roadmap created, 72 v1 requirements mapped across 8 phases
 progress:
   total_phases: 1
   completed_phases: 0
   total_plans: 4
-  completed_plans: 2
+  completed_plans: 3
 ---
 
 # Project State
@@ -28,11 +28,11 @@ See: .planning/PROJECT.md (updated 2026-08-16)
 ## Current Position
 
 Phase: 01 (performance-spike-and-budget-lock) — EXECUTING
-Plan: 3 of 4
+Plan: 4 of 4
 Status: Ready to execute
 Last activity: 2026-08-16 — Phase 01 execution started
 
-Progress: [█████░░░░░] 50%
+Progress: [████████░░] 75%
 
 ## Performance Metrics
 
@@ -60,6 +60,7 @@ Progress: [█████░░░░░] 50%
 |------|----------|-------|-------|
 | Phase 01 P01 | 19min | 2 tasks | 16 files |
 | Phase 01 P02 | 12min | 2 tasks | 11 files |
+| Phase 01 P03 | 7min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -77,6 +78,9 @@ Recent decisions affecting current work:
 - [Phase ?]: 01-02: Sweep cell mapping keeps every cell's backtest at 99.2%+ of the full 25,000-bar series (leverage swept 1-20 across rows, entry index swept only across the first 200 of 25,000 bars across columns) so PERF-03 is not flattered by short cells
 - [Phase ?]: 01-02: Serial reference for the pool-vs-serial equality check is a 50-cell deterministic stride sample, not the full 10,000-cell grid, to avoid pushing bench runtime toward BENCH_TOTAL_RUNTIME_CAP_MS
 - [Phase ?]: 01-02: Workers are not reused across measureMinOfN's 5 repeats — worker construction cost is included in every repeat of the measured PERF-03 figure
+- [Phase ?]: 01-03: makeGridValues spreads values log-uniformly across ~6 orders of magnitude (1e-3 to 1e3), not a uniform [0,1) band, matching the real heatmap outcome metric range
+- [Phase ?]: 01-03: putImageData measured decisively faster than fillRect-per-cell (near 0.00ms vs 4-7ms normalized) on the identical 10,000-cell grid, both proven to paint the same picture before trusting either figure — settles D-15's implementation fork for Phase 6/7
+- [Phase ?]: 01-03: bench/global-setup.ts's JSON artifact now persists recordInfoLine payloads (infoLines field), so a free-text reproducibility figure survives in .bench/bench-results.json, not only stdout
 
 ### Pending Todos
 
@@ -105,6 +109,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-08-16T02:37:24.384Z
-Stopped at: Completed 01-02-PLAN.md
+Last session: 2026-08-16T02:46:09.382Z
+Stopped at: Completed 01-03-PLAN.md
 Resume file: None
