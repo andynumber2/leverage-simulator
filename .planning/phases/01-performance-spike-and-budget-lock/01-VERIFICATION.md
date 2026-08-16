@@ -1,166 +1,136 @@
 ---
 phase: 01-performance-spike-and-budget-lock
-verified: 2026-08-16T00:00:00Z
-status: gaps_found
-score: 5/7 must-haves verified
+verified: 2026-08-16T05:00:00Z
+status: human_needed
+score: 6/7 must-haves verified
 behavior_unverified: 0
 overrides_applied: 0
-gaps:
-  - truth: "A permanent self-test feeds the budget checker a deliberately over-budget fixture and asserts it produces a fail verdict, so the gate cannot rot into a no-op when the harness is refactored (D-09)"
-    status: partial
-    reason: >
-      The self-test (tests/perf-budgets.selftest.test.ts) calls checkBudget() directly and
-      asserts its return value is 'fail'. checkBudget is a pure function whose return value
-      is used only to populate the printed table and JSON verdict field. The actual value that
-      fails the run is a separate, independently-written
-      `expect(normalizedMs).toBeLessThanOrEqual(budget.thresholdMs)` assertion duplicated in
-      each of the three *.bench.test.ts files. D-09's own wording requires "a test feeds the
-      budget checker a deliberately over-budget fixture and asserts it exits non-zero with the
-      correct message" -- the self-test never runs the harness, never checks a process exit
-      code, and never touches the expect() assertions that are the real gate. If a future
-      bench file's expect() line is removed or weakened, the printed table would show
-      verdict=fail while the process exits 0, and nothing currently in the suite -- including
-      this self-test -- would catch it.
-    artifacts:
-      - path: "tests/perf-budgets.selftest.test.ts"
-        issue: "Tests checkBudget() in isolation, not the enforcement path (the inline expect() in each bench file)"
-      - path: "bench/report.ts"
-        issue: "assertRunInvariants (the one function with run-level visibility, called from global-setup teardown) never inspects row.verdict"
-    missing:
-      - "A run-level invariant (in assertRunInvariants or an equivalent function called from bench/global-setup.ts's teardown) that throws when any row.verdict === 'fail', independent of any single bench file's own expect() call"
-      - "A self-test that exercises that run-level check end-to-end (or spawns the actual bench command) with a deliberately over-budget fixture and asserts a non-zero exit, per D-09's literal wording"
-  - truth: "Calibration and metric measurements are sized so that a single repeat spans at least 10 milliseconds, keeping performance.now timer coarsening below one percent of the measured value"
-    status: failed
-    reason: >
-      MIN_MEASUREMENT_MS = 10 is declared in bench/calibration.ts and documented as a hard
-      requirement to avoid performance.now() coarsening, but no function anywhere in the
-      codebase (bench/, tests/, perf-budgets.ts) ever compares a measured value against it --
-      confirmed independently by grep, which finds MIN_MEASUREMENT_MS only in its own
-      declaration and doc comment. This is not theoretical: the phase's own permanent record
-      (01-SPIKE-RESULTS.md) documents the floor being violated in production. PERF-02's raw
-      minimum-of-5 figure is 0.09999999962747097ms and PERF-05's winning putImageData arm is a
-      literal 0ms -- both far below the 10ms floor the harness itself requires, and both were
-      fed through checkBudget and recorded as pass with no structural flag anywhere in the
-      table, JSON artifact, or test output.
-    artifacts:
-      - path: "bench/calibration.ts"
-        issue: "measureMinOfN (lines 28-40) never checks its own result against MIN_MEASUREMENT_MS before returning it"
-      - path: "bench/kernel.bench.test.ts"
-        issue: "Records and asserts a PERF-02 figure (raw 0.0999...ms) that is below the documented floor, with no floor check"
-      - path: "bench/canvas-repaint.bench.test.ts"
-        issue: "Records a putImageData figure of literal 0ms as the PERF-05 winner, with no floor check"
-    missing:
-      - "A floor check in measureMinOfN (or immediately after each calibrationScore()/metric call) that throws or flags when the minimum observed repeat is below MIN_MEASUREMENT_MS"
-      - "For call sites whose natural single-call cost is under the floor (PERF-02's kernel call, the putImageData arm), the same batched-loop amortization already implemented for the throwaway Rust/WASM spike (01-04), applied to the permanent JS bench files"
-deferred: []
+re_verification:
+  previous_status: gaps_found
+  previous_score: 5/7
+  gaps_closed:
+    - "A permanent self-test proves the budget gate cannot rot into a no-op when the harness is refactored (D-09) — Gap 1"
+    - "Measurements are sized to avoid performance.now() timer-resolution coarsening, per MIN_MEASUREMENT_MS — Gap 2"
+  gaps_remaining: []
+  regressions: []
+human_verification:
+  - test: "Configure a GitHub remote for this repository, push the current branch (or main), open a PR or push to main, and confirm the `bench` workflow in `.github/workflows/ci.yml` runs successfully on ubuntu-latest. Then push a second, deliberately regressed commit (e.g. temporarily lower a PERF_BUDGETS threshold below its measured value) and confirm the GitHub Actions check goes red on that commit, then revert."
+    expected: "The first push produces a green `bench` check on ubuntu-latest. The second, deliberately regressed push produces a red `bench` check, with the failure output naming the breached budget id, proving the gate is live in real CI and not merely declared in YAML."
+    why_human: "No GitHub remote is configured in this repository (`git remote -v` returns nothing, confirmed independently in this verification pass). Whether GitHub Actions renders a real budget breach as a red check cannot be verified without pushing to an actual GitHub-hosted remote and an actual Actions run — no tool available to this verifier can create that remote or trigger that run. The `.github/workflows/ci.yml` file is syntactically verified (pull_request/push triggers, read-only permissions, ubuntu-latest, npm ci/typecheck/test/bench) and the equivalent local mechanism (a spawned `npm run bench:selftest` against a deliberately over-budget fixture) is directly confirmed to exit non-zero with a message naming the failing budget id in this pass, but that is a local proxy, not the literal CI proof success criterion 5 asks for."
 ---
 
 # Phase 1: Performance Spike and Budget Lock Verification Report
 
-**Phase Goal:** Measure the hot loop and the 10k-cell repaint on real hardware, then commit the architecture and the budgets
+**Phase Goal:** The architecture is decided by a measured number instead of an estimate, and performance becomes checkable with one command from this point forward
 **Verified:** 2026-08-16
-**Status:** gaps_found
-**Re-verification:** No — initial verification
+**Status:** human_needed
+**Re-verification:** Yes — after gap closure (plans 01-05, 01-06)
 
 ## Goal Achievement
+
+This is a re-verification following gap-closure plans 01-05 (run-level budget backstop + spawned gate-liveness proof) and 01-06 (timer-floor enforcement, batched amortization, bounded worker failure). Both gaps recorded in the prior `01-VERIFICATION.md` were independently re-checked against the current codebase, not against SUMMARY.md claims: I read every changed file directly and additionally ran `npm run typecheck`, `npm test`, and `npm run bench` myself in this pass rather than trusting the prior pre-checks.
 
 ### Observable Truths
 
 | # | Truth | Status | Evidence |
 |---|-------|--------|----------|
-| 1 | A throwaway benchmark reports real wall-clock figures on real hardware for the 25,000-bar backtest and the 10,000-cell Canvas repaint, each with a machine and core count attached (SC1) | ✓ VERIFIED | `bench/kernel.bench.test.ts`, `bench/canvas-repaint.bench.test.ts` run in real headless Chromium via Playwright; `01-SPIKE-RESULTS.md` §2 table carries machine, cores, browser, OS, calibration score on every row. `npm run bench` confirmed 9/9 passing by orchestrator pre-check. |
-| 2 | The plain-JS-vs-WASM and hand-rolled-Canvas-vs-charting-library decisions are recorded in PROJECT.md as Key Decisions citing the measured figure that settled them (SC2) | ✓ VERIFIED | `.planning/PROJECT.md` "Key Decisions" table has two new rows, each naming a specific millisecond figure, percentage of budget, and machine (9 logical cores, calibration score 0.57), each linking to `01-SPIKE-RESULTS.md`. Pre-existing rows untouched (confirmed by reading table). |
-| 3 | One command (`npm run bench`) prints every metric named in PERF-02 through PERF-09, marking not-yet-built paths as unmeasured (SC3) | ✓ VERIFIED | `bench/report.ts#assertRunInvariants` throws if any of the eight requirement group headers is missing; `perf-budgets.ts` carries all 11 budget rows across all 8 requirement ids (confirmed: `tests/perf-budgets.selftest.test.ts` asserts `PERF_BUDGETS` has exactly 11 entries / 8 requirement ids, and this test is part of the 45/45 passing unit suite already confirmed). |
-| 4 | The budget file carries a numeric threshold and perception anchor for each of PERF-02 through PERF-09; any threshold looser than its anchor carries a written reason and Key Decision; an unreachable target is escalated rather than relaxed (SC4) | ✓ VERIFIED | `perf-budgets.ts` (182 lines) defines all 11 entries with `anchorMs`/`anchorLabel`; every entry's `thresholdMs === anchorMs` (confirmed in plan 01-01's `<interfaces>` table and PROJECT.md/STATE.md's "no relaxation reason is owed" statement), so no relaxation applies this phase. `01-SPIKE-RESULTS.md` §4 evaluates every measured figure against the 70% escalation trigger and finds none crossed, consistent with PERF-01a's no-automatic-relaxation rule. |
-| 5 | A deliberately regressed commit fails CI on a budget breach, proving the gate is live rather than declared (SC5) | ✗ FAILED | No GitHub remote is configured in this repository (`git remote -v` returns nothing, confirmed independently), so the live CI demonstration this criterion literally describes has never happened — `01-01-SUMMARY.md` and `01-04-SUMMARY.md` both flag this as an outstanding external dependency. The designated permanent substitute — the D-09 self-test — does not test the actual enforcement path; see Gap 1 below. Neither the live proof nor its documented replacement currently demonstrates this criterion. |
-| 6 | A permanent self-test proves the budget gate cannot rot into a no-op when the harness is refactored (D-09, mandatory per plan 01-01 must_haves) | ✗ FAILED | See Gap 1 in frontmatter. Confirmed independently by reading `tests/perf-budgets.selftest.test.ts` (calls `checkBudget()` directly, never runs the harness or checks an exit code) and `bench/report.ts#assertRunInvariants` (never inspects `row.verdict`), plus `grep` confirming the real gate is three separately duplicated `expect(normalizedMs).toBeLessThanOrEqual(...)` lines in `bench/kernel.bench.test.ts:56`, `bench/canvas-repaint.bench.test.ts:202`, `bench/sweep.bench.test.ts:125`. |
-| 7 | Measurements are sized to avoid `performance.now()` timer-resolution coarsening, per the harness's own `MIN_MEASUREMENT_MS` requirement | ✗ FAILED | See Gap 2 in frontmatter. Confirmed independently by `grep -rn MIN_MEASUREMENT_MS bench tests perf-budgets.ts` — the constant appears only in its own declaration and doc comment, nowhere else. `01-SPIKE-RESULTS.md` itself documents the floor being crossed in production (PERF-02 raw 0.0999ms, PERF-05 winner raw 0ms), both passing budgets with no diagnostic. |
+| 1 | A throwaway benchmark reports real wall-clock figures on real hardware for the 25,000-bar backtest and the 10,000-cell Canvas repaint, each with a machine and core count attached (SC1) | ✓ VERIFIED | `01-SPIKE-RESULTS.md` §2 and the new §6 addendum both carry machine/core/browser/OS/calibration-score columns. Confirmed directly by running `npm run bench` myself: environment block prints `hardwareConcurrency: 9`, `os: linux 7.1.4-200.fc44.aarch64`, `HeadlessChrome/151.0.7922.34`. |
+| 2 | The plain-JS-vs-WASM and hand-rolled-Canvas-vs-charting-library decisions are recorded in PROJECT.md as Key Decisions citing the measured figure that settled them (SC2) | ✓ VERIFIED | `.planning/PROJECT.md` "Key Decisions" table unchanged from prior verification (confirmed no diff to this file by `git status`/`git diff --stat`, consistent with plan 01-06's deliberate scope exclusion). Both rows still cite concrete figures and disclose the floor-value caveat honestly. `01-SPIKE-RESULTS.md` §6 adds an explicit pointer note stating which figure each row cites and that the Canvas row's cited `0ms` is now superseded by the resolved `0.1131ms`, so a later reader does not find a silent discrepancy. |
+| 3 | One command (`npm run bench`) prints every metric named in PERF-02 through PERF-09, marking not-yet-built paths as unmeasured (SC3) | ✓ VERIFIED | Ran `npm run bench` directly: prints all 8 requirement group headers (PERF-02 through PERF-09), 11 of 11 tests passing, unmeasured paths (PERF-04, 06, 07a/b, 08a/b/c, 09) correctly marked `verdict=unmeasured`. |
+| 4 | The budget file carries a numeric threshold and perception anchor for each of PERF-02 through PERF-09; any threshold looser than its anchor carries a written reason and Key Decision; an unreachable target is escalated rather than relaxed (SC4) | ✓ VERIFIED | `perf-budgets.ts` unchanged (182 lines, 11 entries, all `thresholdMs === anchorMs`). `tests/perf-budgets.selftest.test.ts`'s "PERF-01a anchor invariant" describe block still present and passing (confirmed via `npm test`). `01-SPIKE-RESULTS.md` §6 re-runs the 70% escalation evaluation against the newly resolved figures and finds none crossed. |
+| 5 | A deliberately regressed commit fails CI on a budget breach, proving the gate is live rather than declared (SC5) | ? UNCERTAIN | No GitHub remote is configured (`git remote -v` returns nothing, confirmed independently). `.github/workflows/ci.yml` remains syntactically correct and unexecuted on real infrastructure. The local proxy for this criterion — a spawned harness command against a deliberately over-budget fixture — is now correctly wired (see Truth 6) and was directly confirmed by me to exit non-zero with the right message, but that is not the literal "fails CI" proof this criterion names, and nothing available to this verifier can create the remote or trigger a real Actions run. Routed to human verification below. |
+| 6 | A permanent self-test proves the budget gate cannot rot into a no-op when the harness is refactored (D-09, Gap 1 of the prior verification) | ✓ VERIFIED (Gap 1 closed) | Read `bench/report.ts`: `assertRunInvariants` now collects every row with `verdict === 'fail'` and throws naming all failing budget ids in ascending order (lines 276-282); `bench/global-setup.ts`'s teardown wraps that call, sets `process.exitCode = 1`, and rethrows (lines 80-85). Read `tests/perf-budgets.selftest.test.ts`: the D-09 proof test now spawns `npm run bench:selftest` via `spawnSync` with an isolated `BENCH_RESULTS_DIR=.bench/selftest`, asserts `status` is a non-zero number, and asserts the combined stdout/stderr names `PERF-05` and matches `/failed budget/i`. I ran this myself (`npm test` with `--reporter=verbose`) and confirmed the test `spawning the real bench:selftest command against the over-budget fixture exits non-zero (D-09 proof)` passed in 482ms as part of the 75/75 passing unit suite. I also confirmed `.bench/bench-results.json` still holds the real run's 11 rows with no `fail` verdict after that spawn, proving `resolveBenchResultsDir`'s isolation genuinely works, not just as claimed. |
+| 7 | Measurements are sized to avoid `performance.now()` timer-resolution coarsening, per `MIN_MEASUREMENT_MS` (Gap 2 of the prior verification) | ✓ VERIFIED (Gap 2 closed) | Read `bench/calibration.ts`: `measureMinOfN` now throws when `min < MIN_MEASUREMENT_MS` (lines 44-50); `measureBatchedMinOfN` amortizes a batch and enforces the floor against the batch total before dividing (lines 66-82); `calibrationScore` and `normalize` both throw on non-finite/non-positive inputs (lines 143-159, 171-181). I ran `npm run bench` myself and read `.bench/bench-results.json`: PERF-02 measured `0.1036...ms`, PERF-05 measured `0.063ms` — neither reads `0` or `0.00ms`, both are the amortized per-call figures the batching produces (`PERF_02_BATCH_SIZE=500`, `PUT_IMAGE_DATA_BATCH_SIZE=500`, `FILL_RECT_BATCH_SIZE=8`, confirmed present in `bench/kernel.bench.test.ts` and `bench/canvas-repaint.bench.test.ts`, and printed in the run's info lines). |
 
-**Score:** 5/7 truths verified (0 present-but-behavior-unverified)
+**Score:** 6/7 truths verified (0 present-but-behavior-unverified, 1 uncertain/routed to human verification)
 
-### Assessment of the two open code-review findings against the recorded Key Decisions
+### Independent re-check of the two structural gaps from the prior round
 
-This is the question the orchestrator asked me to answer independently, not defer to the reviewer.
+**Gap 1 (D-09 self-test validates the wrong layer).** Prior finding: the self-test called `checkBudget()` in isolation and never touched the actual enforcement path (three duplicated inline `expect()` assertions), so a future refactor dropping one of those lines could silently exit 0. Current state, independently confirmed: `assertRunInvariants` is now the authoritative, run-level check with visibility into every row's `verdict` regardless of which bench file wrote it; the three bench files were rewritten to call `assertWithinBudget(row)` (confirmed present in all three via `grep -l assertWithinBudget bench/kernel.bench.test.ts bench/canvas-repaint.bench.test.ts bench/sweep.bench.test.ts`, all three listed); and the D-09 self-test now spawns the real `bench:selftest` npm script as a child process and asserts its exit code and output, which I reproduced myself. This closes the gap as described: a dropped or weakened per-file `expect()` can no longer let a breach pass, because the run-level check does not depend on it.
 
-**Does CR-01 (unenforced timer-resolution floor) undermine either PROJECT.md Key Decision?**
+**Gap 2 (timer-resolution floor declared but unenforced).** Prior finding: `MIN_MEASUREMENT_MS` was declared but never checked anywhere, and the phase's own permanent record showed PERF-02 and PERF-05 being recorded at or near the floor with no diagnostic. Current state, independently confirmed: the floor check exists in `measureMinOfN` (throws below the floor) and is exercised via `measureBatchedMinOfN`, which enforces it against the batch total, not the per-call quotient — matching the plan's stated design. All three previously sub-floor call sites (PERF-02's kernel call, both canvas arms) now route through the batched helper with disclosed batch sizes. I confirmed via a live `npm run bench` run that no recorded figure reads `0` or `0.00ms`, and via `01-SPIKE-RESULTS.md` §6 that the resolved figures and their batch sizes are recorded permanently alongside the original floor-limited record (sections 1-5 unmodified, confirmed by `git diff --stat` in an earlier commit and by direct reading — section 6 is a pure addition).
 
-No, on the evidence available, but the reasoning differs by decision:
+Both gaps are genuinely closed in the code, not merely claimed closed in a SUMMARY.
 
-- **Plain JS over WASM.** This decision's headline figure is PERF-03's 327.40ms normalized sweep measurement (32.7% of a 1000ms budget) — a fully resolved figure roughly 33x above the 10ms floor, not a floor-limited number. The decision's secondary evidence, the JS-vs-WASM ratio, hit the exact floor problem CR-01 describes at the single-call scale (both arms measured a bit-for-bit identical 0.0999...ms), and the phase's own authors caught this and did not report it as a ratio. Instead they added a 5,000-call batched measurement to amortize the floor and recover a resolvable per-call figure (~1.20x, WASM slower), reproduced across three runs, with an explicit, disclosed caveat that the JS side of that batched figure runs under Node V8 rather than headless Chromium. This is the correct fix for the floor problem, applied narrowly to the one throwaway spike file where it mattered for this decision. **This decision survives independent scrutiny**: its primary evidence (PERF-03) was never floor-limited, and its secondary evidence (the WASM ratio) was floor-limited but was caught and correctly amortized before being cited.
+### New findings surfaced by this round's own code review (`01-REVIEW.md`), assessed independently
 
-- **Hand-rolled Canvas (putImageData) over a charting library.** This decision's headline figure — `putImageData` at 0ms normalized — is exactly the CR-01 failure mode: a value at or below timer resolution, passed through unflagged. However, the *decision itself* does not rest on that number in isolation. It rests on an ordering claim (`putImageData` beats `fillRect`) where `fillRect`'s figure (4.41ms) is fully resolved and comfortably above the floor. A value at-or-below the timer floor is, by construction, less than a resolved 4.41ms; the relative ordering between the two arms is sound even though `putImageData`'s absolute cost is not resolvable at this measurement precision. Both PROJECT.md and `01-SPIKE-RESULTS.md` state the floor caveat explicitly ("at/below performance.now()'s resolution (0ms normalized)") rather than presenting 0ms as if it were a clean number, which is the honest disclosure CR-01 asks for even though the *code* never enforces it. The charting-library rejection half of this decision cites prior Q2 research findings, not a new benchmark, so it is unaffected by CR-01 at all. **This decision also survives, on the strength of the ordering argument and the honest disclosure, not the absolute figure.**
+The phase's current `01-REVIEW.md` (re-review after both gap-closure plans) reports 0 critical, 2 warning, 1 info findings — a clean bill relative to the prior round's two blockers, which I independently re-confirmed rather than trusting the review's own verdict.
 
-**Does CR-01/CR-02 undermine the phase goal itself?**
+- **WR-04** (`bench/calibration.ts:44`): `measureMinOfN`'s floor check (`min < MIN_MEASUREMENT_MS`) lacks the `!Number.isFinite(min)` guard its sibling `calibrationScore` was given. Confirmed by direct read: line 44 only checks the numeric comparison. Real-world impact is narrow — a `NaN` elapsed time would have to come from a broken/mocked timer, not from a throwing `fn` (which would already reject), and even then `normalize()`'s own non-finite guard catches it one call site downstream with a slightly less specific message. This is an incomplete application of an existing fix, not a new failure mode, and does not affect any currently exercised measurement. Non-blocking.
+- **WR-05** (`bench/accumulator-store.ts` + all three bench files): the printed/persisted `calibrationScore` reflects whichever bench file ran last, since `persistEnvironment` unconditionally overwrites a single file. Confirmed by direct read and by observing my own `npm run bench` run print a single `calibrationScore: 0.5650000000372529` line. This affects only the diagnostic/reproducibility surface — each row's own local score correctly normalizes that row (`checkBudget`/`verdict` are unaffected), confirmed by the fact that PERF-02/PERF-05's recorded figures in `.bench/bench-results.json` are internally consistent. Non-blocking for the gate itself, but degrades manual reproducibility as the review notes.
 
-Yes, in the specific, narrower sense that matters going forward. The phase goal is not just "these two decisions are correct" — it is "performance becomes checkable with one command from this point forward" and "a deliberately regressed commit fails CI on a budget breach, proving the gate is live rather than declared" (success criterion 5). The two decisions this phase needed to make survive on the evidence gathered. But the *permanent enforcement machinery* this phase was chartered to build — the thing every later phase (3, 4, 6, 7) inherits and is graded against — has two structural holes that are not about this phase's own numbers:
-
-1. A future measurement that lands at the timer floor (plausible again in Phase 3/4/7, e.g. as compute gets genuinely fast, or on a faster CI runner) will pass its budget with no diagnostic, exactly as happened here, because nothing enforces `MIN_MEASUREMENT_MS`.
-2. A future refactor that drops or weakens one of the three duplicated `expect()` lines that are the actual gate would not be caught by the self-test built specifically to prevent that (D-09), and CI would exit 0 on a real budget breach.
-
-Both are demonstrated, not hypothetical — the phase's own artifacts (`01-SPIKE-RESULTS.md`, the bench test files) already exhibit the first, and the second was confirmed directly against the code in this verification pass. Success criterion 5 is therefore not met: the live GitHub Actions proof never ran (no remote configured), and its documented replacement (the self-test) does not test the mechanism that actually enforces a breach.
+Neither finding is a blocker to this phase's success criteria: neither produces a false pass on a real regression, and both are classified as warnings by the review's own severity scale, which I independently agree with on the evidence.
 
 ### Required Artifacts
 
 | Artifact | Expected | Status | Details |
 |---|---|---|---|
-| `perf-budgets.ts` | Typed budget module, 11 entries / 8 requirement ids | ✓ VERIFIED | 182 lines, exhaustiveness check present, confirmed by passing self-test |
-| `bench/report.ts` | Row shape, table renderer, budget checker, invariants | ✓ VERIFIED | 249 lines; `assertRunInvariants` confirmed present but does not check `verdict === 'fail'` (see Gap 1) |
-| `bench/calibration.ts` | Reference loop, min-of-N, normalization | ⚠️ PARTIAL | 114 lines; `MIN_MEASUREMENT_MS` exported but unenforced (see Gap 2) |
-| `bench/environment-block.ts` | Machine/core/browser/OS/CI stamping | ✓ VERIFIED | 38 lines; confirmed present in `01-SPIKE-RESULTS.md` output |
-| `bench/canvas-grid.ts` | Shared grid fixture, both paint arms | ✓ VERIFIED | 152 lines; both `paintFillRect`/`paintPutImageData` present |
-| `bench/canvas-repaint.bench.test.ts` | Both arms measured + equivalence proof | ✓ VERIFIED | 203 lines |
-| `bench/synthetic-data.ts` | Seeded GBM series | ✓ VERIFIED | 103 lines; determinism ported bit-for-bit to Rust and proven equal |
-| `bench/kernel.ts` | Allocation-free branchy recurrence | ✓ VERIFIED | 168 lines; ruin-clamp/absorbing-state tests present in `tests/kernel.test.ts` |
-| `bench/sweep.worker.ts` / `bench/sweep-pool.ts` | Real Worker pool, transferred buffers | ✓ VERIFIED | `Comlink.transfer` confirmed present in `sweep-pool.ts:89`; `hardwareConcurrency`-based sizing confirmed |
-| `.github/workflows/ci.yml` | PR + push-to-main gate, read-only token | ✓ VERIFIED (syntactically) / ⚠️ NEVER EXECUTED | 59 lines; `pull_request` (not `_target`), `permissions: contents: read`, `ubuntu-latest`, `npm run bench`, `upload-artifact` all confirmed present. Never run on real GitHub Actions infrastructure — no remote configured. |
-| `tests/perf-budgets.selftest.test.ts` | D-09 gate-liveness self-test | ⚠️ ORPHANED PURPOSE | 107 lines, runs and passes, but tests the wrong layer (see Gap 1) |
-| `.planning/phases/01-performance-spike-and-budget-lock/01-SPIKE-RESULTS.md` | Method, numbers, ratio, escalation eval, repro steps | ✓ VERIFIED | 232 lines, all 5 sections present, every row labelled with machine/cores; honestly flags the floor-value caveat |
-| `.planning/PROJECT.md` Key Decisions | Two new rows citing measured figures | ✓ VERIFIED | Confirmed via direct read; pure-addition diff, both rows cite concrete numbers and machine |
+| `bench/report.ts` | `assertWithinBudget`, run-level verdict-fail backstop in `assertRunInvariants` | ✓ VERIFIED | Read in full; both present exactly as the plan specifies (lines 65-75, 276-282) |
+| `bench/accumulator-store.ts` | `resolveBenchResultsDir` with absolute-path/parent-segment guard | ✓ VERIFIED | Read; present at lines 28-40-ish, guards `isAbsolute` and `..` segments |
+| `bench/global-setup.ts` | Teardown sets `process.exitCode = 1` before rethrowing from `assertRunInvariants` | ✓ VERIFIED | Read in full; try/catch wrapper confirmed at lines 80-85 |
+| `bench/selftest/over-budget.selftest.ts` | Deliberately over-budget fixture built via real `checkBudget`, persisted via real accumulator store | ✓ VERIFIED | File exists; referenced correctly by the `bench-selftest` Vitest project |
+| `package.json` | `bench:selftest` script | ✓ VERIFIED | `"bench:selftest": "vitest run --project bench-selftest"` confirmed present |
+| `tests/perf-budgets.selftest.test.ts` | D-09 proof rewritten to spawn the real harness command | ✓ VERIFIED | Read in full; spawn test confirmed present and passing |
+| `bench/calibration.ts` | `MIN_MEASUREMENT_MS` enforcement in `measureMinOfN`, `measureBatchedMinOfN`, guards in `calibrationScore`/`normalize` | ✓ VERIFIED | Read in full; all four present |
+| `bench/kernel.bench.test.ts`, `bench/canvas-repaint.bench.test.ts` | Sub-floor call sites amortized through `measureBatchedMinOfN` | ✓ VERIFIED | Confirmed via live bench run: no figure reads 0/0.00ms; batch-size info lines present in run output |
+| `bench/sweep-pool.ts` | `workerFactory`/`chunkTimeoutMs` seam, per-worker failure promise, bounded timeout | ✓ VERIFIED | Read in full; matches plan's design exactly (lines 37-47, 61-76, 137-174) |
+| `bench/hang-fixture.worker.ts`, `bench/throw-fixture.worker.ts` | Fixture workers for the two failure paths | ✓ VERIFIED | Both files exist; exercised by 2 of the 11 passing bench tests, confirmed via live run |
+| `.planning/phases/01-performance-spike-and-budget-lock/01-SPIKE-RESULTS.md` | Section 6 addendum with resolved figures | ✓ VERIFIED | Section 6 present; sections 1-5 confirmed unmodified |
+| `.github/workflows/ci.yml` | PR + push-to-main gate, read-only token | ✓ VERIFIED (syntactically) / ⚠️ NEVER EXECUTED | Unchanged from prior round; no remote configured, confirmed independently this pass |
 
 ### Key Link Verification
 
 | From | To | Via | Status | Details |
 |---|---|---|---|---|
-| `bench/canvas-repaint.bench.test.ts` | `perf-budgets.ts` | `PERF_BUDGETS['PERF-05']` | ✓ WIRED | Confirmed via grep |
-| `bench/canvas-repaint.bench.test.ts` | `bench/calibration.ts` | `normalize(...)` | ✓ WIRED | Confirmed |
-| `.github/workflows/ci.yml` | `package.json` | `npm run bench` | ✓ WIRED (syntactically) | Never executed on real infra (no remote) |
-| `tests/perf-budgets.selftest.test.ts` | `bench/report.ts` | `checkBudget(...)` | ⚠️ WIRED TO WRONG LAYER | Tests the pure helper, not the actual enforcement path (three separate `expect()` lines in bench files) |
-| `bench/sweep-pool.ts` | `bench/sweep.worker.ts` | `Comlink.wrap` | ✓ WIRED | Confirmed |
-| `bench/sweep-pool.ts` | `bench/kernel.ts` | `runSpikeBacktest` (single implementation) | ✓ WIRED | Confirmed via worker import chain |
+| `bench/selftest/over-budget.selftest.ts` | `bench/global-setup.ts` | persists an over-budget row the real teardown reads back | ✓ WIRED | Confirmed by running `npm run bench:selftest` indirectly via the spawn test, which produced the expected non-zero exit |
+| `bench/global-setup.ts` | `bench/report.ts` | teardown calls `assertRunInvariants`, whose verdict-fail check turns a breach into a non-zero exit | ✓ WIRED | Confirmed via direct code read and empirical spawn-test pass |
+| `tests/perf-budgets.selftest.test.ts` | `package.json` | `spawnSync` of `bench:selftest` | ✓ WIRED | Confirmed via my own `npm test --reporter=verbose` run |
+| `bench/kernel.bench.test.ts`, `bench/canvas-repaint.bench.test.ts`, `bench/sweep.bench.test.ts` | `bench/report.ts` | `assertWithinBudget` replaces the inline numeric comparison | ✓ WIRED | Confirmed via grep across all three files |
+| `bench/kernel.bench.test.ts`, `bench/canvas-repaint.bench.test.ts` | `bench/calibration.ts` | `measureBatchedMinOfN` amortizes sub-floor single-call costs | ✓ WIRED | Confirmed via live bench run's batch-size info lines and non-zero recorded figures |
+| `bench/sweep.bench.test.ts` | `bench/sweep-pool.ts` | `workerFactory`/`chunkTimeoutMs` options exercise the two failure paths | ✓ WIRED | Confirmed via live bench run: 11/11 passing includes both fixture-worker tests |
+
+### Behavioral Spot-Checks
+
+| Behavior | Command | Result | Status |
+|---|---|---|---|
+| Typecheck is clean | `npm run typecheck` | exit 0, no errors | ✓ PASS |
+| Full unit suite passes, including the D-09 spawn proof | `npm test -- --reporter=verbose` | 75/75 passing; D-09 spawn test passed in 482ms | ✓ PASS |
+| Full bench harness passes | `npm run bench` | 11/11 passing, all measured rows non-zero, environment block prints machine/core/browser/OS | ✓ PASS |
+| Self-test's isolation holds | `node -e "..."` reading `.bench/bench-results.json` after `npm run bench` + `npm test` | 11 rows, no `fail` verdict, PERF-02/05 non-zero | ✓ PASS |
+| Em dash removal | `grep -rlP '\x{2014}' --include='*.ts' --include='*.yml' --include='*.json' . --exclude-dir=node_modules --exclude-dir=.planning --exclude-dir=.bench` | prints nothing, exit 1 | ✓ PASS |
+| `bench:selftest` script exists and is wired to the `bench-selftest` Vitest project | `grep -n '"bench' package.json` | both `bench` and `bench:selftest` scripts present | ✓ PASS |
+
+### Probe Execution
+
+No `scripts/*/tests/probe-*.sh` convention exists in this project, and neither PLAN nor SUMMARY declares a probe-based verification path. SKIPPED (no runnable probe entry points).
 
 ### Requirements Coverage
 
 | Requirement | Source Plan | Description | Status | Evidence |
 |---|---|---|---|---|
-| PERF-01 | 01-01 | Budget file + CI-failing gate | ⚠️ PARTIAL | Budget file and per-file gates exist and currently work; the run-level backstop and CI-live-proof gaps above mean "CI fails the build when a measured value exceeds its budget" is not durably guaranteed against future refactors |
-| PERF-01a | 01-01, 01-04 | Provisional thresholds locked via measurement, escalation not relaxation | ✓ SATISFIED | All 11 thresholds equal their anchors; `01-SPIKE-RESULTS.md` §4 evaluates the 70% trigger and finds nothing crossed; PROJECT.md/STATE.md updated from provisional to locked |
-| PERF-10 | 01-01, 01-02, 01-03 | One-command benchmark suite reporting all metrics | ✓ SATISFIED | `npm run bench` confirmed 9/9 passing pre-check; all 8 requirement groups printed per `assertRunInvariants` |
-| PERF-11 | 01-01 through 01-04 | Measurement from the first executable phase, build order before architecture commitment | ✓ SATISFIED | This is the first phase in ROADMAP.md; every measurement carries machine/core-count/CI-flag labelling |
+| PERF-01 | 01-01, 01-05 | Budget file + CI-failing gate | ⚠️ PARTIAL | Budget file, per-file gate, and the run-level backstop all exist and are proven live locally (spawned self-test exits non-zero on a real breach). The literal "CI fails the build" clause remains unproven on real GitHub Actions infrastructure because no remote is configured — see Truth 5 / human verification |
+| PERF-01a | 01-01, 01-04, 01-06 | Provisional thresholds locked via measurement, escalation not relaxation | ✓ SATISFIED | All 11 thresholds equal their anchors; `01-SPIKE-RESULTS.md` §4 and the new §6 both evaluate the 70% trigger and find nothing crossed, including against the newly resolved (post-amortization) figures |
+| PERF-10 | 01-01, 01-02, 01-03, 01-05 | One-command benchmark suite reporting all metrics | ✓ SATISFIED | `npm run bench` confirmed 11/11 passing by me directly; all 8 requirement groups printed |
+| PERF-11 | 01-01 through 01-06 | Measurement from the first executable phase, build order before architecture commitment | ✓ SATISFIED | This is phase 1; every measurement carries machine/core-count/CI-flag labelling, confirmed via a live run's environment block |
 
-No orphaned requirements — `REQUIREMENTS.md` maps exactly PERF-01, PERF-01a, PERF-10, PERF-11 to Phase 1, and all four appear in plan frontmatter `requirements` fields.
+No orphaned requirements — `REQUIREMENTS.md` maps exactly PERF-01, PERF-01a, PERF-10, PERF-11 to Phase 1, and all four appear in plan frontmatter `requirements` fields across 01-01 through 01-06.
 
 ### Anti-Patterns Found
 
 | File | Line | Pattern | Severity | Impact |
 |---|---|---|---|---|
-| `bench/calibration.ts` | 21 | `MIN_MEASUREMENT_MS` declared, never enforced | 🛑 Blocker | Sub-floor measurements pass budgets unflagged (Gap 2) |
-| `tests/perf-budgets.selftest.test.ts` | 32-52 | Self-test validates the wrong layer relative to D-09's own wording | 🛑 Blocker | A dropped/weakened real gate assertion would not be caught (Gap 1) |
-| `bench/sweep-pool.ts` | 64-100 | No `error`/`messageerror` handler on constructed Workers, no timeout on `runChunk` | ⚠️ Warning | A worker construction failure could hang the bench suite with no diagnostic until CI's own timeout (WR-01 in 01-REVIEW.md, not independently re-verified beyond code inspection) |
-| `bench/calibration.ts` | 88-114 | `normalize()`/`calibrationScore()` no guard against a zero/non-finite score | ⚠️ Warning | Same root cause as Gap 2 from a different call site (WR-02 in 01-REVIEW.md) |
-| `bench/report.ts`, `bench/*.bench.test.ts` | multiple | Budget comparison duplicated across `checkBudget()` and three inline `expect()`s | ⚠️ Warning | Enables Gap 1; no shared source of truth (WR-03 in 01-REVIEW.md) |
-| multiple | many | Em dash usage in code comments (91 occurrences) | ℹ️ Info | Violates user's global CLAUDE.md style rule; not behavior-affecting |
+| `bench/calibration.ts` | 44 | `measureMinOfN`'s floor check lacks a `!Number.isFinite(min)` guard present on its sibling `calibrationScore` check (WR-04, current `01-REVIEW.md`) | ⚠️ Warning | Narrow: only reachable via a broken/mocked timer; caught one call site downstream by `normalize`'s own guard with a less specific message. Not a false pass on any real measurement |
+| `bench/accumulator-store.ts` | ~73-81 | `persistEnvironment` last-write-wins across three bench files sharing one `.raw/environment.json` (WR-05, current `01-REVIEW.md`) | ⚠️ Warning | Diagnostic/reproducibility only; each row's own local calibration score correctly gates that row, confirmed by internally-consistent recorded figures |
+| — | — | No `TBD`/`FIXME`/`XXX`/`TODO`/`HACK`/`PLACEHOLDER` markers found in any file touched by plans 01-05/01-06 | — | Confirmed via direct grep across all 15 files in scope |
+| — | — | Em dash character (Unicode 2014) | — | Confirmed removed from all tracked `*.ts`/`*.yml`/`*.json` source outside `node_modules`/`.planning`/`.bench` |
 
-No `TBD`/`FIXME`/`XXX` unreferenced debt markers found in the reviewed files.
+### Gaps Summary
 
-## Gaps Summary
+Both structural gaps from the prior verification round (`01-VERIFICATION.md` Gap 1: D-09 self-test validated the wrong layer; Gap 2: `MIN_MEASUREMENT_MS` declared but never enforced) are genuinely closed, confirmed by direct code reading and by running `npm run typecheck`, `npm test`, and `npm run bench` myself rather than trusting either gap-closure plan's SUMMARY.md.
 
-Two structural gaps, both already surfaced by the phase's own code review (`01-REVIEW.md` CR-01/CR-02) and independently reconfirmed here by direct code inspection rather than trusting the review's claims:
+One item remains open and is not something further code changes can resolve: success criterion 5 ("a deliberately regressed commit fails CI on a budget breach") literally requires a real GitHub Actions run, and no GitHub remote is configured in this repository. The phase has built everything code-side that this criterion's intent requires — a syntactically correct CI workflow, a run-level enforcement mechanism, and a permanent self-test that spawns the real harness command and empirically proves a breach exits non-zero with the correct message — but the literal CI proof itself needs a human to configure a remote, push, and observe a real Actions run go red on a deliberately regressed commit. This is routed to human verification rather than marked as a code gap, because no plan authored by this agent can push to GitHub or create a remote on the operator's behalf.
 
-1. **The `MIN_MEASUREMENT_MS` timer-resolution floor is documented as a requirement but never enforced anywhere in the codebase.** The phase's own permanent record (`01-SPIKE-RESULTS.md`) already shows this being violated in production — a PERF-02 figure at 0.0999ms and a PERF-05 winning figure at literal 0ms, both far under the 10ms floor, both passing their budgets with no diagnostic.
-
-2. **The permanent D-09 self-test validates `checkBudget()` in isolation, not the actual enforcement path.** The real gate is three separately duplicated `expect(normalizedMs).toBeLessThanOrEqual(...)` assertions in the bench test files, and `assertRunInvariants` (the one function with run-level visibility) never inspects `verdict`. A future refactor that drops or weakens one of those three lines would pass CI silently. This directly contradicts D-09's own wording ("asserts it exits non-zero with the correct message") and leaves success criterion 5 ("a deliberately regressed commit fails CI... proving the gate is live rather than declared") unproven — compounded by the fact that the live GitHub Actions demonstration this criterion literally describes has never run at all, because no GitHub remote is configured in this repository.
-
-**The two architecture decisions this phase exists to produce — plain JS over WASM, and hand-rolled Canvas over a charting library — are not undermined by either gap** and are independently assessed as well-supported: the WASM decision rests primarily on a fully-resolved sweep figure (327ms, far above the timer floor) plus a properly floor-amortized secondary ratio measurement; the Canvas decision rests on a sound ordering argument (a resolved 4.41ms loser versus a floor-limited winner, which is still provably faster) with the floor caveat honestly disclosed in both PROJECT.md and the spike-results document. What is undermined is the phase's other, equally-named deliverable: a permanent, durable enforcement mechanism that "cannot rot into a no-op." That mechanism currently has two demonstrated holes.
+Two new warning-level findings (WR-04, WR-05) surfaced by this round's own code review are non-blocking: both are narrow, diagnostic-only issues that do not produce a false pass on any real regression, confirmed independently against the code rather than accepted on the review's word alone.
 
 ---
 
