@@ -12,7 +12,7 @@ import { paramsForCell, runSpikeBacktest, SWEEP_COLS, SWEEP_ROWS } from './kerne
 import { PERF_BUDGETS } from '../perf-budgets.ts'
 import { calibrationScore, measureMinOfN, normalize, REPEAT_COUNT } from './calibration.ts'
 import { captureEnvironment } from './environment-block.ts'
-import { checkBudget, type MeasurementRow } from './report.ts'
+import { assertWithinBudget, checkBudget, type MeasurementRow } from './report.ts'
 import { resolveWorkerCount, runSpikeSweep } from './sweep-pool.ts'
 import { BAR_COUNT, DEFAULT_SEED, makeSeededGbmSeries } from './synthetic-data.ts'
 
@@ -121,6 +121,8 @@ test('PERF-03: a full 10,000-cell sweep on a real Worker pool stays under budget
     `PERF-03 sweep: workerCount=${workerCount} chunkCount=${chunkCount}`,
   )
 
-  // The actual gate: an ordinary Vitest assertion (D-03). A value exactly at threshold passes.
-  expect(normalizedMs).toBeLessThanOrEqual(budget.thresholdMs)
+  // The precise per-metric signal: fails this test next to the code that measured the value.
+  // The authoritative gate is the verdict check inside assertRunInvariants, which fails the run
+  // even if this line is removed.
+  expect(() => assertWithinBudget(row)).not.toThrow()
 })

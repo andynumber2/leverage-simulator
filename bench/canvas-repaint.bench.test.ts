@@ -33,7 +33,7 @@ import {
 import { PERF_BUDGETS } from '../perf-budgets.ts'
 import { calibrationScore, measureMinOfN, normalize, REPEAT_COUNT } from './calibration.ts'
 import { captureEnvironment } from './environment-block.ts'
-import { checkBudget, type MeasurementRow } from './report.ts'
+import { assertWithinBudget, checkBudget, type MeasurementRow } from './report.ts'
 
 const CANVAS_WIDTH = GRID_COLS * CELL_SIZE_PX
 const CANVAS_HEIGHT = GRID_ROWS * CELL_SIZE_PX
@@ -196,8 +196,8 @@ test('PERF-05: both hand-rolled canvas arms measured on the identical 10,000-cel
       `winner=${winner.name} (asserted against PERF-05) loser=${loser.name}`,
   )
 
-  // The actual gate: an ordinary Vitest assertion, so a breach fails the run through the normal
-  // test-runner failure path with no separate reporting pipeline (D-03). A value exactly at
-  // threshold passes, matching PERF-01's "fails only when a measured value exceeds its budget".
-  expect(winner.normalizedMs).toBeLessThanOrEqual(budget.thresholdMs)
+  // The precise per-metric signal: fails this test next to the code that measured the value.
+  // The authoritative gate is the verdict check inside assertRunInvariants, which fails the run
+  // even if this line is removed.
+  expect(() => assertWithinBudget(row)).not.toThrow()
 })

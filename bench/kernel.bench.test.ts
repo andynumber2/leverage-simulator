@@ -11,7 +11,7 @@ import { PERF_BUDGETS } from '../perf-budgets.ts'
 import { calibrationScore, measureMinOfN, normalize, REPEAT_COUNT } from './calibration.ts'
 import { captureEnvironment } from './environment-block.ts'
 import { runSpikeBacktest, type SpikeKernelParams } from './kernel.ts'
-import { checkBudget, type MeasurementRow } from './report.ts'
+import { assertWithinBudget, checkBudget, type MeasurementRow } from './report.ts'
 import { BAR_COUNT, makeSeededGbmSeries } from './synthetic-data.ts'
 
 test('PERF-02: a single full-history backtest over 25,000 bars stays under budget', async () => {
@@ -52,6 +52,8 @@ test('PERF-02: a single full-history backtest over 25,000 bars stays under budge
   }
   await commands.recordMeasurement(row)
 
-  // The actual gate: an ordinary Vitest assertion (D-03). A value exactly at threshold passes.
-  expect(normalizedMs).toBeLessThanOrEqual(budget.thresholdMs)
+  // The precise per-metric signal: fails this test next to the code that measured the value.
+  // The authoritative gate is the verdict check inside assertRunInvariants, which fails the run
+  // even if this line is removed.
+  expect(() => assertWithinBudget(row)).not.toThrow()
 })
