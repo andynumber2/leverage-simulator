@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-08-16)
 Phase: 01 (performance-spike-and-budget-lock) — EXECUTING
 Plan: 3 of 6
 Status: Ready to execute
-Last activity: 2026-08-16 — Phase 01 execution started
+Last activity: 2026-08-16 - Completed quick task 260816-p8z: Make the bench calibration score canonical per run
 
 Progress: [██████████] 100%
 
@@ -112,6 +112,12 @@ None yet.
 
 - [Phase 3]: Cost parameters must be sourced and documented before validation is first run.
   Adjusting them afterward to tighten the fit invalidates the gate
+
+### Quick Tasks Completed
+
+| # | Description | Date | Commit | Directory |
+|---|-------------|------|--------|-----------|
+| 260816-p8z | Make the bench calibration score canonical per run | 2026-08-16 | e345a88 | [260816-p8z-make-the-bench-calibration-score-canonic](./quick/260816-p8z-make-the-bench-calibration-score-canonic/) |
 
 ## Deferred Items
 
