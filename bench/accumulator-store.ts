@@ -15,7 +15,8 @@
  * comment).
  */
 
-import { mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { randomUUID } from 'node:crypto'
+import { link, mkdir, readdir, readFile, rm, unlink, writeFile } from 'node:fs/promises'
 import { platform, release } from 'node:os'
 import { isAbsolute, join } from 'node:path'
 
@@ -53,6 +54,10 @@ export function resolveBenchResultsDir(): string {
 
 function rawDir(): string {
   return join(process.cwd(), resolveBenchResultsDir(), '.raw')
+}
+
+function calibrationPath(): string {
+  return join(rawDir(), 'calibration.json')
 }
 
 /** Clears any state left over from a previous run of the same process. Called once, from
@@ -97,6 +102,72 @@ export async function loadCapturedEnvironment(): Promise<EnvironmentBlock | null
   try {
     const content = await readFile(join(rawDir(), 'environment.json'), 'utf8')
     return JSON.parse(content) as EnvironmentBlock
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Write-once canonical calibration score for a run, shared through this file's filesystem-backed
+ * bridge for the same module-instance-boundary reason documented at the top of this file.
+ *
+ * Why this exists: bench/kernel.bench.test.ts, bench/sweep.bench.test.ts and
+ * bench/canvas-repaint.bench.test.ts each used to sample their own calibrationScore(), so
+ * different rows in one run were denominated in different scores, and the recorded environment
+ * block (last-write-wins) was not necessarily the score that normalized any given row. GitHub
+ * Actions run 31963076671 attempt 1 recorded this divergence directly: the environment block
+ * printed 0.7375 while PERF-03's own score was 1.4400 (1486.70 / 1032.43), a 2x divergence
+ * inside one run.
+ *
+ * The same module-instance-boundary reasoning documented at the top of this file is why the
+ * sharing is filesystem backed rather than in memory: a plain in-memory module accumulator does
+ * not survive across the separate vite-node module instances the browser-commands bridge and
+ * global-setup teardown run as.
+ *
+ * This changes only how the score is sampled, shared and recorded across the three bench files,
+ * never how it is computed or applied: `NOMINAL_REFERENCE_MS` and `normalize()` in
+ * bench/calibration.ts are untouched.
+ *
+ * The first caller to successfully claim a score for this run wins; every later caller,
+ * including a racing concurrent one, receives that same stored value. `link()` is the
+ * write-once primitive here: unlike a check-then-act existence test (which two concurrent
+ * callers can both pass), `link()` is atomic at the filesystem level and fails with `EEXIST`
+ * rather than clobbering an existing file. The temporary file is fully written before the link
+ * is attempted, so a losing caller can never observe a partially written winner.
+ */
+export async function claimCalibrationScore(sample: number): Promise<number> {
+  if (!Number.isFinite(sample) || sample <= 0) {
+    throw new Error(
+      `claimCalibrationScore: sample (${sample}) is zero, negative or non-finite: a broken ` +
+        "sample must not become the run's denominator",
+    )
+  }
+  await mkdir(rawDir(), { recursive: true })
+  const finalPath = calibrationPath()
+  const tmpPath = join(rawDir(), `.calibration.json.tmp-${process.pid}-${randomUUID()}`)
+  await writeFile(tmpPath, JSON.stringify({ calibrationScore: sample }), 'utf8')
+  try {
+    await link(tmpPath, finalPath)
+    return sample
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'EEXIST') {
+      const content = await readFile(finalPath, 'utf8')
+      return (JSON.parse(content) as { calibrationScore: number }).calibrationScore
+    }
+    throw error
+  } finally {
+    // Removed on every path, including the rethrow path, so a failed run does not leave litter
+    // in .raw/. Best-effort: the temp file may already be gone if link() itself failed part way.
+    await unlink(tmpPath).catch(() => {})
+  }
+}
+
+/** Mirrors `loadCapturedEnvironment`: reads and parses the claimed score, `null` when no score
+ * has been claimed yet this run or on any read failure. */
+export async function loadCalibrationScore(): Promise<number | null> {
+  try {
+    const content = await readFile(calibrationPath(), 'utf8')
+    return (JSON.parse(content) as { calibrationScore: number }).calibrationScore
   } catch {
     return null
   }
