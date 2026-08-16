@@ -1,7 +1,13 @@
 import { playwright } from '@vitest/browser-playwright'
 import { defineConfig } from 'vitest/config'
 
-import { persistEnvironment, persistInfoLine, persistMeasurement } from './bench/accumulator-store.ts'
+import {
+  claimCalibrationScore,
+  loadCalibrationScore,
+  persistEnvironment,
+  persistInfoLine,
+  persistMeasurement,
+} from './bench/accumulator-store.ts'
 import type { BrowserCapturedEnvironment } from './bench/environment-block.ts'
 import type { MeasurementRow } from './bench/report.ts'
 
@@ -55,6 +61,14 @@ export default defineConfig({
                 await persistInfoLine(id, line)
                 return null
               },
+              // Task 2 (quick-260816-p8z): readCalibration/claimCalibration back the run's
+              // canonical calibration score (bench/canonical-calibration.ts). claimCalibration
+              // returns the run's winning score, which may be a different value than the caller
+              // submitted when another bench file's claim already won the race, and that is the
+              // point of the command: every later caller converges on the one value that was
+              // actually stored.
+              readCalibration: async (_context) => loadCalibrationScore(),
+              claimCalibration: async (_context, sample: number) => claimCalibrationScore(sample),
             },
           },
         },

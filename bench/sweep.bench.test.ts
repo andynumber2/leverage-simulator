@@ -10,7 +10,8 @@ import { expect, test } from 'vitest'
 
 import { paramsForCell, runSpikeBacktest, SWEEP_COLS, SWEEP_ROWS } from './kernel.ts'
 import { PERF_BUDGETS } from '../perf-budgets.ts'
-import { calibrationScore, measureMinOfN, normalize, REPEAT_COUNT } from './calibration.ts'
+import { measureMinOfN, normalize, REPEAT_COUNT } from './calibration.ts'
+import { resolveRunCalibration } from './canonical-calibration.ts'
 import { captureEnvironment } from './environment-block.ts'
 import { assertWithinBudget, checkBudget, type MeasurementRow } from './report.ts'
 import { resolveWorkerCount, runSpikeSweep } from './sweep-pool.ts'
@@ -123,7 +124,8 @@ test(
 )
 
 test('PERF-03: a full 10,000-cell sweep on a real Worker pool stays under budget', async () => {
-  const score = calibrationScore()
+  // The run's canonical calibration figure, shared with every other bench file in this run.
+  const score = await resolveRunCalibration()
   let workerCount = 0
   let chunkCount = 0
   const rawMs = await measureMinOfN(REPEAT_COUNT, async () => {

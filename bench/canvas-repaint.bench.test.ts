@@ -31,7 +31,8 @@ import {
   type RgbaColor,
 } from './canvas-grid.ts'
 import { PERF_BUDGETS } from '../perf-budgets.ts'
-import { calibrationScore, measureBatchedMinOfN, normalize, REPEAT_COUNT } from './calibration.ts'
+import { measureBatchedMinOfN, normalize, REPEAT_COUNT } from './calibration.ts'
+import { resolveRunCalibration } from './canonical-calibration.ts'
 import { captureEnvironment } from './environment-block.ts'
 import { assertWithinBudget, checkBudget, type MeasurementRow } from './report.ts'
 
@@ -157,7 +158,8 @@ test('equivalence: paintPutImageData writes the expected color into the expected
 // --- Measurement -------------------------------------------------------------------------------
 
 test('PERF-05: both hand-rolled canvas arms measured on the identical 10,000-cell grid', async () => {
-  const score = calibrationScore()
+  // The run's canonical calibration figure, shared with every other bench file in this run.
+  const score = await resolveRunCalibration()
 
   const { ctx: fillRectCtx } = makeDisplayCanvas()
   const fillRectRawMs = await measureBatchedMinOfN(REPEAT_COUNT, FILL_RECT_BATCH_SIZE, () => {

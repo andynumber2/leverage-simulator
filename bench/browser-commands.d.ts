@@ -17,5 +17,13 @@ declare module 'vitest/internal/browser' {
      * bench/global-setup.ts alongside the measurement table. See bench/accumulator-store.ts's
      * `persistInfoLine` header comment for why this exists. */
     recordInfoLine: (id: string, line: string) => Promise<null>
+    /** Task 2 (quick-260816-p8z): read the run's already-claimed canonical calibration score, or
+     * `null` when no bench file has claimed one yet this run. See
+     * bench/accumulator-store.ts's `claimCalibrationScore` header comment for why this exists. */
+    readCalibration: () => Promise<number | null>
+    /** Task 2 (quick-260816-p8z): submit a sampled score as this run's canonical calibration
+     * score. Returns the run's winning score, which may differ from the submitted sample when
+     * another caller's claim already won. */
+    claimCalibration: (sample: number) => Promise<number>
   }
 }

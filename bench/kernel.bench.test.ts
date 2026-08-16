@@ -8,7 +8,8 @@ import { commands } from 'vitest/browser'
 import { expect, test } from 'vitest'
 
 import { PERF_BUDGETS } from '../perf-budgets.ts'
-import { calibrationScore, measureBatchedMinOfN, normalize, REPEAT_COUNT } from './calibration.ts'
+import { measureBatchedMinOfN, normalize, REPEAT_COUNT } from './calibration.ts'
+import { resolveRunCalibration } from './canonical-calibration.ts'
 import { captureEnvironment } from './environment-block.ts'
 import { runSpikeBacktest, type SpikeKernelParams } from './kernel.ts'
 import { assertWithinBudget, checkBudget, type MeasurementRow } from './report.ts'
@@ -36,7 +37,8 @@ test('PERF-02: a single full-history backtest over 25,000 bars stays under budge
     expenseRatio: 0.0095,
   }
 
-  const score = calibrationScore()
+  // The run's canonical calibration figure, shared with every other bench file in this run.
+  const score = await resolveRunCalibration()
   const rawMs = await measureBatchedMinOfN(REPEAT_COUNT, PERF_02_BATCH_SIZE, () => {
     runSpikeBacktest(params, series, outValue, outRuined)
   })
