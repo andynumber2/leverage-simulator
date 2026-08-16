@@ -88,6 +88,16 @@ export function escalationTriggered(normalizedMs: number | null, budgetMs: numbe
 }
 
 /**
+ * Relative tolerance for the score-coherence check in `assertRunInvariants`. `normalizedMs` is
+ * an exact IEEE division of `measuredMs` by the run's calibration score (`bench/calibration.ts`'s
+ * `normalize`), so the round trip `measuredMs - normalizedMs * score` is accurate to a few ulps.
+ * `1e-9` relative is many orders of magnitude looser than that true residual, while still
+ * catching the 2x divergence observed on GitHub Actions run 31963076671 (environment block
+ * 0.7375 versus PERF-03's own score 1.4400).
+ */
+export const SCORE_COHERENCE_RELATIVE_TOLERANCE = 1e-9
+
+/**
  * Rounds half-up to two decimal places for display. This value is never fed back into
  * `checkBudget` or `escalationTriggered`: those compare the unrounded float derived from
  * `performance.now()` deltas.
@@ -242,9 +252,18 @@ export function renderTable(
  * - No row may carry verdict "fail". This is the authoritative gate: it has visibility into
  *   every row regardless of which bench file recorded it, so a breach cannot be silenced by
  *   removing or weakening a single bench file's own assertion.
+ * - When `environment` is supplied, every measured row's implied score
+ *   (`measuredMs / normalizedMs`) must agree with `environment.calibrationScore`: this
+ *   structurally prevents a future bench file that samples its own score from producing rows
+ *   denominated differently from the recorded environment block, turning that divergence into a
+ *   failed run rather than a silently divergent report.
  * - totalRuntimeMs must not exceed BENCH_TOTAL_RUNTIME_CAP_MS.
  */
-export function assertRunInvariants(rows: readonly MeasurementRow[], totalRuntimeMs: number): void {
+export function assertRunInvariants(
+  rows: readonly MeasurementRow[],
+  totalRuntimeMs: number,
+  environment?: EnvironmentBlock,
+): void {
   const present = new Set(rows.map((r) => r.requirementId))
   const missing = allRequirementIds().filter((id) => !present.has(id))
   if (missing.length > 0) {
@@ -279,6 +298,39 @@ export function assertRunInvariants(rows: readonly MeasurementRow[], totalRuntim
     throw new Error(
       `assertRunInvariants: ${failing.length} row(s) failed budget: ${failingIds.join(', ')}`,
     )
+  }
+
+  // Score coherence (quick-260816-p8z): only runs when a caller supplies an environment block.
+  // Uses the multiplied form (measuredMs - normalizedMs * score) rather than dividing
+  // measuredMs / normalizedMs, so a legitimately zero measurement cannot produce NaN from a
+  // zero denominator. Collected and thrown once, sorted ascending by budget id, for the same
+  // stable-message reason the verdict check above documents.
+  if (environment) {
+    const divergent = rows
+      .filter((r) => r.measuredMs !== null && r.normalizedMs !== null)
+      .filter((r) => {
+        const measuredMs = r.measuredMs as number
+        const normalizedMs = r.normalizedMs as number
+        const residual = Math.abs(measuredMs - normalizedMs * environment.calibrationScore)
+        const scale = SCORE_COHERENCE_RELATIVE_TOLERANCE * Math.max(1, Math.abs(measuredMs))
+        return residual > scale
+      })
+      .sort((a, b) => a.budgetId.localeCompare(b.budgetId))
+    if (divergent.length > 0) {
+      const details = divergent
+        .map((r) => {
+          const measuredMs = r.measuredMs as number
+          const normalizedMs = r.normalizedMs as number
+          const impliedScore = normalizedMs === 0 ? 0 : measuredMs / normalizedMs
+          return `${r.budgetId} (implied score ${impliedScore}, environment score ` +
+            `${environment.calibrationScore})`
+        })
+        .join(', ')
+      throw new Error(
+        `assertRunInvariants: ${divergent.length} row(s) diverge from the recorded ` +
+          `environment.calibrationScore: ${details}`,
+      )
+    }
   }
 
   if (totalRuntimeMs > BENCH_TOTAL_RUNTIME_CAP_MS) {

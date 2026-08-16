@@ -78,7 +78,7 @@ export default async function setup(): Promise<() => Promise<void>> {
     // thrown error, so the guarantee holds even in a Vitest project configuration where an
     // uncaught error from globalSetup's teardown alone would not otherwise flip the exit code.
     try {
-      assertRunInvariants(rows, totalRuntimeMs)
+      assertRunInvariants(rows, totalRuntimeMs, environment)
     } catch (error) {
       process.exitCode = 1
       throw error

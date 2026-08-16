@@ -184,6 +184,47 @@ describe('assertRunInvariants', () => {
     expect(() => assertRunInvariants(withFailure, 500)).toThrow(/failed budget/i)
   })
 
+  test('a full row set plus an environment block whose calibrationScore matches every measured row does not throw', () => {
+    // fullRowSet's only measured row is PERF-05 (measuredMs: 4, normalizedMs: 4), so a score of
+    // 1 keeps measuredMs === normalizedMs * score.
+    const coherentEnvironment: EnvironmentBlock = { ...environment, calibrationScore: 1 }
+    expect(() => assertRunInvariants(fullRowSet, 500, coherentEnvironment)).not.toThrow()
+  })
+
+  test('a row whose implied score diverges from the environment block by 2x throws, naming the budget id and both scores', () => {
+    const divergentRows = fullRowSet.map((r) =>
+      r.budgetId === 'PERF-05' ? { ...r, measuredMs: 8, normalizedMs: 4 } : r,
+    )
+    // measuredMs / normalizedMs = 2 for PERF-05, but the environment block records 1: a 2x
+    // divergence, the same shape as GitHub Actions run 31963076671.
+    const divergentEnvironment: EnvironmentBlock = { ...environment, calibrationScore: 1 }
+    expect(() => assertRunInvariants(divergentRows, 500, divergentEnvironment)).toThrow(/PERF-05/)
+    expect(() => assertRunInvariants(divergentRows, 500, divergentEnvironment)).toThrow(/implied score 2/)
+    expect(() => assertRunInvariants(divergentRows, 500, divergentEnvironment)).toThrow(/environment score 1/)
+  })
+
+  test('unmeasured rows are skipped by the coherence check, not treated as a divergence', () => {
+    const coherentEnvironment: EnvironmentBlock = { ...environment, calibrationScore: 1 }
+    // Every unmeasured row in fullRowSet has measuredMs/normalizedMs both null; only PERF-05 is
+    // measured, and it is coherent with a score of 1.
+    expect(() => assertRunInvariants(fullRowSet, 500, coherentEnvironment)).not.toThrow()
+  })
+
+  test('called with two arguments (no environment block), the coherence check is skipped entirely', () => {
+    const divergentRows = fullRowSet.map((r) =>
+      r.budgetId === 'PERF-05' ? { ...r, measuredMs: 8, normalizedMs: 4 } : r,
+    )
+    expect(() => assertRunInvariants(divergentRows, 500)).not.toThrow()
+  })
+
+  test('a row with normalizedMs === 0 and measuredMs === 0 is coherent with any score and does not throw or produce NaN', () => {
+    const zeroRow = fullRowSet.map((r) =>
+      r.budgetId === 'PERF-05' ? { ...r, measuredMs: 0, normalizedMs: 0 } : r,
+    )
+    const someEnvironment: EnvironmentBlock = { ...environment, calibrationScore: 3.7 }
+    expect(() => assertRunInvariants(zeroRow, 500, someEnvironment)).not.toThrow()
+  })
+
   test('two failing rows supplied in reverse budget-id order produce the same message as ascending order', () => {
     const ascending = fullRowSet.map((r) => {
       if (r.budgetId === 'PERF-05') return { ...r, normalizedMs: 100, verdict: 'fail' as const }
