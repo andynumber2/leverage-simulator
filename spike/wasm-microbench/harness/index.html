@@ -1,0 +1,146 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>wasm-microbench harness</title>
+  </head>
+  <body>
+    <script type="module">
+      import init, { make_seeded_gbm_series, bench_full_series } from '../pkg/wasm_microbench.js'
+
+      // Same calibration methodology as bench/calibration.ts (D-06/D-07), reimplemented here
+      // rather than imported: this harness runs outside the Vitest/vite-node module graph, and
+      // the constants below are copied verbatim so the ratio is not contaminated by a different
+      // timing statistic.
+      const REPEAT_COUNT = 5
+      const NOMINAL_REFERENCE_MS = 40
+      const REFERENCE_SCRATCH_SIZE = 1024
+      const REFERENCE_ITERATIONS = 40_000_000
+
+      function runReferenceLoop(scratch) {
+        let acc = 0
+        for (let i = 0; i < REFERENCE_ITERATIONS; i++) {
+          const idx = i & (REFERENCE_SCRATCH_SIZE - 1)
+          const prev = scratch[idx] ?? 0
+          const next = prev * 1.0000001 + 0.0000001
+          scratch[idx] = next
+          acc += next
+        }
+        return acc
+      }
+
+      function calibrationScore() {
+        const scratch = new Float64Array(REFERENCE_SCRATCH_SIZE)
+        let min = Infinity
+        let sink = 0
+        for (let i = 0; i < REPEAT_COUNT; i++) {
+          const start = performance.now()
+          sink += runReferenceLoop(scratch)
+          const elapsed = performance.now() - start
+          if (elapsed < min) min = elapsed
+        }
+        if (!Number.isFinite(sink)) {
+          throw new Error('calibrationScore: reference loop produced a non-finite accumulator')
+        }
+        return min / NOMINAL_REFERENCE_MS
+      }
+
+      async function measureMinOfN(n, fn) {
+        let min = Infinity
+        for (let i = 0; i < n; i++) {
+          const start = performance.now()
+          // eslint-disable-next-line no-await-in-loop
+          await fn()
+          const elapsed = performance.now() - start
+          if (elapsed < min) min = elapsed
+        }
+        return min
+      }
+
+      function normalize(rawMs, score) {
+        return rawMs / score
+      }
+
+      // Identical params to bench/kernel.bench.test.ts's PERF-02 test, and identical
+      // DEFAULT_SEED to bench/synthetic-data.ts, so the two arms time the same work.
+      const DEFAULT_SEED = 0x5eed5eed
+      const PARAMS = {
+        leverage: 3,
+        entryIndex: 0,
+        initialInvestment: 10_000,
+        contributionAmount: 100,
+        contributionIntervalBars: 21,
+        financingSpread: 0.005,
+        expenseRatio: 0.0095,
+      }
+
+      function callBenchFullSeries(series) {
+        return bench_full_series(
+          series,
+          PARAMS.leverage,
+          PARAMS.entryIndex,
+          PARAMS.initialInvestment,
+          PARAMS.contributionAmount,
+          PARAMS.contributionIntervalBars,
+          PARAMS.financingSpread,
+          PARAMS.expenseRatio,
+        )
+      }
+
+      async function main() {
+        await init()
+
+        // Series built once, outside the timed region — mirrors the JS arm's
+        // "preallocated/prebuilt outside the timed loop" discipline (D-06/F1).
+        const series = make_seeded_gbm_series(DEFAULT_SEED)
+
+        // One untimed correctness call, whose result the Node driver compares against the JS
+        // arm's own output for the same seed and params before any ratio is trusted.
+        const correctness = callBenchFullSeries(series)
+
+        const score = calibrationScore()
+        const rawMs = await measureMinOfN(REPEAT_COUNT, () => {
+          callBenchFullSeries(series)
+        })
+        const normalizedMs = normalize(rawMs, score)
+
+        // Secondary, above-noise-floor figure: a single call already lands at/below
+        // performance.now()'s effective resolution in headless Chromium (see rawMs above,
+        // which matches the JS arm's own PERF-02 floor-limited raw figure). BATCH_SIZE calls
+        // inside one timed unit amortizes the timer's coarsening so a genuinely resolvable
+        // per-call cost can be recovered by division, without changing what is computed per
+        // call (same bench_full_series call, same series, same params).
+        const BATCH_SIZE = 5000
+        const batchRawMs = await measureMinOfN(REPEAT_COUNT, () => {
+          for (let i = 0; i < BATCH_SIZE; i++) {
+            callBenchFullSeries(series)
+          }
+        })
+        const batchNormalizedMs = normalize(batchRawMs, score)
+        const perCallNormalizedMs = batchNormalizedMs / BATCH_SIZE
+        const perCallRawMs = batchRawMs / BATCH_SIZE
+
+        window.__HARNESS_RESULT__ = {
+          finalValue: correctness[0],
+          ruined: correctness[1] === 1,
+          calibrationScore: score,
+          rawMs,
+          normalizedMs,
+          batch: {
+            batchSize: BATCH_SIZE,
+            batchRawMs,
+            batchNormalizedMs,
+            perCallNormalizedMs,
+            perCallRawMs,
+          },
+          hardwareConcurrency: navigator.hardwareConcurrency,
+          userAgent: navigator.userAgent,
+        }
+      }
+
+      main().catch((err) => {
+        window.__HARNESS_RESULT__ = { error: String((err && err.stack) || err) }
+      })
+    </script>
+  </body>
+</html>
