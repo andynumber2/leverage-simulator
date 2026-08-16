@@ -247,6 +247,10 @@ See "Deviations from Plan" above — all three architecture-level issues (enviro
 - No blockers for Phase 1's remaining plans (01-02, 01-03, 01-04), which build on this plan's scaffold, budget table, and report machinery.
 - The GitHub remote / Actions setup above is the only outstanding external dependency; it does not block further local execution of this phase's plans.
 
+## Self-Check: PASSED
+
+All 17 claimed files verified present on disk (`package.json` through this SUMMARY). All 3 claimed commit hashes (`0f7125d`, `cc8fa9b`, `faa136c`) verified present in `git log --oneline --all`.
+
 ---
 *Phase: 01-performance-spike-and-budget-lock*
 *Completed: 2026-08-16*

@@ -5,15 +5,15 @@ milestone_name: milestone
 current_phase: 01
 current_phase_name: performance-spike-and-budget-lock
 status: executing
-stopped_at: Phase 1 context gathered
-last_updated: "2026-08-16T02:02:12.237Z"
+stopped_at: Completed 01-01-PLAN.md
+last_updated: "2026-08-16T02:23:56.736Z"
 last_activity: 2026-08-16
 last_activity_desc: Roadmap created, 72 v1 requirements mapped across 8 phases
 progress:
   total_phases: 1
   completed_phases: 0
   total_plans: 4
-  completed_plans: 0
+  completed_plans: 1
 ---
 
 # Project State
@@ -28,11 +28,11 @@ See: .planning/PROJECT.md (updated 2026-08-16)
 ## Current Position
 
 Phase: 01 (performance-spike-and-budget-lock) — EXECUTING
-Plan: 1 of 4
-Status: Executing Phase 01
+Plan: 2 of 4
+Status: Ready to execute
 Last activity: 2026-08-16 — Phase 01 execution started
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [███░░░░░░░] 25%
 
 ## Performance Metrics
 
@@ -54,6 +54,11 @@ Progress: [░░░░░░░░░░] 0%
 - Trend: —
 
 *Updated after each plan completion*
+**Per-Plan Metrics:**
+
+| Plan | Duration | Tasks | Files |
+|------|----------|-------|-------|
+| Phase 01 P01 | 19min | 2 tasks | 16 files |
 
 ## Accumulated Context
 
@@ -66,6 +71,8 @@ Recent decisions affecting current work:
 - [Roadmap]: Kernel validation against real UPRO/TQQQ folded into the kernel phase as its definition of done, not a separate downstream gate, so the no-tuning constraint lives in the same spec as the code that would be tuned
 - [Roadmap]: Heatmap design pass is its own phase — the entry-date x leverage pairing has no precedent in any surveyed tool
 - [Roadmap]: No optimization phase. Every compute- or render-touching phase carries a measured performance number in its success criteria
+- [Phase ?]: 01-01: Browser-to-Node bridge for the bench harness persists to .bench/.raw/ on disk (not an in-memory module accumulator) — the browser.commands implementation and global-setup teardown run as separate vite-node module instances
+- [Phase ?]: 01-01: NOMINAL_REFERENCE_MS calibration anchor set to 40ms, tuned empirically in this sandbox; must be re-verified (not silently retuned) once measured on the D-17 ubuntu-latest CI baseline
 
 ### Pending Todos
 
@@ -94,6 +101,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-08-16T01:16:56.078Z
-Stopped at: Phase 1 context gathered
-Resume file: .planning/phases/01-performance-spike-and-budget-lock/01-CONTEXT.md
+Last session: 2026-08-16T02:23:56.728Z
+Stopped at: Completed 01-01-PLAN.md
+Resume file: None
