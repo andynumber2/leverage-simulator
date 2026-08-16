@@ -66,6 +66,19 @@ describe('mapValueToRgba', () => {
     expect(mapValueToRgba(3.14159)).toEqual(mapValueToRgba(3.14159))
   })
 
+  test('every value from makeGridValues maps to exactly one deterministic RGBA, for all 10,000 cells', () => {
+    // The pure half of D-15's equivalence proof: there is exactly one color mapping, so neither
+    // paint arm can consume a different color for the same cell than the other. See
+    // bench/canvas-repaint.bench.test.ts for the rendered half of this proof (Task 2).
+    const values = makeGridValues(0x5eed)
+    for (let i = 0; i < CELL_COUNT; i++) {
+      const value = values[i] ?? 0
+      const first = mapValueToRgba(value)
+      const second = mapValueToRgba(value)
+      expect(second).toEqual(first)
+    }
+  })
+
   test('low and high values map to visibly different colors', () => {
     const low = mapValueToRgba(1e-3)
     const high = mapValueToRgba(1e3)
