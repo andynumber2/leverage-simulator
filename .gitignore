@@ -1,0 +1,20 @@
+node_modules/
+.bench/
+dist/
+
+# Playwright local caches / artifacts
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+
+# Vitest browser-mode failure attachments (screenshots taken on a failing assertion)
+.vitest-attachments/
+**/__screenshots__/
+
+# GSD run-local scratch (dispatch sentinels, research fetch cache) - regenerable, not provenance
+.gsd/
+.planning/research/.cache/
+
+# Editor / OS noise
+.DS_Store

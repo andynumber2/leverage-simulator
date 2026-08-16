@@ -56,21 +56,29 @@ Decimal phases appear between their surrounding integers in numeric order.
   4. The budget file carries a numeric threshold for each of PERF-02 through PERF-09, each annotated with its perception anchor (16ms = one frame, 100ms = feels instant, 1s = holds attention). Any threshold set looser than its anchor carries a written reason and an accompanying Key Decision, and an unreachable target is escalated as an architecture change rather than relaxed automatically.
   5. A deliberately regressed commit fails CI on a budget breach, proving the gate is live rather than declared.
 
-**Plans:** 4 plans
+**Plans:** 6/6 plans executed (4 executed, 2 gap closure pending)
 
 Plans:
 **Wave 1**
 
-- [ ] 01-01-PLAN.md: Tracer. `npm run bench` measures a real 10,000-cell Canvas repaint in headless Chromium, gates it against the locked typed budget file, and CI proves the gate goes red
+- [x] 01-01-PLAN.md: Tracer. `npm run bench` measures a real 10,000-cell Canvas repaint in headless Chromium, gates it against the locked typed budget file, and CI proves the gate goes red
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 01-02-PLAN.md: JS compute arm. Seeded 25,000-bar series, branchy per-bar recurrence (PERF-02), and a real Worker-pool sweep of 10,000 cells (PERF-03)
-- [ ] 01-03-PLAN.md: Canvas arms. `fillRect`-per-cell versus a single `putImageData` pass on the same grid, with a paint-equivalence proof before either timing is trusted
+- [x] 01-02-PLAN.md: JS compute arm. Seeded 25,000-bar series, branchy per-bar recurrence (PERF-02), and a real Worker-pool sweep of 10,000 cells (PERF-03)
+- [x] 01-03-PLAN.md: Canvas arms. `fillRect`-per-cell versus a single `putImageData` pass on the same grid, with a paint-equivalence proof before either timing is trusted
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 01-04-PLAN.md: Throwaway Rust WASM microbenchmark, SPIKE-RESULTS record, and the two architecture Key Decisions citing their measured figures
+- [x] 01-04-PLAN.md: Throwaway Rust WASM microbenchmark, SPIKE-RESULTS record, and the two architecture Key Decisions citing their measured figures
+
+**Wave 4** *(gap closure, blocked on Wave 3 completion)*
+
+- [x] 01-05-PLAN.md: Gap 1. A run-level verdict backstop in `assertRunInvariants`, one shared budget comparison, and a self-test that spawns a real harness command against a deliberately over-budget fixture and asserts a non-zero exit (D-09)
+
+**Wave 5** *(gap closure, blocked on Wave 4 completion)*
+
+- [x] 01-06-PLAN.md: Gap 2. Enforce the declared `MIN_MEASUREMENT_MS` timer floor, amortize every sub-floor call site through a batched loop in the same slice, bound the worker failure path, and record the resolved figures
 
 ### Phase 2: Compiled Data Bundle
 
@@ -194,7 +202,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Performance Spike and Budget Lock | 0/TBD | Not started | - |
+| 1. Performance Spike and Budget Lock | 6/6 | In Progress|  |
 | 2. Compiled Data Bundle | 0/TBD | Not started | - |
 | 3. Simulation Kernel and the UPRO/TQQQ Gate | 0/TBD | Not started | - |
 | 4. First Defensible Backtest in the Browser | 0/TBD | Not started | - |

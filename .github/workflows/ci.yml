@@ -1,0 +1,59 @@
+name: CI
+
+# D-01: the standard `pull_request` trigger only, never `pull_request_target`, which would
+# grant untrusted fork-PR code a write token and access to repository secrets (threat T-01-02).
+# This job needs neither: it only runs `npm ci` and `npm run bench` against the PR's own code.
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+# Workflow-level read-only token. No secrets are referenced anywhere in this job, so untrusted
+# fork-PR code that executes during `npm ci`/`npm run bench` has no write access and nothing to
+# exfiltrate (T-01-02).
+permissions:
+  contents: read
+
+jobs:
+  bench:
+    # D-17: ubuntu-latest IS the 4-core baseline machine that PERF-03 names: this collapses the
+    # gate machine and the baseline machine into one, so there is no derating factor to argue
+    # about.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - uses: actions/cache@v4
+        id: playwright-cache
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+
+      - name: Install Playwright browsers (cold cache)
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: npx playwright install --with-deps chromium
+
+      - name: Install Playwright OS dependencies (warm cache)
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: npx playwright install-deps chromium
+
+      - run: npm run typecheck
+
+      - run: npm test
+
+      - run: npm run bench
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: bench-results
+          path: .bench/bench-results.json
+          if-no-files-found: warn

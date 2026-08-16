@@ -1,0 +1,24 @@
+{
+  "name": "leverage-simulator",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Daily-rebalanced leveraged exposure simulator with rigorous cost modelling.",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --project unit",
+    "bench": "vitest run --project bench",
+    "bench:selftest": "vitest run --project bench-selftest"
+  },
+  "license": "UNLICENSED",
+  "devDependencies": {
+    "@types/node": "22.19.5",
+    "@vitest/browser-playwright": "4.1.10",
+    "playwright": "1.62.1",
+    "typescript": "5.9.3",
+    "vitest": "4.1.10"
+  },
+  "dependencies": {
+    "comlink": "4.4.2"
+  }
+}
