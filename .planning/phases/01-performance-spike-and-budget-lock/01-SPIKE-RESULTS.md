@@ -168,8 +168,31 @@ retuning, adopting the WASM ratio, a coarser default grid) is owed, and per D-20
 budget is relaxed. Task 3 records no third Key Decision row, per this document's own finding.
 
 PERF-04, 06, 07a, 07b, 08a, 08b, 08c, 09 are unmeasured this phase (implemented in Phase 4 or 7)
-and are not evaluated against the trigger — there is no measured value yet to compare, and their
-thresholds remain locked at their perception anchors per D-19 regardless.
+and are not evaluated against the trigger, since there is no measured value yet to compare, and
+their thresholds remain locked at their perception anchors per D-19 regardless.
+
+### Addendum (quick-260816-qae, 2026-08-16): this section's verdict is superseded
+
+**The verdict above was reached before the D-17 baseline existed.** No GitHub remote was
+configured in this repository at the time §2 and this section were written, so every figure both
+cite is the informational dev-sandbox run (9 logical cores), never the authoritative
+`ubuntu-latest` baseline. That baseline now exists.
+
+On the D-17 baseline (GitHub Actions `ubuntu-latest`, run 31965951474, 4 logical cores,
+calibration score 1.0600, HEAD 8eb9551), PERF-03 measured 807.92ms normalized (856.40ms raw,
+workerCount=3, chunkCount=12), **80.8% of the 1000ms budget, crossing the 70% trigger.** A prior
+baseline run, 31963076671 attempt 2, measured 700.38ms normalized (70.0%) and also crossed it, so
+the trigger is crossed on two consecutive `ubuntu-latest` runs, not a single-sample artifact.
+
+**This supersedes the table's "No" verdict for PERF-03 above.** PERF-02 and PERF-05 are
+unaffected: on the same D-17 baseline they measured 0.21ms of the 16ms budget and 0.37ms of the
+16ms budget respectively, both well clear of the trigger, consistent with this section's original
+verdict for those two rows.
+
+The escalation is recorded as a deliberate D-20 escalation, not a budget relaxation, in
+`PROJECT.md`'s Key Decisions table (third phase-1 row). `NOMINAL_REFERENCE_MS` stays 40 and no
+`thresholdMs` moved. A reader who stops at this section's table above, without reading this
+addendum, will reach the wrong conclusion about PERF-03.
 
 ---
 

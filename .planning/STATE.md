@@ -86,7 +86,8 @@ Recent decisions affecting current work:
 - [Phase ?]: 01-03: bench/global-setup.ts's JSON artifact now persists recordInfoLine payloads (infoLines field), so a free-text reproducibility figure survives in .bench/bench-results.json, not only stdout
 - [PROJECT.md Key Decisions]: 01-04: Plain JS with a Worker pool settles the sweep/kernel compute architecture over WASM — measured PERF-03 at 32.7% of budget, and a throwaway Rust microbenchmark of the identical recurrence measured ~1.20x SLOWER than JS (not near parity as CONTEXT.md's rationale predicted), so WASM is dropped as a default rather than adopted
 - [PROJECT.md Key Decisions]: 01-04: Hand-rolled Canvas 2D (putImageData) settles the heatmap renderer over any charting library — measured PERF-05 at 0% of budget; no charting library was separately benchmarked per D-14, citing .claude/CLAUDE.md's Q2 findings
-- [Phase ?]: 01-04: No measured figure (PERF-02 1.1%, PERF-03 32.7%, PERF-05 0%) crosses the D-20 70% escalation trigger this phase; no deliberate escalation and no third Key Decision row are owed
+- [Phase ?]: 01-04 corrected (quick-260816-qae): the D-20 70% escalation trigger IS crossed by PERF-03 on the D-17 baseline (807.92ms normalized, 80.8% of the 1000ms budget, run 31965951474); the escalation is recorded deliberately as a third Key Decision row in PROJECT.md, with no budget relaxed. PERF-02 (0.21ms of the 16ms budget) and PERF-05 (0.37ms of the 16ms budget) stay well clear of the trigger on the same baseline
+- [Phase ?]: quick-260816-qae: NOMINAL_REFERENCE_MS stays at 40, closing the 01-01 re-verify open item recorded above. The two consecutive D-17 baseline runs measured the reference loop at 37.30ms and 42.40ms, a 14% spread; retuning to either single sample would fit noise rather than re-verify against the baseline, and 40 sits between them. 01-01-PLAN.md's PERF-01a prohibition (line 71) forbids altering the calibration reference loop or its scaling in response to a measurement whose only effect would be to un-trip an escalation
 - [Phase ?]: 01-05: assertRunInvariants's verdict check promoted to the authoritative budget gate; per-file expect() demoted to a diagnostic delegate over assertWithinBudget
 - [Phase ?]: 01-06: measureBatchedMinOfN added alongside measureMinOfN (not promoted) so the floor is enforced against the batch total exactly once; PERF-03's sweep keeps calling measureMinOfN directly since its raw cost already clears the floor
 - [Phase ?]: 01-06: batch sizes (PERF_02=500, putImageData=500, fillRect=8) all cleared the 10ms floor on the first empirical run; DEFAULT_CHUNK_TIMEOUT_MS set to 10s for sweep-pool worker failure detection
@@ -99,12 +100,14 @@ None yet.
 ### Blockers/Concerns
 
 - [Phase 1]: All eight PERF-02 through PERF-09 budgets are now **locked** at their perception
-  anchors (D-19) — every threshold equals its anchor, so no `relaxationReason` is owed on any
-  entry in `perf-budgets.ts`. PERF-02 (1.1%), PERF-03 (32.7%), and PERF-05 (0%) are measured this
-  phase and none crosses the D-20 70% escalation trigger; PERF-04, 06, 07a/b, 08a/b/c, and 09
-  remain unmeasured (implemented in Phase 4 or 7) but are already gated from their first commit.
-  Any future relaxation of any of these eight requires a Key Decision under PERF-01a, never a
-  silent edit
+  anchors (D-19): every threshold equals its anchor, so no `relaxationReason` is owed on any
+  entry in `perf-budgets.ts`. On the D-17 baseline (GitHub Actions `ubuntu-latest`, run
+  31965951474), PERF-02 (0.21ms of the 16ms budget) and PERF-05 (0.37ms of the 16ms budget) stay
+  well clear of the D-20 70% escalation trigger. PERF-03 crosses it (807.92ms normalized, 80.8%
+  of the 1000ms budget) and has been escalated deliberately under D-20, recorded as a third Key
+  Decision row in PROJECT.md, not relaxed. PERF-04, 06, 07a/b, 08a/b/c, and 09 remain unmeasured
+  (implemented in Phase 4 or 7) but are already gated from their first commit. Any future
+  relaxation of any of these eight requires a Key Decision under PERF-01a, never a silent edit
 
 - [Phase 2]: Exact FRED series start dates (DFF, DTB3, TB3MS) and Yahoo ^GSPC/^SP500TR
   first-available rows were verified via web search, not a direct API pull. Re-confirm against
