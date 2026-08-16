@@ -56,7 +56,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   4. The budget file carries a numeric threshold for each of PERF-02 through PERF-09, each annotated with its perception anchor (16ms = one frame, 100ms = feels instant, 1s = holds attention). Any threshold set looser than its anchor carries a written reason and an accompanying Key Decision, and an unreachable target is escalated as an architecture change rather than relaxed automatically.
   5. A deliberately regressed commit fails CI on a budget breach, proving the gate is live rather than declared.
 
-**Plans:** 4/4 plans executed
+**Plans:** 6 plans (4 executed, 2 gap closure pending)
 
 Plans:
 **Wave 1**
@@ -71,6 +71,14 @@ Plans:
 **Wave 3** *(blocked on Wave 2 completion)*
 
 - [x] 01-04-PLAN.md: Throwaway Rust WASM microbenchmark, SPIKE-RESULTS record, and the two architecture Key Decisions citing their measured figures
+
+**Wave 4** *(gap closure, blocked on Wave 3 completion)*
+
+- [ ] 01-05-PLAN.md: Gap 1. A run-level verdict backstop in `assertRunInvariants`, one shared budget comparison, and a self-test that spawns a real harness command against a deliberately over-budget fixture and asserts a non-zero exit (D-09)
+
+**Wave 5** *(gap closure, blocked on Wave 4 completion)*
+
+- [ ] 01-06-PLAN.md: Gap 2. Enforce the declared `MIN_MEASUREMENT_MS` timer floor, amortize every sub-floor call site through a batched loop in the same slice, bound the worker failure path, and record the resolved figures
 
 ### Phase 2: Compiled Data Bundle
 
