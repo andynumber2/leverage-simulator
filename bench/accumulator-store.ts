@@ -1,16 +1,16 @@
 /**
- * bench/accumulator-store.ts — Node-only, filesystem-backed accumulator for the browser-to-Node
+ * bench/accumulator-store.ts: Node-only, filesystem-backed accumulator for the browser-to-Node
  * bridge.
  *
  * `vitest.config.ts`'s `browser.commands` implementations and `bench/global-setup.ts`'s
  * teardown run as separate module instances of the Vitest/vite-node runtime, even though both
- * execute in the same OS process — a plain in-memory module-level array does not survive across
+ * execute in the same OS process: a plain in-memory module-level array does not survive across
  * that boundary (verified empirically: the command wrote successfully, but a later in-memory
  * read from global-setup.ts's own import of the same source file saw no data). The filesystem is
  * genuinely shared regardless of which module instance touches it, so this file persists every
  * recorded row and the environment block to `.bench/.raw/` and reads them back at teardown.
  *
- * Deliberately never imported by any `*.bench.test.ts` file — it imports `node:fs`/`node:os`,
+ * Deliberately never imported by any `*.bench.test.ts` file: it imports `node:fs`/`node:os`,
  * which break the browser bundle if pulled in transitively (see bench/report.ts's header
  * comment).
  */
@@ -68,7 +68,7 @@ export async function persistMeasurement(row: MeasurementRow): Promise<void> {
 }
 
 /** Persists the run's environment block, filling in the two fields (`os`, `ci`) that are
- * genuinely Node-side concerns — `process.env` and `node:os` are exactly what is available in
+ * genuinely Node-side concerns: `process.env` and `node:os` are exactly what is available in
  * this Node-context command implementation. */
 export async function persistEnvironment(block: BrowserCapturedEnvironment): Promise<void> {
   await mkdir(rawDir(), { recursive: true })
@@ -105,10 +105,10 @@ export async function loadCapturedEnvironment(): Promise<EnvironmentBlock | null
 /**
  * Free-text info lines a `*.bench.test.ts` file wants printed in the run's stdout table
  * alongside the measurement rows (e.g. bench/sweep.bench.test.ts's resolved worker count and
- * chosen chunk count, for PERF-03 reproducibility). Not part of MeasurementRow's typed shape —
+ * chosen chunk count, for PERF-03 reproducibility). Not part of MeasurementRow's typed shape:
  * this is deliberately a narrow, additive escape hatch rather than a change to the row schema.
  * Added in Task 2 of plan 01-02 because a browser-context `console.log` does not reach
- * `npm run bench`'s stdout under the default (non-verbose) Vitest reporter — verified
+ * `npm run bench`'s stdout under the default (non-verbose) Vitest reporter, verified
  * empirically: the same log line appears only with `--reporter=verbose`, which this project's
  * `bench` script does not pass. Persisted the same way as every other browser-to-Node payload in
  * this file, for the same module-instance-boundary reason documented at the top of this file.

@@ -1,15 +1,15 @@
 /**
- * perf-budgets.ts — D-21: single source of truth for every performance threshold.
+ * perf-budgets.ts: D-21, single source of truth for every performance threshold.
  *
  * A typed TypeScript module, not a runtime-parsed config file. A malformed entry (missing
- * field, wrong type, or a requirementId outside the union) cannot compile — the compiler is
+ * field, wrong type, or a requirementId outside the union) cannot compile: the compiler is
  * the validation layer (see the exhaustiveness check at the bottom of this file).
  *
  * Every threshold in this table equals its perception anchor, per the `<interfaces>` table in
  * 01-01-PLAN.md, so no entry here carries a `relaxationReason` and no relaxation Key Decision is
  * owed under PERF-01a. If a later phase's measurement forces `thresholdMs` above `anchorMs`,
  * that entry must also gain a non-empty `relaxationReason`, and the change must be recorded as a
- * Key Decision in PROJECT.md — not made silently.
+ * Key Decision in PROJECT.md, not made silently.
  */
 
 /** The eight requirements this phase's budget table covers, PERF-02 through PERF-09. */
@@ -53,7 +53,7 @@ export interface PerfBudget {
 
 /** Escalation trigger per D-20: measured value at or above 70% of budget escalates
  * deliberately (pool tuning, WASM ratio, coarser default grid) rather than the budget being
- * relaxed. This is a warning marker, not a failure — the run still passes if the budget itself
+ * relaxed. This is a warning marker, not a failure: the run still passes if the budget itself
  * is not breached. */
 export const ESCALATION_TRIGGER_RATIO = 0.7
 

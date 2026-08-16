@@ -230,3 +230,85 @@ npm run bench
 
 Reads `.bench/bench-results.json` after the run for the machine-readable figures this document's
 §2 table transcribes.
+
+---
+
+## 6. Post-gap-closure re-measurement (plans 01-05 and 01-06)
+
+`01-VERIFICATION.md` Gap 2 found the declared `MIN_MEASUREMENT_MS` floor unenforced, and this
+document's §2 recorded PERF-02's raw minimum-of-five at `0.09999999962747097ms` and PERF-05's
+winning arm at a literal `0ms`, both far below the 10ms floor. Neither figure carried any
+information about the workload's true cost; both carried only the timer's own resolution. Plan
+01-06 enforced the floor inside `measureMinOfN` and added `measureBatchedMinOfN`, a batched-loop
+amortization helper that times a fixed number of calls inside one unit and divides by that count
+to recover a resolvable per-call figure. This section records the resolved numbers that produced,
+transcribed from a `.bench/bench-results.json` artifact captured after plan 01-06 landed, not
+retyped from memory.
+
+### Resolved figures
+
+Every row below is an informational dev-machine run, not the authoritative `ubuntu-latest`
+baseline: `ci: false` in the captured environment block confirms no run has ever executed on the
+D-17 baseline machine, for the same reason recorded in §2's baseline caveat.
+
+| Figure | Raw (per-call) | Normalized | Budget | % of budget | Batch size | Batch minimum | Machine | Cores | Browser | OS | Calib. score | Source |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| PERF-02 (JS, single 25k-bar backtest, amortized) | 0.105ms | 0.18181818180645323ms | 16ms | 1.14% | 500 | 52.5000ms | this dev sandbox (informational, not D-17 baseline) | 9 | HeadlessChrome/151.0.7922.34 | linux 7.1.4-200.fc44.aarch64 | 0.5775000000372529 | spike-synthetic |
+| PERF-05 (JS, canvas `putImageData` arm, winner, asserted against budget, amortized) | 0.0656ms | 0.1131034482820635ms | 16ms | 0.71% | 500 | 32.8000ms | this dev sandbox (informational, not D-17 baseline) | 9 | HeadlessChrome/151.0.7922.34 | linux 7.1.4-200.fc44.aarch64 | 0.5775000000372529 | spike-synthetic |
+| PERF-05 (JS, canvas `fillRect` arm, loser, informational, amortized) | 3.775ms | 6.51ms (printed) | 16ms | 40.7% (informational; the loser arm) | 8 | 30.2000ms | this dev sandbox (informational, not D-17 baseline) | 9 | HeadlessChrome/151.0.7922.34 | linux 7.1.4-200.fc44.aarch64 | 0.5775000000372529 | spike-synthetic |
+
+No figure above reads `0` or `0.00ms`: every raw value came from a batch whose timed span
+cleared `MIN_MEASUREMENT_MS`, and the batch size and batch minimum that produced it are printed
+alongside it, exactly as `T-01-14`'s prohibition requires. `PERF-02`'s batch minimum (52.5ms
+across 500 calls) and both canvas arms' batch minimums (32.8ms across 500 calls for
+`putImageData`, 30.2ms across 8 calls for `fillRect`) all clear the floor by a comfortable
+margin; no batch size in `bench/kernel.bench.test.ts` or `bench/canvas-repaint.bench.test.ts`
+needed doubling beyond the values chosen at plan-authoring time (`PERF_02_BATCH_SIZE = 500`,
+`PUT_IMAGE_DATA_BATCH_SIZE = 500`, `FILL_RECT_BATCH_SIZE = 8`).
+
+### Escalation re-evaluation (D-20)
+
+Escalation trigger: measured normalized value at or above **70%** of budget
+(`ESCALATION_TRIGGER_RATIO` in `perf-budgets.ts`).
+
+| Budget | Normalized | Budget | % of budget | Crossed 70%? |
+|---|---|---|---|---|
+| PERF-02 | 0.1818ms | 16ms | 1.14% | **No** |
+| PERF-05 (asserted arm, `putImageData`) | 0.1131ms | 16ms | 0.71% | **No** |
+| PERF-05 (informational, `fillRect`) | 6.51ms | 16ms | 40.7% | **No** |
+
+No resolved figure crosses the 70% trigger. The `fillRect` arm's informational percentage rose
+from §4's floor-limited 27.6% to 40.7% once amortization revealed its true per-call cost, but it
+remains well under the trigger and is not the arm asserted against the PERF-05 budget. No
+deliberate escalation is owed, and per D-20/PERF-01a, no budget is relaxed and no third Key
+Decision row is added.
+
+### PROJECT.md Key Decisions rows: deliberately left unmodified
+
+`PROJECT.md`'s Key Decisions table cites two figures this section supersedes: the "Plain JS with
+a Worker pool" row cites PERF-03's `327.40ms normalized (185.80ms raw, ...)` figure, and the
+"Hand-rolled Canvas 2D" row cites PERF-05's `0ms normalized` figure. PERF-03 was never floor-
+limited (its raw single-run wall clock is roughly 186ms, itself already far above the floor) and
+is unaffected by this plan; its cited figure stands as recorded. PERF-05's cited `0ms` figure is
+now superseded by this section's resolved `0.1131034482820635ms` (winner, `putImageData`).
+
+Per the operator's locked gap-closure decision, this plan does not edit either PROJECT.md row and
+does not re-litigate either architecture decision. `01-VERIFICATION.md` independently assessed
+both decisions against these gaps and found both well supported: the plain-JS decision rests
+primarily on PERF-03's fully resolved figure, never floor-limited to begin with, and the Canvas
+decision rests on an ordering argument against a fully resolved loser (`fillRect`, resolved at
+6.51ms both before and after this plan's batching, since it was never the arm reported as `0ms`).
+This paragraph is the pointer that keeps a later reader from finding a silent discrepancy between
+PROJECT.md's cited `0ms` and this section's resolved figure.
+
+### Reproduction steps (updated)
+
+```bash
+npm run bench          # resolved PERF-02/PERF-05 figures, this section's §6 table
+npm run bench:selftest  # gate-liveness proof; exits non-zero against the deliberate fixture
+```
+
+Still unproven: no run has executed on GitHub Actions, because no remote is configured in this
+repository (`git remote -v` returns nothing). Whether the CI job renders a non-zero exit as a red
+check, and whether these dev-machine figures hold on the D-17 `ubuntu-latest` baseline, both
+remain open until a real remote and a real CI run exist.

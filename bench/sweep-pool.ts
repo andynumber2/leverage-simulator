@@ -1,7 +1,7 @@
 /**
- * bench/sweep-pool.ts — Task 2: real Worker pool partitioning bench/kernel.ts's 10,000-cell sweep
- * (CONTEXT.md D-10). Workers are constructed fresh inside every `runSpikeSweep` call — not reused
- * across `measureMinOfN` repeats — so worker construction cost, one of the costs research
+ * bench/sweep-pool.ts: Task 2, real Worker pool partitioning bench/kernel.ts's 10,000-cell sweep
+ * (CONTEXT.md D-10). Workers are constructed fresh inside every `runSpikeSweep` call, not reused
+ * across `measureMinOfN` repeats, so worker construction cost, one of the costs research
  * hand-waved, is included in every repeat of the measured PERF-03 figure, not hidden after the
  * first. See 01-02-SUMMARY.md for the resolved worker count, chosen chunk count, and reasoning.
  */
@@ -14,7 +14,7 @@ import type { ChunkRequest, SweepWorkerApi } from './sweep.worker.ts'
 const CELL_COUNT = SWEEP_COLS * SWEEP_ROWS
 
 /** Each worker receives several chunks rather than exactly one (PITFALLS F4), so a single slow
- * worker cannot strand the tail of the sweep — a worker that finishes its chunks early simply
+ * worker cannot strand the tail of the sweep: a worker that finishes its chunks early simply
  * pulls the next chunk off the shared queue in `runSpikeSweep` below. */
 const CHUNKS_PER_WORKER = 4
 
@@ -86,7 +86,7 @@ export interface SweepResult {
  * Partitions all `SWEEP_COLS * SWEEP_ROWS` cells across a real Worker pool sized to
  * `resolveWorkerCount()` (or `options.workerCount` if supplied), dispatches chunks via a shared
  * work queue so no worker is idle while chunks remain, and resolves only once the final cell's
- * result has arrived on the calling thread — exactly what PERF-03 specifies as "wall-clock from
+ * result has arrived on the calling thread, exactly what PERF-03 specifies as "wall-clock from
  * user action to final cell."
  */
 export async function runSpikeSweep(seed: number, options: SweepOptions = {}): Promise<SweepResult> {

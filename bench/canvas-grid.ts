@@ -1,17 +1,17 @@
 /**
- * bench/canvas-grid.ts — the shared 10,000-cell grid fixture (D-15) both hand-rolled canvas
+ * bench/canvas-grid.ts: the shared 10,000-cell grid fixture (D-15) both hand-rolled canvas
  * repaint arms measure against.
  *
  * D-15 settles an internal implementation fork with measurement, not assumption: one `fillRect`
  * per cell versus a single `putImageData` pass, on the identical grid. That comparison only
  * means something if the two arms genuinely paint the same picture, so both consume
- * `makeGridValues`'s output through the same `mapValueToRgba` mapping — neither arm can differ
+ * `makeGridValues`'s output through the same `mapValueToRgba` mapping: neither arm can differ
  * in what color a cell should be.
  *
  * Both arms are hand-rolled Canvas 2D, per D-14: research already rejected uPlot (no heatmap
  * mark at all), ECharts and Plotly (documented degradation well under 10,000 cells) and
  * Observable Plot (defaults to SVG, the exact failure mode this cell count triggers) for the
- * heatmap. See `.claude/CLAUDE.md` section "Q2 — Charting". This file adds no charting library
+ * heatmap. See `.claude/CLAUDE.md` section "Q2: Charting". This file adds no charting library
  * dependency.
  */
 
@@ -45,7 +45,7 @@ function mulberry32(seed: number): () => number {
 
 /** log10 of the smallest and largest values `makeGridValues` produces. The real heatmap's
  * outcome metrics (final value as a multiple of contributed, IRR) span several orders of
- * magnitude, not a uniform [0, 1) range — a uniform grid would exercise neither the same
+ * magnitude, not a uniform [0, 1) range: a uniform grid would exercise neither the same
  * color-mapping nor the same fillStyle-churn profile a production metric will. */
 const VALUE_LOG_MIN = -3
 const VALUE_LOG_MAX = 3
@@ -68,7 +68,7 @@ export function makeGridValues(seed: number): Float64Array {
  * The one value-to-color mapping both paint arms use. Pure and deterministic: log10 of `value`
  * (clamped to the range `makeGridValues` produces) is normalized to [0, 1] and linearly
  * interpolated between two hues. The green channel is held fixed at 64 so no `mapValueToRgba`
- * output can ever equal a background color chosen with a different green channel — this is what
+ * output can ever equal a background color chosen with a different green channel: this is what
  * lets the equivalence assertions in bench/canvas-repaint.bench.test.ts tell a painted cell apart
  * from an unpainted (background) one.
  */
@@ -86,7 +86,7 @@ export function mapValueToRgba(value: number): RgbaColor {
 
 /**
  * One `fillRect` call per cell. `values` must have length CELL_COUNT. Allocates nothing beyond
- * the per-cell fillStyle string, which fillRect itself requires — no ImageData or typed array is
+ * the per-cell fillStyle string, which fillRect itself requires: no ImageData or typed array is
  * allocated here.
  */
 export function paintFillRect(ctx: CanvasRenderingContext2D, values: Float64Array): void {
@@ -101,7 +101,7 @@ export function paintFillRect(ctx: CanvasRenderingContext2D, values: Float64Arra
 }
 
 // --- putImageData arm's reused buffers ------------------------------------------------------
-// Created once, on first use, and reused on every subsequent call — the measured figure must
+// Created once, on first use, and reused on every subsequent call: the measured figure must
 // reflect painting, not allocation. Not created at module load: this module is also imported
 // from the fast Node `unit` project (tests/canvas-grid.test.ts), where `document` does not
 // exist, and only the pure functions above are exercised there.
@@ -130,7 +130,7 @@ function getPutImageDataBuffer(): { canvas: HTMLCanvasElement; ctx: CanvasRender
  * Writes one pixel per cell into a GRID_COLS by GRID_ROWS `ImageData`, applies it in a single
  * `putImageData` call to an offscreen buffer canvas of that exact size, then draws that buffer
  * scaled up onto `ctx`'s (display-size) canvas with `imageSmoothingEnabled` set to false so cell
- * edges stay crisp — per `.claude/CLAUDE.md` "Q2 — Charting"'s upscaling note. `values` must have
+ * edges stay crisp, per `.claude/CLAUDE.md` "Q2: Charting"'s upscaling note. `values` must have
  * length CELL_COUNT.
  */
 export function paintPutImageData(ctx: CanvasRenderingContext2D, values: Float64Array): void {

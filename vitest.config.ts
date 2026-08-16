@@ -31,7 +31,7 @@ export default defineConfig({
             // The browser-to-Node bridge (RESEARCH.md's preferred mechanism over the stdout
             // marker-protocol fallback): a bench test calls `commands.recordMeasurement(row)` /
             // `commands.recordEnvironment(block)` from inside the browser context, and these
-            // implementations — which run in the Node process hosting the browser instance —
+            // implementations (which run in the Node process hosting the browser instance)
             // persist the payload to `.bench/.raw/` via bench/accumulator-store.ts, which
             // bench/global-setup.ts's teardown reads back at run end. Persisting to disk (rather
             // than an in-memory module accumulator) is required here: the command
@@ -64,7 +64,7 @@ export default defineConfig({
           // D-09: the gate-liveness self-test's harness command. Reuses bench/global-setup.ts
           // unchanged, so the deliberately over-budget fixture in bench/selftest/ goes through
           // the identical teardown, buildFullRowSet, and assertRunInvariants that
-          // `npm run bench` uses. No browser block here — the browser plays no part in the
+          // `npm run bench` uses. No browser block here: the browser plays no part in the
           // exit-code path this project proves, and adding one would put a Playwright startup on
           // every unit-suite run.
           name: 'bench-selftest',

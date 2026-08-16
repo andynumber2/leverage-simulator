@@ -1,5 +1,5 @@
 /**
- * tests/perf-budgets.selftest.test.ts — D-09: the permanent gate-liveness self-test.
+ * tests/perf-budgets.selftest.test.ts: D-09, the permanent gate-liveness self-test.
  *
  * Runs in the fast Node `unit` project on every PR forever. Its authoritative test spawns the
  * real `bench:selftest` harness command against a deliberately over-budget fixture and asserts a

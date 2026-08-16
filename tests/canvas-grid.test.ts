@@ -1,5 +1,5 @@
 /**
- * tests/canvas-grid.test.ts — Task 1: pure determinism and color-mapping assertions for
+ * tests/canvas-grid.test.ts: Task 1, pure determinism and color-mapping assertions for
  * bench/canvas-grid.ts's shared fixture. Runs in the fast Node `unit` project. The paint
  * functions (`paintFillRect`, `paintPutImageData`) need a real canvas and stay in the browser
  * project's bench/canvas-repaint.bench.test.ts.

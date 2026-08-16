@@ -1,8 +1,8 @@
 /**
- * bench/sweep.worker.ts — Task 2: the Comlink-exposed chunk runner that executes bench/kernel.ts's
+ * bench/sweep.worker.ts: Task 2, the Comlink-exposed chunk runner that executes bench/kernel.ts's
  * `runSpikeBacktest` inside a real Web Worker. Imports `runSpikeBacktest` and
  * `makeSeededGbmSeries` directly (rather than re-implementing anything) so there is exactly one
- * recurrence implementation in this phase — bench/sweep-pool.ts never computes a backtest itself.
+ * recurrence implementation in this phase: bench/sweep-pool.ts never computes a backtest itself.
  *
  * Comlink API surface used here (verified against node_modules/comlink's own .d.ts, since
  * RESEARCH.md tags its Comlink description LOW confidence): `Comlink.expose(obj)` on the worker
@@ -39,7 +39,7 @@ function getSeriesForSeed(seed: number): SyntheticSeries {
   return cachedSeries
 }
 
-// Scratch output buffers reused across cells within this worker — the kernel itself is
+// Scratch output buffers reused across cells within this worker: the kernel itself is
 // allocation-free per bar (PITFALLS F1); reusing the scratch buffers across cells keeps this
 // worker's own dispatch loop allocation-free too.
 const scratchValue = new Float64Array(BAR_COUNT)

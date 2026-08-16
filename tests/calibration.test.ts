@@ -1,5 +1,5 @@
 /**
- * tests/calibration.test.ts — Task 1: fast Node unit coverage of bench/calibration.ts's floor
+ * tests/calibration.test.ts: Task 1, fast Node unit coverage of bench/calibration.ts's floor
  * enforcement, the measureBatchedMinOfN amortization contract, and the calibration score guards.
  * Runs in the `unit` project, so every assertion here is independent of the browser-context bench
  * suite (`npm run bench`) and of any particular machine's true timing.

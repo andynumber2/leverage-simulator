@@ -1,21 +1,21 @@
 /**
- * bench/synthetic-data.ts — D-16: deterministic seeded synthetic series, shared unchanged by the
+ * bench/synthetic-data.ts: D-16, deterministic seeded synthetic series, shared unchanged by the
  * JS arm (this file) and the Rust arm plan 01-04 ports it to.
  *
  * Generator (must be reproduced bit-for-bit by the Rust port):
  * - Algorithm: mulberry32, a 32-bit xorshift-family PRNG. State: a single uint32 `state`.
- *   Update per call: `state = (state + 0x6d2b79f5) | 0`, then two xorshift-multiply rounds —
+ *   Update per call: `state = (state + 0x6d2b79f5) | 0`, then two xorshift-multiply rounds:
  *   `t = imul(state ^ (state >>> 15), state | 1)`, `t = (t + imul(t ^ (t >>> 7), t | 61)) ^ t`,
  *   output `((t ^ (t >>> 14)) >>> 0) / 4294967296`, a uniform value in [0, 1).
  * - Seed constant: `DEFAULT_SEED = 0x5eed5eed`, used whenever no explicit seed is supplied.
  * - Normal transform: Box-Muller (trigonometric form). Two uniform draws `u1, u2` per normal
  *   deviate: `z = sqrt(-2 * ln(u1)) * cos(2*pi*u2)`. `u1` is clamped away from exactly 0 (to
  *   `1e-12`) so `ln(u1)` never diverges. Only the cosine branch's single deviate is used per
- *   pair of uniform draws — the companion sine-branch deviate is not computed, trading a small
+ *   pair of uniform draws: the companion sine-branch deviate is not computed, trading a small
  *   amount of PRNG-stream efficiency for a simpler, more easily ported implementation.
  *
  * Determinism: the same seed always produces byte-identical output arrays, on any machine, on
- * any run — required so PERF-02/PERF-03 figures are comparable across the dev machine, the CI
+ * any run: required so PERF-02/PERF-03 figures are comparable across the dev machine, the CI
  * baseline, and (in plan 01-04) the JS-vs-Rust arms.
  */
 
@@ -36,7 +36,7 @@ export interface SyntheticSeries {
   calendarDaysElapsed: Int32Array
 }
 
-/** Daily drift, ~7.6%/year compounded at 252 trading days — a plausible positive equity drift. */
+/** Daily drift, ~7.6%/year compounded at 252 trading days: a plausible positive equity drift. */
 const DAILY_DRIFT = 0.0003
 /** Daily volatility, within the "plausible equity range, roughly 0.008 to 0.016 daily" the Task
  * 1 behavior spec names. */

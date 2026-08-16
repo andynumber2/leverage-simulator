@@ -1,5 +1,5 @@
 /**
- * bench/report.ts — D-04: row shape, table renderer, budget checker, run-level invariants.
+ * bench/report.ts: D-04, row shape, table renderer, budget checker, run-level invariants.
  *
  * `checkBudget` is the single numeric comparison between a normalized measurement and its
  * budget; no other place in the codebase compares `normalizedMs` against `budgetMs` (WR-03).
@@ -21,7 +21,7 @@ export type Verdict = 'pass' | 'fail' | 'unmeasured'
 /** `spike-synthetic`: measured against seeded synthetic input by throwaway spike code (this
  * phase). `production`: measured against the real kernel/UI once a later phase re-registers the
  * row. Per PERF-11's prohibition, a spike-synthetic figure must never be presented as if it were
- * a production measurement — this field is what makes that distinction mechanical rather than
+ * a production measurement: this field is what makes that distinction mechanical rather than
  * a documentation promise. */
 export type MeasurementSource = 'spike-synthetic' | 'production'
 
@@ -43,7 +43,7 @@ export interface MeasurementRow {
 
 /**
  * `unmeasured` when there is no normalized value to compare. Otherwise `fail` when the
- * normalized value is strictly greater than the budget, `pass` when it is less than or equal —
+ * normalized value is strictly greater than the budget, `pass` when it is less than or equal:
  * PERF-01 fails a run only when a measured value *exceeds* its budget, so a value exactly at
  * threshold passes.
  */
@@ -58,7 +58,7 @@ export function checkBudget(row: Pick<MeasurementRow, 'normalizedMs' | 'budgetMs
  * The single per-metric delegate every `*.bench.test.ts` file calls instead of hand-writing its
  * own `normalizedMs > budgetMs` comparison. Throws, naming the budget id, the normalized value
  * and the budget value, when `checkBudget` returns `fail`. Returns without throwing for `pass`
- * and for `unmeasured` — this function only ever reports an actual budget breach, never a
+ * and for `unmeasured`: this function only ever reports an actual budget breach, never a
  * missing measurement. `checkBudget` remains the only place the numeric comparison itself lives
  * (WR-03), so this function's outcome and a row's recorded `verdict` can never disagree.
  */
@@ -68,7 +68,7 @@ export function assertWithinBudget(
   const verdict = checkBudget(row)
   if (verdict === 'fail') {
     throw new Error(
-      `assertWithinBudget: budget "${row.budgetId}" failed — measured ${row.normalizedMs}ms ` +
+      `assertWithinBudget: budget "${row.budgetId}" failed: measured ${row.normalizedMs}ms ` +
         `exceeds budget ${row.budgetMs}ms`,
     )
   }
@@ -76,7 +76,7 @@ export function assertWithinBudget(
 
 /**
  * True when the normalized value has reached or passed `ESCALATION_TRIGGER_RATIO` (70%, D-20)
- * of budget. This does not fail the run by itself — it is a deliberately-earlier-than-breach
+ * of budget. This does not fail the run by itself: it is a deliberately-earlier-than-breach
  * warning so later phases' known additional work has headroom to land before the budget itself
  * is missed.
  */
@@ -89,7 +89,7 @@ export function escalationTriggered(normalizedMs: number | null, budgetMs: numbe
 
 /**
  * Rounds half-up to two decimal places for display. This value is never fed back into
- * `checkBudget` or `escalationTriggered` — those compare the unrounded float derived from
+ * `checkBudget` or `escalationTriggered`: those compare the unrounded float derived from
  * `performance.now()` deltas.
  */
 export function formatMeasured(ms: number | null): string {
@@ -112,7 +112,7 @@ export function formatMeasured(ms: number | null): string {
 //
 // This module is imported by both browser-context test files and Node-context config/setup
 // files, so it must never import a Node builtin (see bench/environment-store.ts, which is
-// Node-only for exactly this reason — a `node:os` import here previously broke the browser
+// Node-only for exactly this reason: a `node:os` import here previously broke the browser
 // bundle with "Module has been externalized for browser compatibility").
 
 const accumulatedRows: MeasurementRow[] = []
@@ -138,7 +138,7 @@ export function resetAccumulator(): void {
  * Builds the complete, always-eleven-row set from `PERF_BUDGETS`: every budget id that has a
  * recorded measurement this run uses that row; every budget id with no recorded measurement
  * gets a synthesized `unmeasured` row that still carries its threshold and anchor. This is a
- * lookup against the explicit accumulator, never a try/catch around a missing function — per
+ * lookup against the explicit accumulator, never a try/catch around a missing function, per
  * RESEARCH.md Pattern 4's anti-pattern note, a thrown error during measurement must surface as
  * a crash, not silently downgrade to `unmeasured`.
  */
@@ -181,7 +181,7 @@ function allRequirementIds(): RequirementId[] {
 
 /**
  * Renders the environment block, an authoritative-vs-informational banner, and the full table
- * (grouped by requirement id ascending, rows sorted by budget id ascending within each group —
+ * (grouped by requirement id ascending, rows sorted by budget id ascending within each group,
  * a pure function of row *content*, independent of input array order, per the Task 1 behavior
  * spec). Columns: metric, source, measured, budget, anchor, verdict, escalate.
  */
@@ -236,7 +236,7 @@ export function renderTable(
  * could accidentally ignore.
  *
  * - Every one of the eight requirement group headers (PERF-02..PERF-09) must be present.
- * - At least one row must be genuinely measured — a harness that measures nothing is broken,
+ * - At least one row must be genuinely measured: a harness that measures nothing is broken,
  *   not passing (PERF-10's empty-input edge case).
  * - Every row's budgetId must exist in PERF_BUDGETS.
  * - No row may carry verdict "fail". This is the authoritative gate: it has visibility into
@@ -256,7 +256,7 @@ export function assertRunInvariants(rows: readonly MeasurementRow[], totalRuntim
   const anyMeasured = rows.some((r) => r.verdict !== 'unmeasured')
   if (rows.length === 0 || !anyMeasured) {
     throw new Error(
-      'assertRunInvariants: zero rows measured this run — a harness that measures nothing is ' +
+      'assertRunInvariants: zero rows measured this run: a harness that measures nothing is ' +
         'broken, not passing',
     )
   }
@@ -270,7 +270,7 @@ export function assertRunInvariants(rows: readonly MeasurementRow[], totalRuntim
   // The authoritative gate (WR-03/D-09): this check has visibility into every row's verdict
   // independent of any single bench file's own assertion, so removing or weakening one bench
   // file's `expect()` can no longer let a breach exit 0. Sorted ascending by budget id because
-  // loadAccumulatedRows reads row files in readdir order, which is not guaranteed stable — an
+  // loadAccumulatedRows reads row files in readdir order, which is not guaranteed stable: an
   // unsorted message would make an identical two-failure run print differently on different
   // machines.
   const failing = rows.filter((r) => r.verdict === 'fail')
@@ -284,7 +284,7 @@ export function assertRunInvariants(rows: readonly MeasurementRow[], totalRuntim
   if (totalRuntimeMs > BENCH_TOTAL_RUNTIME_CAP_MS) {
     throw new Error(
       `assertRunInvariants: total bench runtime ${totalRuntimeMs}ms exceeds the declared cap ` +
-        `of ${BENCH_TOTAL_RUNTIME_CAP_MS}ms (D-08) — repeat cost has crept; raising the cap ` +
+        `of ${BENCH_TOTAL_RUNTIME_CAP_MS}ms (D-08): repeat cost has crept; raising the cap ` +
         'requires a recorded decision, not a silent edit',
     )
   }

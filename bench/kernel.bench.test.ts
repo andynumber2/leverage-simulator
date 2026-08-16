@@ -1,5 +1,5 @@
 /**
- * bench/kernel.bench.test.ts — Task 1: PERF-02 measurement. One full leveraged backtest over
+ * bench/kernel.bench.test.ts: Task 1, PERF-02 measurement. One full leveraged backtest over
  * the 25,000-bar seeded synthetic series, following the same measure -> normalize -> record ->
  * assert shape as bench/canvas-repaint.bench.test.ts (plan 01-01).
  */
@@ -21,7 +21,7 @@ import { BAR_COUNT, makeSeededGbmSeries } from './synthetic-data.ts'
 const PERF_02_BATCH_SIZE = 500
 
 test('PERF-02: a single full-history backtest over 25,000 bars stays under budget', async () => {
-  // Series and output buffers preallocated once, outside the timed region, per D-06/F1 — the
+  // Series and output buffers preallocated once, outside the timed region, per D-06/F1: the
   // measurement must reflect the recurrence's own cost, not series generation or allocation.
   const series = makeSeededGbmSeries()
   const outValue = new Float64Array(BAR_COUNT)

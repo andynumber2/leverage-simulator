@@ -1,5 +1,5 @@
 /**
- * bench/canvas-repaint.bench.test.ts — D-15: both hand-rolled canvas repaint arms, measured on
+ * bench/canvas-repaint.bench.test.ts: D-15, both hand-rolled canvas repaint arms, measured on
  * the identical 10,000-cell grid.
  *
  * `paintFillRect` and `paintPutImageData` (bench/canvas-grid.ts) paint the same
@@ -7,10 +7,10 @@
  * internal implementation fork with two comparable figures rather than a directional guess.
  * Before either figure is trusted, both arms are proven to have painted the expected colors into
  * the expected cells (see the equivalence assertions below, which run and pass before any
- * `measureMinOfN` call) — an arm cannot win this comparison by painting less.
+ * `measureMinOfN` call): an arm cannot win this comparison by painting less.
  *
  * The measurement itself is calibration-normalized (D-06) and compared against the real PERF-05
- * threshold in `perf-budgets.ts` via an ordinary Vitest `expect` — that `expect` call, not
+ * threshold in `perf-budgets.ts` via an ordinary Vitest `expect`: that `expect` call, not
  * `checkBudget`, is what fails CI on a breach (D-03). The faster arm's normalized figure is
  * recorded as the PERF-05 row; the slower arm's figure is preserved in stdout and in the JSON
  * artifact via the `recordInfoLine` bridge (introduced in plan 01-02), since a browser-context
@@ -55,7 +55,7 @@ function makeDisplayCanvas(): { canvas: HTMLCanvasElement; ctx: CanvasRenderingC
   const canvas = document.createElement('canvas')
   canvas.width = CANVAS_WIDTH
   canvas.height = CANVAS_HEIGHT
-  // Deliberately never appended to the DOM — a detached canvas still has a real 2D rendering
+  // Deliberately never appended to the DOM: a detached canvas still has a real 2D rendering
   // context and real paint cost, per D-02's "real Canvas" requirement, without needing page
   // layout to host it.
   const ctx = canvas.getContext('2d')
@@ -109,7 +109,7 @@ test('equivalence: paintFillRect writes the expected color into the expected cel
 
   for (const { col, row } of SAMPLE_CELLS) {
     const sampled = samplePixelAtCellCenter(ctx, col, row)
-    // A failure here means the sampling assertion below would pass vacuously — invalidating the
+    // A failure here means the sampling assertion below would pass vacuously, invalidating the
     // paintFillRect timing figure below, not just this render check.
     expect(sampled, `cell (${col}, ${row}) must read BACKGROUND before paintFillRect runs`).toEqual(
       BACKGROUND,
@@ -123,7 +123,7 @@ test('equivalence: paintFillRect writes the expected color into the expected cel
     const sampled = samplePixelAtCellCenter(ctx, col, row)
     expect(
       sampled,
-      `cell (${col}, ${row}) must equal mapValueToRgba's output after paintFillRect — a ` +
+      `cell (${col}, ${row}) must equal mapValueToRgba's output after paintFillRect: a ` +
         'mismatch here means the PERF-05 fillRect figure is not trustworthy',
     ).toEqual(expected)
   }
@@ -148,7 +148,7 @@ test('equivalence: paintPutImageData writes the expected color into the expected
     const sampled = samplePixelAtCellCenter(ctx, col, row)
     expect(
       sampled,
-      `cell (${col}, ${row}) must equal mapValueToRgba's output after paintPutImageData — a ` +
+      `cell (${col}, ${row}) must equal mapValueToRgba's output after paintPutImageData: a ` +
         'mismatch here means the PERF-05 putImageData figure is not trustworthy',
     ).toEqual(expected)
   }

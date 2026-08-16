@@ -1,7 +1,7 @@
 /**
- * bench/sweep.bench.test.ts — Task 2: correctness assertions for the real Worker pool sweep,
+ * bench/sweep.bench.test.ts: Task 2, correctness assertions for the real Worker pool sweep,
  * then the PERF-03 measurement. The `<behavior>` assertions run first and must all pass before
- * any timing figure is trusted — a sweep that is fast because it computed nothing must not be
+ * any timing figure is trusted: a sweep that is fast because it computed nothing must not be
  * able to produce a passing figure.
  */
 
@@ -23,7 +23,7 @@ const CELL_COUNT = SWEEP_COLS * SWEEP_ROWS
  * serially on the calling thread as the correctness reference for the pool-computed grid. A
  * full 10,000-cell serial pass (no partitioning, no worker parallelism) would add several
  * seconds to this bench file's own runtime on top of every other registered arm, pushing the
- * whole suite toward BENCH_TOTAL_RUNTIME_CAP_MS — see 01-02-SUMMARY.md for the measured cost
+ * whole suite toward BENCH_TOTAL_RUNTIME_CAP_MS, see 01-02-SUMMARY.md for the measured cost
  * this traded off against and why a 50-cell stride sample is sufficient to catch a partitioning
  * bug (it samples across both the leverage axis and the entry-date axis, not a single row/column).
  */
@@ -75,7 +75,7 @@ test('sweep pool: two runs with the same seed produce an element-wise identical 
 
 test(
   'sweep pool: pool-computed cells match a serial reference sample (subset, not the full ' +
-    '10,000 cells — see 01-02-SUMMARY.md); inverting this assertion must fail the run',
+    '10,000 cells, see 01-02-SUMMARY.md); inverting this assertion must fail the run',
   async () => {
     const reference = computeSerialReferenceSample()
     const { grid } = await runSpikeSweep(DEFAULT_SEED)
@@ -152,7 +152,7 @@ test('PERF-03: a full 10,000-cell sweep on a real Worker pool stays under budget
   // Reproducibility (acceptance criteria): print the resolved worker count and chosen chunk
   // count that produced this figure. Routed through the recordInfoLine bridge, not a plain
   // console.log, because a browser-context console.log does not reach `npm run bench`'s stdout
-  // under the default (non-verbose) Vitest reporter — see bench/accumulator-store.ts.
+  // under the default (non-verbose) Vitest reporter, see bench/accumulator-store.ts.
   await commands.recordInfoLine(
     'PERF-03-sweep',
     `PERF-03 sweep: workerCount=${workerCount} chunkCount=${chunkCount}`,

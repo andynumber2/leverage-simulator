@@ -1,10 +1,10 @@
 /**
- * bench/calibration.ts — D-06/D-07: calibration-normalized, minimum-of-N timing.
+ * bench/calibration.ts: D-06/D-07, calibration-normalized, minimum-of-N timing.
  *
  * GitHub-hosted runners vary roughly 20-40% in throughput run to run. Without normalization the
  * budget gate either flakes on a slow runner or has to be loosened by that same factor, which
- * would let a genuine regression of the same size through. Every timed metric — including the
- * calibration loop's own repeats — divides by a score derived from a fixed reference workload
+ * would let a genuine regression of the same size through. Every timed metric, including the
+ * calibration loop's own repeats, divides by a score derived from a fixed reference workload
  * run in the same process/browser instance immediately before the metric.
  */
 
@@ -16,7 +16,7 @@ export const REPEAT_COUNT = 5
 /** Per Pitfall 1 in 01-RESEARCH.md: a repeat that completes in a handful of microseconds risks
  * `performance.now()` timer coarsening (security-hardened browsers commonly coarsen timer
  * resolution) dominating the measurement, and risks the JIT proving the loop dead and eliding
- * it. Every repeat — calibration and metric alike — is sized to span at least this many
+ * it. Every repeat, calibration and metric alike, is sized to span at least this many
  * milliseconds. */
 export const MIN_MEASUREMENT_MS = 10
 

@@ -1,12 +1,12 @@
 /**
- * bench/global-setup.ts — D-04/D-08: the bench run's Node-side lifecycle.
+ * bench/global-setup.ts: D-04/D-08, the bench run's Node-side lifecycle.
  *
  * Vitest's `globalSetup` runs once, in the main Node process, before any browser instance for
  * the `bench` project starts, and its returned teardown function runs once after every test in
  * that project has finished. This is therefore the natural place to time the run's total
  * wall-clock (D-08), flush the accumulator that the `browser.commands` bridge (vitest.config.ts)
  * persisted via bench/accumulator-store.ts, print the table, write the JSON artifact, and
- * enforce the run-level invariants — throwing here is what turns a violation into a non-zero
+ * enforce the run-level invariants: throwing here is what turns a violation into a non-zero
  * exit code.
  */
 
@@ -40,7 +40,7 @@ export default async function setup(): Promise<() => Promise<void>> {
     const environment = await loadCapturedEnvironment()
     if (!environment) {
       throw new Error(
-        'bench/global-setup: no environment block was captured this run — every run must ' +
+        'bench/global-setup: no environment block was captured this run: every run must ' +
           'stamp a full environment block (D-18); a bench run with no captured environment ' +
           'has not measured anything real',
       )
@@ -63,7 +63,7 @@ export default async function setup(): Promise<() => Promise<void>> {
     await mkdir(dir, { recursive: true })
     const tmpPath = join(dirname(path), `.bench-results.json.tmp-${process.pid}`)
     // infoLines carries reproducibility detail that has no single-row home in `rows` (e.g.
-    // 01-03's both-canvas-arm figures, of which only the winner becomes a MeasurementRow) — it
+    // 01-03's both-canvas-arm figures, of which only the winner becomes a MeasurementRow): it
     // must land in the JSON artifact too, not only in stdout, or a figure recorded via
     // recordInfoLine would be unrecoverable once the terminal scrolls.
     const payload = JSON.stringify({ environment, rows, totalRuntimeMs, infoLines }, null, 2)
@@ -73,7 +73,7 @@ export default async function setup(): Promise<() => Promise<void>> {
     await rename(tmpPath, path)
 
     // Throws on any violated invariant, which is what turns a budget/coverage/runtime problem
-    // into a non-zero exit code for `npm run bench` — no separate reporting pipeline (D-03).
+    // into a non-zero exit code for `npm run bench`: no separate reporting pipeline (D-03).
     // process.exitCode is set explicitly before rethrowing rather than relying solely on the
     // thrown error, so the guarantee holds even in a Vitest project configuration where an
     // uncaught error from globalSetup's teardown alone would not otherwise flip the exit code.

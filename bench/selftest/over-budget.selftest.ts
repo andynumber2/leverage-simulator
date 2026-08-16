@@ -1,8 +1,8 @@
 /**
- * bench/selftest/over-budget.selftest.ts — D-09: the deliberately over-budget fixture.
+ * bench/selftest/over-budget.selftest.ts: D-09, the deliberately over-budget fixture.
  *
  * Runs as the sole test in the `bench-selftest` Vitest project (vitest.config.ts), which reuses
- * `bench/global-setup.ts` unchanged. This file's own assertion is not what proves D-09 — it is
+ * `bench/global-setup.ts` unchanged. This file's own assertion is not what proves D-09: it is
  * the real teardown, reading this row back through the real accumulator store and running the
  * real `assertRunInvariants` against it, that must fail the run. `tests/perf-budgets.selftest
  * .test.ts` spawns `npm run bench:selftest` and asserts that outcome from the outside.

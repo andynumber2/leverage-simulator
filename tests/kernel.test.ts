@@ -1,5 +1,5 @@
 /**
- * tests/kernel.test.ts — Task 1: correctness assertions for bench/synthetic-data.ts and
+ * tests/kernel.test.ts: Task 1, correctness assertions for bench/synthetic-data.ts and
  * bench/kernel.ts. Runs in the fast Node `unit` project. These are correctness checks on
  * throwaway spike code, and they exist because a fast wrong kernel is not a useful measurement.
  */
@@ -148,7 +148,7 @@ describe('runSpikeBacktest', () => {
 
   test('allocates nothing per bar: repeated calls against preallocated buffers produce identical output for identical input', () => {
     // Not a GC-instrumentation test (not practical in a fast unit test); instead asserts the
-    // documented contract this property depends on — reusing the same preallocated output
+    // documented contract this property depends on: reusing the same preallocated output
     // buffers across repeated calls with the same input always yields the same result, which
     // would not hold if the function depended on any per-call allocated/mutable module state.
     const series = makeFixedSeries([0.01, -0.02, 0.015], [0.02, 0.02, 0.02], [1, 1, 1])

@@ -1,6 +1,6 @@
 name: CI
 
-# D-01: the standard `pull_request` trigger only — never `pull_request_target`, which would
+# D-01: the standard `pull_request` trigger only, never `pull_request_target`, which would
 # grant untrusted fork-PR code a write token and access to repository secrets (threat T-01-02).
 # This job needs neither: it only runs `npm ci` and `npm run bench` against the PR's own code.
 on:
@@ -17,7 +17,7 @@ permissions:
 
 jobs:
   bench:
-    # D-17: ubuntu-latest IS the 4-core baseline machine that PERF-03 names — this collapses the
+    # D-17: ubuntu-latest IS the 4-core baseline machine that PERF-03 names: this collapses the
     # gate machine and the baseline machine into one, so there is no derating factor to argue
     # about.
     runs-on: ubuntu-latest

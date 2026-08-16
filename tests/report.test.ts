@@ -1,5 +1,5 @@
 /**
- * tests/report.test.ts — coverage for bench/report.ts's pure functions, run in the fast Node
+ * tests/report.test.ts: coverage for bench/report.ts's pure functions, run in the fast Node
  * `unit` project. Complements tests/perf-budgets.selftest.test.ts (D-09's gate-liveness proof
  * and the PERF-01a anchor invariant) with the remaining behaviors from 01-01-PLAN.md's Task 1/
  * Task 2 `<behavior>` blocks.
@@ -45,7 +45,7 @@ const environment: EnvironmentBlock = {
 }
 
 /** A full, always-present row set covering all eight requirement groups (PERF-02..PERF-09),
- * mirroring what bench/report.ts's buildFullRowSet produces from PERF_BUDGETS — used directly
+ * mirroring what bench/report.ts's buildFullRowSet produces from PERF_BUDGETS: used directly
  * here so these tests do not depend on any particular measurement having run. */
 const fullRowSet: MeasurementRow[] = [
   row({ budgetId: 'PERF-02', requirementId: 'PERF-02', measuredMs: null, normalizedMs: null, budgetMs: 16, anchorMs: 16, anchorLabel: 'one frame', verdict: 'unmeasured' }),
@@ -66,7 +66,7 @@ describe('checkBudget', () => {
     expect(checkBudget(row({ normalizedMs: 20, budgetMs: 16 }))).toBe('fail')
   })
 
-  test('exactly at threshold passes — PERF-01 fails only when a value exceeds its budget', () => {
+  test('exactly at threshold passes: PERF-01 fails only when a value exceeds its budget', () => {
     expect(checkBudget(row({ normalizedMs: 16, budgetMs: 16 }))).toBe('pass')
   })
 
@@ -79,7 +79,7 @@ describe('checkBudget', () => {
   })
 
   test('compares the unrounded value, never the display-rounded one', () => {
-    // 16.001 rounds to "16.00" for display, but the real comparison must still fail — if
+    // 16.001 rounds to "16.00" for display, but the real comparison must still fail: if
     // checkBudget ever used formatMeasured's rounded output internally, this would misreport
     // "pass".
     expect(checkBudget(row({ normalizedMs: 16.001, budgetMs: 16 }))).toBe('fail')

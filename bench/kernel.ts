@@ -1,7 +1,7 @@
 /**
- * bench/kernel.ts — Task 1: the allocation-free per-bar leveraged recurrence, including the
- * branchy parts (PITFALLS A1, A2, A4, A7, A8; CONTEXT D-12). This is throwaway spike code — the
- * real kernel is Phase 3's — but it must carry the same branches Phase 3's kernel will, so the
+ * bench/kernel.ts: Task 1, the allocation-free per-bar leveraged recurrence, including the
+ * branchy parts (PITFALLS A1, A2, A4, A7, A8; CONTEXT D-12). This is throwaway spike code, the
+ * real kernel is Phase 3's, but it must carry the same branches Phase 3's kernel will, so the
  * measured PERF-02/PERF-03 figures are not flattered by a stripped arithmetic loop.
  *
  * Day-count convention (PITFALLS A4/A8, deliberately two different bases, not conflated):
@@ -90,7 +90,7 @@ export function runSpikeBacktest(
     const rate = shortRate[i] ?? 0
     const calendarGap = calendarDaysElapsed[i] ?? 1
 
-    // A1: leverage applied to the daily return and compounded — never to a cumulative return.
+    // A1: leverage applied to the daily return and compounded, never to a cumulative return.
     value = value * (1 + leverage * dailyReturn)
 
     // A2/A8: financing on the borrowed portion (leverage - 1), calendar-day accrual. At
@@ -101,11 +101,11 @@ export function runSpikeBacktest(
       value -= financingCost
     }
 
-    // A4: expense ratio on the flat trading-day convention — a genuinely different accrual
+    // A4: expense ratio on the flat trading-day convention, a genuinely different accrual
     // basis from financing, applied every bar regardless of calendar gap.
     value -= value * (expenseRatio / TRADING_DAYS_PER_YEAR)
 
-    // A7: ruin clamp — the instant the computed value would reach or cross zero.
+    // A7: ruin clamp: the instant the computed value would reach or cross zero.
     if (value <= 0) {
       value = 0
       ruined = true
@@ -135,7 +135,7 @@ export function runSpikeBacktest(
 // --- Sweep cell -> params mapping --------------------------------------------------------------
 // Shared by bench/sweep.worker.ts (per-cell computation) and bench/sweep.bench.test.ts (the
 // serial reference), so there is exactly one mapping from a sweep grid position to backtest
-// parameters. Not a production feature — Phase 7 owns the real entry-date x leverage sweep UI;
+// parameters. Not a production feature: Phase 7 owns the real entry-date x leverage sweep UI;
 // this exists only so PERF-03's measured sweep does real, varied, ruin-capable work rather than
 // running 10,000 identical backtests.
 
@@ -148,7 +148,7 @@ const DEFAULT_INITIAL_INVESTMENT = 10_000
 /**
  * Row sweeps leverage from LEVERAGE_MIN to LEVERAGE_MAX; column sweeps entryIndex across the
  * first SWEEP_COLS bars (0..199 of 25,000), so every cell's backtest still spans ~99.2%+ of the
- * full series — close enough to "10,000 backtests over ~25,000 daily bars each" that the
+ * full series, close enough to "10,000 backtests over ~25,000 daily bars each" that the
  * measured PERF-03 figure is not meaningfully flattered by shorter-than-representative cells.
  */
 export function paramsForCell(row: number, col: number): SpikeKernelParams {
