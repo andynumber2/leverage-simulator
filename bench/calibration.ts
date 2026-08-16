@@ -167,6 +167,15 @@ export function calibrationScore(): number {
  * Throws rather than silently producing `Infinity` or `NaN` when `score` is zero, negative or
  * non-finite (WR-02): a broken calibration score must never propagate through every downstream
  * figure as an unreadable number. Also throws when `rawMs` itself is non-finite.
+ *
+ * KNOWN LIMITATION (Broken Window 2, quick-260816-qae): this correction is partial, not
+ * complete. Across three D-17 baseline runs the raw PERF-03 sweep spanned 653.1ms to 856.4ms
+ * (a 31% spread) and the normalized figures still read 70.0%, 80.8% and 70.3% of budget, where
+ * a fully working anchor would collapse them toward one number. Treat a normalized figure as
+ * carrying roughly 10 percentage points of runner noise, and do not read a small change in one
+ * as a real regression or improvement. The remedy is not retuning NOMINAL_REFERENCE_MS, which
+ * is budget-denominating; it is establishing whether this scalar reference loop tracks a
+ * Worker-pool workload's sensitivity to runner speed at all.
  */
 export function normalize(rawMs: number, score: number): number {
   if (!Number.isFinite(score) || score <= 0) {
