@@ -5,15 +5,15 @@ milestone_name: milestone
 current_phase: 01
 current_phase_name: performance-spike-and-budget-lock
 status: executing
-stopped_at: Completed 01-01-PLAN.md
-last_updated: "2026-08-16T02:23:56.736Z"
+stopped_at: Completed 01-02-PLAN.md
+last_updated: "2026-08-16T02:37:24.392Z"
 last_activity: 2026-08-16
 last_activity_desc: Roadmap created, 72 v1 requirements mapped across 8 phases
 progress:
   total_phases: 1
   completed_phases: 0
   total_plans: 4
-  completed_plans: 1
+  completed_plans: 2
 ---
 
 # Project State
@@ -28,11 +28,11 @@ See: .planning/PROJECT.md (updated 2026-08-16)
 ## Current Position
 
 Phase: 01 (performance-spike-and-budget-lock) — EXECUTING
-Plan: 2 of 4
+Plan: 3 of 4
 Status: Ready to execute
 Last activity: 2026-08-16 — Phase 01 execution started
 
-Progress: [███░░░░░░░] 25%
+Progress: [█████░░░░░] 50%
 
 ## Performance Metrics
 
@@ -59,6 +59,7 @@ Progress: [███░░░░░░░] 25%
 | Plan | Duration | Tasks | Files |
 |------|----------|-------|-------|
 | Phase 01 P01 | 19min | 2 tasks | 16 files |
+| Phase 01 P02 | 12min | 2 tasks | 11 files |
 
 ## Accumulated Context
 
@@ -73,6 +74,9 @@ Recent decisions affecting current work:
 - [Roadmap]: No optimization phase. Every compute- or render-touching phase carries a measured performance number in its success criteria
 - [Phase ?]: 01-01: Browser-to-Node bridge for the bench harness persists to .bench/.raw/ on disk (not an in-memory module accumulator) — the browser.commands implementation and global-setup teardown run as separate vite-node module instances
 - [Phase ?]: 01-01: NOMINAL_REFERENCE_MS calibration anchor set to 40ms, tuned empirically in this sandbox; must be re-verified (not silently retuned) once measured on the D-17 ubuntu-latest CI baseline
+- [Phase ?]: 01-02: Sweep cell mapping keeps every cell's backtest at 99.2%+ of the full 25,000-bar series (leverage swept 1-20 across rows, entry index swept only across the first 200 of 25,000 bars across columns) so PERF-03 is not flattered by short cells
+- [Phase ?]: 01-02: Serial reference for the pool-vs-serial equality check is a 50-cell deterministic stride sample, not the full 10,000-cell grid, to avoid pushing bench runtime toward BENCH_TOTAL_RUNTIME_CAP_MS
+- [Phase ?]: 01-02: Workers are not reused across measureMinOfN's 5 repeats — worker construction cost is included in every repeat of the measured PERF-03 figure
 
 ### Pending Todos
 
@@ -101,6 +105,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-08-16T02:23:56.728Z
-Stopped at: Completed 01-01-PLAN.md
+Last session: 2026-08-16T02:37:24.384Z
+Stopped at: Completed 01-02-PLAN.md
 Resume file: None
