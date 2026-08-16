@@ -85,6 +85,43 @@ test(
   },
 )
 
+// --- WR-01: bounded, diagnostic worker failure paths ------------------------------------------
+// A Worker that dies leaves no response for its in-flight Comlink RPC to correlate, so an
+// unguarded `await` hangs forever and `Promise.all` never resolves. Both fixture workers exist
+// solely to prove `runSpikeSweep`'s failure paths are bounded rather than open-ended.
+
+test(
+  'sweep pool: a worker whose runChunk never resolves rejects the sweep within the configured ' +
+    'timeout, naming the worker index and the chunk range, instead of hanging',
+  async () => {
+    await expect(
+      runSpikeSweep(DEFAULT_SEED, {
+        workerCount: 1,
+        chunkTimeoutMs: 200,
+        workerFactory: () =>
+          new Worker(new URL('./hang-fixture.worker.ts', import.meta.url), { type: 'module' }),
+      }),
+    ).rejects.toThrow(/worker 0.*chunk \[\d+, \d+\)/)
+  },
+  2000,
+)
+
+test(
+  'sweep pool: a worker that throws during module evaluation rejects the sweep with a ' +
+    'diagnostic naming the worker index, instead of hanging',
+  async () => {
+    await expect(
+      runSpikeSweep(DEFAULT_SEED, {
+        workerCount: 1,
+        chunkTimeoutMs: 200,
+        workerFactory: () =>
+          new Worker(new URL('./throw-fixture.worker.ts', import.meta.url), { type: 'module' }),
+      }),
+    ).rejects.toThrow(/worker 0/)
+  },
+  2000,
+)
+
 test('PERF-03: a full 10,000-cell sweep on a real Worker pool stays under budget', async () => {
   const score = calibrationScore()
   let workerCount = 0
