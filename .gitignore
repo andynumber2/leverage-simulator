@@ -12,5 +12,9 @@ dist/
 .vitest-attachments/
 **/__screenshots__/
 
+# GSD run-local scratch (dispatch sentinels, research fetch cache) - regenerable, not provenance
+.gsd/
+.planning/research/.cache/
+
 # Editor / OS noise
 .DS_Store
