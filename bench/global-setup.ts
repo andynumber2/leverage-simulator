@@ -54,7 +54,11 @@ export default async function setup(): Promise<() => Promise<void>> {
 
     await mkdir(RESULTS_DIR, { recursive: true })
     const tmpPath = join(dirname(RESULTS_PATH), `.bench-results.json.tmp-${process.pid}`)
-    const payload = JSON.stringify({ environment, rows, totalRuntimeMs }, null, 2)
+    // infoLines carries reproducibility detail that has no single-row home in `rows` (e.g.
+    // 01-03's both-canvas-arm figures, of which only the winner becomes a MeasurementRow) — it
+    // must land in the JSON artifact too, not only in stdout, or a figure recorded via
+    // recordInfoLine would be unrecoverable once the terminal scrolls.
+    const payload = JSON.stringify({ environment, rows, totalRuntimeMs, infoLines }, null, 2)
     await writeFile(tmpPath, payload, 'utf8')
     // Write-then-rename: an interrupted run leaves either no artifact (crash before rename) or
     // a complete one (rename is atomic on the same filesystem), never a truncated one.
