@@ -33,7 +33,15 @@ against real leveraged ETF price history.
 
 - [ ] Simulate daily-rebalanced leverage at an arbitrary positive multiple (1x through 20x+,
       fractional allowed), where 1x reproduces the unlevered series exactly
-- [ ] Model daily return as `L*r - (L-1)*(short_rate + spread) - expense_ratio/252`, not `L*r`
+- [ ] Model each trading day's portfolio return as leveraged price return minus financing on the
+      borrowed portion minus expense ratio, not `L*r`. Financing and fees accrue on **calendar
+      days elapsed since the prior trading day**, not per trading row: a three-day weekend costs
+      three days of interest. Roughly
+      `r_port = L*r - (L-1)*(short_rate + spread)*days/360 - ER*days/365`,
+      with the exact day-count conventions to be decided and documented
+- [ ] The 1x case must reproduce the unlevered series **exactly**, as a tested invariant
+- [ ] Cost parameter defaults must be sourced independently and never tuned to make the
+      UPRO/TQQQ validation pass. Residual tracking error is reported honestly, not fitted away
 - [ ] Support an initial investment amount plus a recurring contribution amount at daily,
       monthly, quarterly, or yearly frequency
 - [ ] Support a dividend-reinvest toggle backed by two bundled series per symbol
@@ -120,11 +128,16 @@ against real leveraged ETF price history.
   against a lump-sum CAGR is a common source of wrong conclusions in exactly these arguments.
   IRR is used instead.
 - **Data seams that constrain deep history**: daily S&P 500 price data reaches back to 1928, but
-  daily total-return data effectively begins in 1988 and daily short-rate series around 1954.
-  Longer coverage requires monthly sources (Shiller) interpolated to daily. The 1929-1932
-  drawdown is the single most persuasive data point against high leverage, so the extended tier
-  exists to reach it; the strict tier exists so nobody can dismiss a result as an interpolation
-  artifact.
+  daily total-return data effectively begins in 1988 and daily short-rate data does not exist
+  before 1954 at all (FRED `DFF` starts 1954-07-01, `DTB3` starts 1954-01-04; the monthly
+  `TB3MS` reaches back only to 1934-01-01). Reaching 1929 therefore *requires* interpolating
+  monthly or annual rate data to daily. There is no way around it. The 1929-1932 drawdown is the
+  single most persuasive data point against high leverage, so the extended tier exists to reach
+  it; the strict tier exists so nobody can dismiss a result as an interpolation artifact.
+- **Overlapping windows are not independent observations**: adjacent entry dates in a sweep share
+  nearly all their underlying data. A 10,000-cell heatmap is a sensitivity analysis over one
+  history, not 10,000 backtests. The UI must say so in visible copy, not in a methodology
+  footnote, or the tool overstates its own evidence and hands the argument back.
 - **Credibility anchor**: real UPRO and TQQQ price history is bundled not to simulate but to
   validate. If the model does not reproduce them, its conclusions carry no weight.
 - **Deployment target**: Cloudflare Pages, static hosting only.
@@ -155,6 +168,8 @@ against real leveraged ETF price history.
 | Validate against real UPRO/TQQQ | Without it, every conclusion is an unfalsifiable claim | — Pending |
 | Both sweep modes (fixed-horizon and hold-to-today) | They answer different questions and each alone is misleading | — Pending |
 | Attribution breakdown as headline feature | Naming which mechanism cost the money is what actually ends an argument; a number alone does not | — Pending |
+| Financing accrues on calendar days, not trading rows | Interest runs over weekends and holidays; per-trading-row `/252` systematically understates leverage cost | — Pending |
+| Heatmap UI must state that windows overlap | 10,000 cells over one shared history is a sensitivity analysis, not 10,000 independent trials; claiming otherwise is the kind of overstatement that loses the argument | — Pending |
 
 ## Evolution
 
