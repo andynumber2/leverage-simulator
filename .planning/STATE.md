@@ -81,6 +81,9 @@ Recent decisions affecting current work:
 - [Phase ?]: 01-03: makeGridValues spreads values log-uniformly across ~6 orders of magnitude (1e-3 to 1e3), not a uniform [0,1) band, matching the real heatmap outcome metric range
 - [Phase ?]: 01-03: putImageData measured decisively faster than fillRect-per-cell (near 0.00ms vs 4-7ms normalized) on the identical 10,000-cell grid, both proven to paint the same picture before trusting either figure — settles D-15's implementation fork for Phase 6/7
 - [Phase ?]: 01-03: bench/global-setup.ts's JSON artifact now persists recordInfoLine payloads (infoLines field), so a free-text reproducibility figure survives in .bench/bench-results.json, not only stdout
+- [PROJECT.md Key Decisions]: 01-04: Plain JS with a Worker pool settles the sweep/kernel compute architecture over WASM — measured PERF-03 at 32.7% of budget, and a throwaway Rust microbenchmark of the identical recurrence measured ~1.20x SLOWER than JS (not near parity as CONTEXT.md's rationale predicted), so WASM is dropped as a default rather than adopted
+- [PROJECT.md Key Decisions]: 01-04: Hand-rolled Canvas 2D (putImageData) settles the heatmap renderer over any charting library — measured PERF-05 at 0% of budget; no charting library was separately benchmarked per D-14, citing .claude/CLAUDE.md's Q2 findings
+- [Phase ?]: 01-04: No measured figure (PERF-02 1.1%, PERF-03 32.7%, PERF-05 0%) crosses the D-20 70% escalation trigger this phase; no deliberate escalation and no third Key Decision row are owed
 
 ### Pending Todos
 
@@ -88,9 +91,13 @@ None yet.
 
 ### Blockers/Concerns
 
-- [Phase 1]: PERF-02 through PERF-09 thresholds are provisional until the spike measures what is
-  achievable. Locking rule from PERF-01a applies: an unreachable target is an architecture
-  escalation, never an automatic budget relaxation
+- [Phase 1]: All eight PERF-02 through PERF-09 budgets are now **locked** at their perception
+  anchors (D-19) — every threshold equals its anchor, so no `relaxationReason` is owed on any
+  entry in `perf-budgets.ts`. PERF-02 (1.1%), PERF-03 (32.7%), and PERF-05 (0%) are measured this
+  phase and none crosses the D-20 70% escalation trigger; PERF-04, 06, 07a/b, 08a/b/c, and 09
+  remain unmeasured (implemented in Phase 4 or 7) but are already gated from their first commit.
+  Any future relaxation of any of these eight requires a Key Decision under PERF-01a, never a
+  silent edit
 
 - [Phase 2]: Exact FRED series start dates (DFF, DTB3, TB3MS) and Yahoo ^GSPC/^SP500TR
   first-available rows were verified via web search, not a direct API pull. Re-confirm against
