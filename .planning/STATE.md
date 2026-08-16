@@ -5,15 +5,15 @@ milestone_name: milestone
 current_phase: 01
 current_phase_name: performance-spike-and-budget-lock
 status: executing
-stopped_at: Completed 01-05-PLAN.md
-last_updated: "2026-08-16T04:18:54.016Z"
+stopped_at: Completed 01-06-PLAN.md
+last_updated: "2026-08-16T04:38:04.148Z"
 last_activity: 2026-08-16
 last_activity_desc: Roadmap created, 72 v1 requirements mapped across 8 phases
 progress:
   total_phases: 1
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 6
-  completed_plans: 5
+  completed_plans: 6
 ---
 
 # Project State
@@ -28,11 +28,11 @@ See: .planning/PROJECT.md (updated 2026-08-16)
 ## Current Position
 
 Phase: 01 (performance-spike-and-budget-lock) — EXECUTING
-Plan: 2 of 6
+Plan: 3 of 6
 Status: Ready to execute
 Last activity: 2026-08-16 — Phase 01 execution started
 
-Progress: [████████░░] 83%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
@@ -63,6 +63,7 @@ Progress: [████████░░] 83%
 | Phase 01 P03 | 7min | 2 tasks | 4 files |
 | Phase 01 P04 | 35min | 3 tasks | 3 files |
 | Phase 01 P05 | 15min | 2 tasks | 10 files |
+| Phase 01 P06 | 16min | 3 tasks | 23 files |
 
 ## Accumulated Context
 
@@ -87,6 +88,9 @@ Recent decisions affecting current work:
 - [PROJECT.md Key Decisions]: 01-04: Hand-rolled Canvas 2D (putImageData) settles the heatmap renderer over any charting library — measured PERF-05 at 0% of budget; no charting library was separately benchmarked per D-14, citing .claude/CLAUDE.md's Q2 findings
 - [Phase ?]: 01-04: No measured figure (PERF-02 1.1%, PERF-03 32.7%, PERF-05 0%) crosses the D-20 70% escalation trigger this phase; no deliberate escalation and no third Key Decision row are owed
 - [Phase ?]: 01-05: assertRunInvariants's verdict check promoted to the authoritative budget gate; per-file expect() demoted to a diagnostic delegate over assertWithinBudget
+- [Phase ?]: 01-06: measureBatchedMinOfN added alongside measureMinOfN (not promoted) so the floor is enforced against the batch total exactly once; PERF-03's sweep keeps calling measureMinOfN directly since its raw cost already clears the floor
+- [Phase ?]: 01-06: batch sizes (PERF_02=500, putImageData=500, fillRect=8) all cleared the 10ms floor on the first empirical run; DEFAULT_CHUNK_TIMEOUT_MS set to 10s for sweep-pool worker failure detection
+- [Phase ?]: 01-06: closed both 01-VERIFICATION.md Gap 2 items (unenforced floor, unbounded worker hang) in one phase-closing plan; removed all em dash occurrences from tracked *.ts/*.yml/*.json source
 
 ### Pending Todos
 
@@ -119,6 +123,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-08-16T04:18:54.006Z
-Stopped at: Completed 01-05-PLAN.md
+Last session: 2026-08-16T04:38:04.138Z
+Stopped at: Completed 01-06-PLAN.md
 Resume file: None
