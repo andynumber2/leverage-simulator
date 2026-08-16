@@ -5,15 +5,15 @@ milestone_name: milestone
 current_phase: 01
 current_phase_name: performance-spike-and-budget-lock
 status: executing
-stopped_at: Completed 01-04-PLAN.md
-last_updated: "2026-08-16T04:01:54.831Z"
+stopped_at: Completed 01-05-PLAN.md
+last_updated: "2026-08-16T04:18:54.016Z"
 last_activity: 2026-08-16
 last_activity_desc: Roadmap created, 72 v1 requirements mapped across 8 phases
 progress:
   total_phases: 1
-  completed_phases: 1
+  completed_phases: 0
   total_plans: 6
-  completed_plans: 4
+  completed_plans: 5
 ---
 
 # Project State
@@ -28,11 +28,11 @@ See: .planning/PROJECT.md (updated 2026-08-16)
 ## Current Position
 
 Phase: 01 (performance-spike-and-budget-lock) — EXECUTING
-Plan: 4 of 4
+Plan: 2 of 6
 Status: Ready to execute
 Last activity: 2026-08-16 — Phase 01 execution started
 
-Progress: [██████████] 100%
+Progress: [████████░░] 83%
 
 ## Performance Metrics
 
@@ -62,6 +62,7 @@ Progress: [██████████] 100%
 | Phase 01 P02 | 12min | 2 tasks | 11 files |
 | Phase 01 P03 | 7min | 2 tasks | 4 files |
 | Phase 01 P04 | 35min | 3 tasks | 3 files |
+| Phase 01 P05 | 15min | 2 tasks | 10 files |
 
 ## Accumulated Context
 
@@ -85,6 +86,7 @@ Recent decisions affecting current work:
 - [PROJECT.md Key Decisions]: 01-04: Plain JS with a Worker pool settles the sweep/kernel compute architecture over WASM — measured PERF-03 at 32.7% of budget, and a throwaway Rust microbenchmark of the identical recurrence measured ~1.20x SLOWER than JS (not near parity as CONTEXT.md's rationale predicted), so WASM is dropped as a default rather than adopted
 - [PROJECT.md Key Decisions]: 01-04: Hand-rolled Canvas 2D (putImageData) settles the heatmap renderer over any charting library — measured PERF-05 at 0% of budget; no charting library was separately benchmarked per D-14, citing .claude/CLAUDE.md's Q2 findings
 - [Phase ?]: 01-04: No measured figure (PERF-02 1.1%, PERF-03 32.7%, PERF-05 0%) crosses the D-20 70% escalation trigger this phase; no deliberate escalation and no third Key Decision row are owed
+- [Phase ?]: 01-05: assertRunInvariants's verdict check promoted to the authoritative budget gate; per-file expect() demoted to a diagnostic delegate over assertWithinBudget
 
 ### Pending Todos
 
@@ -117,6 +119,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-08-16T03:13:25.599Z
-Stopped at: Completed 01-04-PLAN.md
+Last session: 2026-08-16T04:18:54.006Z
+Stopped at: Completed 01-05-PLAN.md
 Resume file: None
