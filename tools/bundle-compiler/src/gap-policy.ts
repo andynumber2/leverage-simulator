@@ -125,10 +125,13 @@ function matchesException(exceptions: ReadonlyArray<CalendarException>, scope: s
 
 /**
  * Resolves one series against the reference calendar, filling or refusing every mismatch per the
- * classification order documented at the top of this file. Collects every violation of a given
- * classification before throwing, so one compile run names everything that needs fixing rather
- * than the first offender only. `newestDate` is the newest last date across every loaded series in
- * the bundle, computed once by the caller, used only for the D-12 staleness warning.
+ * classification order documented at the top of this file. Collects every violation within a
+ * given classification before throwing, so one compile run names everything that needs fixing for
+ * that classification rather than the first offender only -- classification 1 (extra bars) throws
+ * before classification 2/3 (interior gaps) is evaluated, so an extra bar and an unrelated
+ * interior gap on the same series surface across two separate compile runs, not one. `newestDate`
+ * is the newest last date across every loaded series in the bundle, computed once by the caller,
+ * used only for the D-12 staleness warning.
  */
 export function applyGapPolicy(
   series: RawSeries,
