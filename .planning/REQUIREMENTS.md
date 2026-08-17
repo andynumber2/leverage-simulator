@@ -58,7 +58,7 @@ measured in CI, not an aspiration.
 - [x] **DATA-01**: A CLI bundle compiler in the repo ingests raw CSVs and emits versioned binary
       data assets plus a JSON manifest, so adding a symbol is "drop in a CSV, recompile, redeploy"
 
-- [ ] **DATA-02**: The compiler aligns trading calendars across symbols and the rate series, and
+- [x] **DATA-02**: The compiler aligns trading calendars across symbols and the rate series, and
       fails loudly on misalignment rather than silently forward-filling
 
 - [x] **DATA-03**: The compiler emits, per symbol, both a price-return and a total-return series
@@ -286,7 +286,7 @@ measured in CI, not an aspiration.
 | PERF-10 | Phase 1 | Complete |
 | PERF-11 | Phase 1 | Complete |
 | DATA-01 | Phase 2 | Complete |
-| DATA-02 | Phase 2 | Pending |
+| DATA-02 | Phase 2 | Complete |
 | DATA-03 | Phase 2 | Complete |
 | DATA-04 | Phase 2 | Complete |
 | DATA-05 | Phase 2 | Complete |

@@ -32,7 +32,7 @@ render path, starting with the first one.
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Performance Spike and Budget Lock** - Measure the hot loop and the 10k-cell repaint on real hardware, then commit the architecture and the budgets (completed 2026-08-17)
-- [ ] **Phase 2: Compiled Data Bundle** - A CLI compiler turns raw CSVs into versioned binary assets with machine-readable provenance
+- [x] **Phase 2: Compiled Data Bundle** - A CLI compiler turns raw CSVs into versioned binary assets with machine-readable provenance (completed 2026-08-17)
 - [ ] **Phase 3: Simulation Kernel and the UPRO/TQQQ Gate** - The cost model, proven against real leveraged-ETF history before any UI is built on it
 - [ ] **Phase 4: First Defensible Backtest in the Browser** - A real single run, in the browser, that can be pasted as a link
 - [ ] **Phase 5: Attribution and the Credibility Surface** - Name which mechanism consumed the money, and let a skeptic check every assumption
@@ -94,7 +94,7 @@ Plans:
   4. The bundled universe covers S&P 500 daily to 1928, Nasdaq-100/QQQ, the real leveraged ETFs UPRO, TQQQ, SSO and QLD, and VTI, EFA, EEM and TLT, each with both a price-return and a total-return series, plus a daily short-rate series spanning the full range of every tier.
   5. The benchmark command reports the compiled bundle's total byte size and its decode-to-typed-array time, and the decode figure fits inside PERF-08's 1000ms data-load budget. A round-trip test asserts the decoded arrays match the compiler's in-memory series exactly, and content-hashed asset filenames make it impossible for a redeploy to serve a stale cached bundle alongside a new manifest.
 
-**Plans:** 8/8 plans executed
+**Plans:** 8/8 plans complete
 
 *Plans 02-06 through 02-08 were added on 2026-08-17 after the source-stack reversal recorded in `02-CONTEXT.md`. They produce the `raw/` tree that 02-04 and 02-05 consume, so they run before both. 02-04 moved from wave 3 to wave 5 and 02-05 from wave 4 to wave 6.*
 
@@ -232,7 +232,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Performance Spike and Budget Lock | 6/6 | Complete    | 2026-08-17 |
-| 2. Compiled Data Bundle | 8/8 | In Progress|  |
+| 2. Compiled Data Bundle | 8/8 | Complete    | 2026-08-17 |
 | 3. Simulation Kernel and the UPRO/TQQQ Gate | 0/TBD | Not started | - |
 | 4. First Defensible Backtest in the Browser | 0/TBD | Not started | - |
 | 5. Attribution and the Credibility Surface | 0/TBD | Not started | - |
