@@ -6,6 +6,7 @@
  * built-in `readFile`/`writeFile`/`removeFile` entries.
  */
 
+import type { BundleBytes } from './bundle-bytes.ts'
 import type { BrowserCapturedEnvironment } from './environment-block.ts'
 import type { MeasurementRow } from './report.ts'
 
@@ -25,5 +26,9 @@ declare module 'vitest/internal/browser' {
      * score. Returns the run's winning score, which may differ from the submitted sample when
      * another caller's claim already won. */
     claimCalibration: (sample: number) => Promise<number>
+    /** Task 3 (02-05, D-23): the compiled bundle's real on-disk raw and brotli-compressed byte
+     * totals, measured Node-side by bench/bundle-bytes.ts's `measureBundleBytes` since the
+     * browser context has no filesystem access to public/data/'s source directory. */
+    readBundleBytes: () => Promise<BundleBytes>
   }
 }

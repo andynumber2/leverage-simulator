@@ -1,3 +1,5 @@
+import path from 'node:path'
+
 import { playwright } from '@vitest/browser-playwright'
 import { defineConfig } from 'vitest/config'
 
@@ -8,8 +10,13 @@ import {
   persistInfoLine,
   persistMeasurement,
 } from './bench/accumulator-store.ts'
+import { measureBundleBytes } from './bench/bundle-bytes.ts'
 import type { BrowserCapturedEnvironment } from './bench/environment-block.ts'
 import type { MeasurementRow } from './bench/report.ts'
+
+/** Convention this repo's compiler and CLI both follow (tools/bundle-compiler/src/cli.ts): the
+ * compiled bundle always lands at "public/data" under the working directory. */
+const COMPILED_BUNDLE_DIR = path.resolve(process.cwd(), 'public', 'data')
 
 export default defineConfig({
   test: {
@@ -69,6 +76,10 @@ export default defineConfig({
               // actually stored.
               readCalibration: async (_context) => loadCalibrationScore(),
               claimCalibration: async (_context, sample: number) => claimCalibrationScore(sample),
+              // D-23: bench/bundle-size.bench.test.ts's Node-side filesystem fact, the same
+              // pattern readCalibration uses -- a browser-context test asks the Node process for
+              // something only Node can measure (here, the compiled bundle's real on-disk bytes).
+              readBundleBytes: async (_context) => measureBundleBytes(COMPILED_BUNDLE_DIR),
             },
           },
         },
