@@ -128,7 +128,7 @@ against a measurement.
   — **Reversibility:** costly — Phase 5's on-screen provenance and the extended-tier warning are
   both rendered from these records, so changing the record structure later means changing what the
   UI can honestly say.
-- **D-17:** **Finding recorded, no action taken this phase.** Phase 5 criterion 4 states the
+- **D-17 [informational]:** **Finding recorded, no action taken this phase.** Phase 5 criterion 4 states the
   extended tier's bias is that "interpolated monthly data smooths daily volatility and therefore
   understates volatility drag." That reasoning appears wrong: daily S&P *prices* genuinely reach
   1928, so returns are not interpolated. Only rates and dividends are, and neither drives volatility
