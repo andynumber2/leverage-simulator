@@ -94,7 +94,9 @@ Plans:
   4. The bundled universe covers S&P 500 daily to 1928, Nasdaq-100/QQQ, the real leveraged ETFs UPRO, TQQQ, SSO and QLD, and VTI, EFA, EEM and TLT, each with both a price-return and a total-return series, plus a daily short-rate series spanning the full range of every tier.
   5. The benchmark command reports the compiled bundle's total byte size and its decode-to-typed-array time, and the decode figure fits inside PERF-08's 1000ms data-load budget. A round-trip test asserts the decoded arrays match the compiler's in-memory series exactly, and content-hashed asset filenames make it impossible for a redeploy to serve a stale cached bundle alongside a new manifest.
 
-**Plans:** 3/5 plans executed
+**Plans:** 3/8 plans executed
+
+*Plans 02-06 through 02-08 were added on 2026-08-17 after the source-stack reversal recorded in `02-CONTEXT.md`. They produce the `raw/` tree that 02-04 and 02-05 consume, so they run before both. 02-04 moved from wave 3 to wave 5 and 02-05 from wave 4 to wave 6.*
 
 Plans:
 **Wave 1**
@@ -104,13 +106,22 @@ Plans:
 **Wave 2** *(blocked on Wave 1 completion)*
 
 - [x] 02-02-PLAN.md: Calendar agreement. A price-series gap aborts naming the dates, a rate-series gap is carried and seamed, an extra bar aborts, and `raw/calendar-exceptions.json` is the only override
-- [x] 02-03-PLAN.md: Real inputs. A fetch script pulls the locked source stack into canonical CSVs with provenance sidecars, gated by a package-legitimacy checkpoint before any spreadsheet dependency
+- [x] 02-03-PLAN.md: Real inputs. A fetch script pulls the locked source stack into canonical CSVs with provenance sidecars, gated by a package-legitimacy checkpoint before any spreadsheet dependency. Superseded on the equity vendor by 02-06 and 02-07
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 02-04-PLAN.md: Derived series. One daily short rate spliced across four sources, pre-1988 total return constructed from an interpolated dividend yield, and tier ranges computed by scanning seam records
+- [ ] 02-06-PLAN.md: Tracer. Yahoo replaces the dropped equity vendor, total return is reconstructed from dividend events behind a hard drift gate, the fetch route reports live versus manual with a staleness gate, and the Shiller parser's two defects are fixed
 
 **Wave 4** *(blocked on Wave 3 completion)*
+
+- [ ] 02-07-PLAN.md: The Nasdaq-100 total-return index normalized from a fourth vendor format with its export defects counted, and the total-return versus price-return divergence cross-check committed as a standing test
+
+**Wave 5** *(blocked on Wave 4 completion)*
+
+- [ ] 02-08-PLAN.md: The two instruction documents rewritten around the vendors that exist, the two superseded decision rows marked with pointers rather than edited, and every vendor original committed
+- [ ] 02-04-PLAN.md: Derived series. One daily short rate spliced across four sources, the S&P's pre-1988 total return constructed from an interpolated dividend yield, and tier ranges computed by scanning seam records
+
+**Wave 6** *(blocked on Wave 5 completion)*
 
 - [ ] 02-05-PLAN.md: The real universe compiled and committed, plus two new gated bench rows for bundle transfer bytes and decode-to-typed-array time
 
@@ -221,7 +232,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Performance Spike and Budget Lock | 6/6 | Complete    | 2026-08-17 |
-| 2. Compiled Data Bundle | 3/5 | In Progress|  |
+| 2. Compiled Data Bundle | 3/8 | In Progress|  |
 | 3. Simulation Kernel and the UPRO/TQQQ Gate | 0/TBD | Not started | - |
 | 4. First Defensible Backtest in the Browser | 0/TBD | Not started | - |
 | 5. Attribution and the Credibility Surface | 0/TBD | Not started | - |
