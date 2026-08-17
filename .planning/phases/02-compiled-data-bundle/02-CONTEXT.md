@@ -1,7 +1,33 @@
 # Phase 2: Compiled Data Bundle - Context
 
 **Gathered:** 2026-08-17
+**Updated:** 2026-08-17 (source-stack reversal — see "Source Stack Reversal" below)
 **Status:** Ready for planning
+
+> **Source Stack Reversal (2026-08-17).** D-04's locked stack named Stooq for daily equity and
+> ETF prices. Stooq cannot deliver it and was replaced. This update rewrites D-04, D-05, D-06 and
+> D-07, annotates D-14 and D-15 with now-verified facts, and adds D-24 through D-28. Every other
+> decision is unchanged. Plans 02-01 and 02-02 are unaffected. Plan 02-03's committed artifacts are
+> superseded, not rewritten (D-28); plans 02-04 and 02-05 were written against the old stack and
+> need revising before they execute.
+>
+> **What Stooq actually did**, established by direct evidence this session, not inference:
+> - `^spx` no longer exists. Stooq renamed it `^USLC`, its own US Large Cap index, with history
+>   only to 2013. The project needs daily S&P prices to 1928 (D-17).
+> - `^ndx` returns 22,882 bars starting **1938-01-03** at a value of 2.24. The Nasdaq-100 launched
+>   in 1985. Forty-seven years of that file are not the Nasdaq-100, and its 1985 values do not match
+>   the index's own launch level on either the split-adjusted or unadjusted reading.
+> - Stooq's `Close` column is **dividend-adjusted**. On 1999-03-10 Stooq gave QQQ 43.2932; Yahoo
+>   gives `close` 51.0625 and `adjclose` 43.0271. Stooq was serving a total-return series under a
+>   price label. Every Stooq file would have been committed as `-PR`, and plan 02-04's construction
+>   would have counted dividends twice. The byte-identity halt plan 02-03 built to catch the
+>   total-return problem would never have fired, because the two files were never going to be
+>   identical.
+>
+> The Stooq URLs and symbol conventions in `tools/fetch-data/src/sources.ts` came from a single
+> MEDIUM-confidence web-search snippet (`.planning/research/.cache/f567254a…json`) and from
+> unverified recall, never from a successful fetch — `sources.ts:70` says so in a comment. The
+> lesson recorded in D-28 is that a vendor claim is not established until a real pull confirms it.
 
 <domain>
 ## Phase Boundary
@@ -48,23 +74,45 @@ against a measurement.
 - **D-03:** The compiler accepts **exactly one canonical CSV schema** (`date,value`, ISO dates, no
   blanks) and validates it hard. Per-source normalization (Stooq vs FRED vs Shiller column
   layouts) happens in the fetch script, not the compiler. One input contract, one thing to test.
-- **D-04:** The source stack is **locked, not delegated**: Stooq for daily equity and ETF prices,
-  FRED for `DFF`/`DTB3`/`TB3MS`, Shiller for pre-1988 monthly S&P dividends, plus the pre-1934
-  short-rate source in D-13. The researcher **verifies coverage and total-return availability per
-  symbol** against this stack rather than re-choosing it.
-- **D-05:** Licensing is handled by **recording terms per source and proceeding**. FRED and Shiller
-  are explicitly redistributable; Stooq's terms are permissive for personal use and unclear for
-  redistribution. This is a knowingly accepted risk, not an oversight.
-- **D-06:** That risk is recorded in exactly three places, only one of which is authored: the
-  **sidecar** carries `license`/`termsUrl`/`retrievedAt` (authored once), the **manifest** carries
-  those fields through per series (copied by the compiler, never hand-typed), and the **Phase 5
-  methodology page** renders from the manifest. The accepted-risk reasoning itself is promoted to a
-  **Key Decision in PROJECT.md**, because it is an accepted risk rather than an implementation
-  detail.
-- **D-07:** The fetch script **always pulls latest**; there is no as-of pinning. The git diff on
-  refresh is the review surface, and a revised historical value shows up as a changed line in a
-  commit. Pinning was rejected because Stooq and Shiller do not support date-bounded queries
-  consistently, so it would be honored unevenly.
+- **D-04 [REVISED 2026-08-17, supersedes the Stooq stack]:** The source stack is **locked, not
+  delegated**, and is now **four vendors, each the narrowest source that actually carries what it is
+  asked for**, all verified live this session:
+  - **Yahoo Finance** (`query1.finance.yahoo.com/v8/finance/chart/<SYMBOL>`, JSON) for daily
+    equity and ETF prices, their dividend and split events, `^GSPC` (24,773 bars from
+    **1927-12-30**), `^NDX` (10,298 bars from 1985-10-01) and `^SP500TR` (9,728 bars from
+    **1988-01-04**).
+  - **Nasdaq** (`indexes.nasdaqomx.com/Index/History/XNDX`, EOD) for the Nasdaq-100 Total Return
+    index, 6,908 rows from **1999-03-04**. Yahoo carries the `^XNDX` ticker but stores **no
+    history** for it (`firstTradeDate: null`, `validRanges: ["1d","5d"]`), which is why this is a
+    separate vendor rather than a fifth Yahoo symbol.
+  - **FRED** for `DFF`/`DTB3`/`TB3MS` plus the pre-1934 short rate in D-13. Unchanged, already
+    fetched and committed.
+  - **Shiller** for pre-1988 monthly S&P dividends. Unchanged.
+
+  Stooq is **dropped entirely**, not demoted to a cross-check: keeping it would retain a
+  proof-of-work bot challenge and a manual browser step for a vendor that mislabeled a
+  total-return series as `Close`, and D-25's reconstruction gate is a stronger internal check than
+  a second opinion from a vendor we no longer trust.
+  — **Reversibility:** costly — four vendor formats (Yahoo JSON, Nasdaq CSV, FRED CSV, Shiller CSV)
+  are normalized in the fetch script, and every sidecar, manifest entry and Phase 5 provenance
+  string is authored from this table.
+- **D-05 [REVISED 2026-08-17]:** Licensing is still handled by **recording terms per source and
+  proceeding**. FRED and Shiller remain explicitly redistributable. **Yahoo's terms are personal-use
+  and its chart endpoint is undocumented**; **Nasdaq's index site carries its own terms**. Both are
+  knowingly accepted risks, recorded rather than resolved, exactly as Stooq's were.
+- **D-06 [MECHANISM UNCHANGED, vendors restated]:** The recording machinery does not move, because
+  it was never Stooq-specific. The **sidecar** carries `license`/`termsUrl`/`retrievedAt` (authored
+  once per source in `sources.ts`), the **manifest** carries those fields through per series (copied
+  by the compiler, never hand-typed), and the **Phase 5 methodology page** renders from the
+  manifest. Only the per-vendor text changes, plus a replacement **Key Decision in PROJECT.md**
+  covering Yahoo and Nasdaq. The two Stooq rows are marked superseded, not deleted (D-28).
+- **D-07 [REVISED 2026-08-17]:** The fetch script **always pulls latest**; there is still no as-of
+  pinning, and the git diff on refresh is still the review surface. The original rationale (Stooq
+  and Shiller lack date-bounded queries) is void, but the decision stands on the stronger ground it
+  always rested on: a vendor revision to a historical value must surface as a changed line in a
+  reviewable commit rather than silently changing a past conclusion. **D-24 is what makes this
+  actually true** for the total-return series — storing Yahoo's back-adjusted `adjclose` would
+  rewrite every row on every refresh and reduce the diff to noise.
 
 ### Calendar Alignment
 
@@ -111,15 +159,27 @@ against a measurement.
   an assumed constant rate was rejected as a fabricated input in the one era the tool most needs to
   be believed about. **Research task:** confirm the NBER series exists in a machine-readable form
   covering 1928-1934.
-- **D-14:** A tier is a property of **(symbol, dividend mode)**, not of the bundle or of a symbol
-  alone. The strict range is the intersection of the genuinely-daily inputs a given run actually
-  uses, so S&P strict price-return reaches 1954 (daily price + daily rate) while S&P strict
-  total-return starts 1988 (daily TR). Per-symbol scoping would discard 34 years of genuinely-daily
-  price history for no data reason; bundle-wide scoping would let EEM's 2003 start collapse strict
-  to 2003 for everything.
-- **D-15:** Pre-1988 total return is constructed as **daily price return plus a daily dividend yield
-  interpolated from Shiller's monthly series**, spliced to real daily TR at 1988. Every splice and
-  interpolation date lands in the manifest as a seam, so the construction is visible at day level.
+- **D-14 [CONFIRMED against real data 2026-08-17]:** A tier is a property of **(symbol, dividend
+  mode)**, not of the bundle or of a symbol alone. The strict range is the intersection of the
+  genuinely-daily inputs a given run actually uses, so S&P strict price-return reaches 1954 (daily
+  price + daily rate) while S&P strict total-return starts 1988 (daily TR). Per-symbol scoping would
+  discard 34 years of genuinely-daily price history for no data reason; bundle-wide scoping would
+  let EEM's 2003 start collapse strict to 2003 for everything.
+
+  The 1988 boundary is now **verified, not assumed**: `^SP500TR`'s first bar is **1988-01-04**,
+  exactly the date this decision declared. The design had always assumed this series without naming
+  it. **NDX has the same shape**: price-return from 1985-10-01, total-return from 1999-03-04
+  (XNDX's first bar). Nothing is lost in practice, since QQQ starts 1999-03-10 and no Nasdaq-100
+  total-return backtest was available before 1999 from any source in this stack.
+- **D-15 [ANNOTATED 2026-08-17]:** Pre-1988 total return is constructed as **daily price return plus
+  a daily dividend yield interpolated from Shiller's monthly series**, spliced to real daily TR at
+  1988. Every splice and interpolation date lands in the manifest as a seam, so the construction is
+  visible at day level. The "real daily TR" side of that splice is now named: **`^SP500TR`**.
+
+  This construction path applies to the **S&P only**. The 9 ETFs get real total return from their
+  own dividend events across their whole lives (D-24), and NDX gets it from XNDX, so neither needs
+  a Shiller-interpolated segment. `^GSPC`'s `adjclose` equals its `close` on all 24,773 bars,
+  because an index pays no dividends — the S&P is the one symbol where construction is unavoidable.
 - **D-16:** A seam is a **typed record carrying kind (`splice` | `interpolation` | `carry-forward`),
   the affected date range, the source on each side, and the method used**. Tier ranges are computed
   by scanning these records, satisfying criterion 3's computed-not-declared rule. A per-day mask was
@@ -179,9 +239,82 @@ against a measurement.
   was rejected because decode is only one component of it: a decode passing at 900ms would look
   fine and blow the real budget the moment Phase 4 adds fetch and first render on top.
 
+### Total-Return Construction and Fetch Route (added 2026-08-17)
+
+- **D-24:** ETF total return is **reconstructed from `close` plus Yahoo's dividend events**, not
+  taken from `adjclose`. Yahoo's `adjclose` is back-adjusted: every new dividend retroactively
+  rescales the entire history, so storing it would rewrite all ~6,900 rows of every ETF series on
+  every refresh and destroy the git-diff review surface D-01 and D-07 exist for. Reconstruction
+  makes past values immutable, so a refresh appends and a genuine vendor revision shows up as
+  exactly one changed line.
+
+  **Verified workable before deciding.** Reconstructing forward as
+  `TR_t = TR_{t-1} × (close_t + D_t) / close_{t-1}` reproduces Yahoo's own `adjclose` over each
+  full history to: QQQ 0.0033%, UPRO 0.0080%, VTI 0.0147%, TLT 0.0150%, TQQQ 0.0828% (worst case,
+  across 372× of growth over 16 years). That residual is float rounding in Yahoo's adjustment
+  factors, not a modelling difference. Dividend and split events are present in every downloaded
+  file (QQQ 89 dividends, TLT 287, UPRO 46 + 5 splits, TQQQ 21 + 8 splits).
+  — **Reversibility:** costly — every `-TR` raw CSV, the D-25 gate and its tolerance, and the
+  manifest's seam records for the ETF series all derive from this choice.
+- **D-25:** The reconstruction-vs-`adjclose` agreement is a **hard gate in the fetch script**: every
+  refresh recomputes the comparison and **exits non-zero** if any symbol drifts past a declared
+  tolerance. This catches a vendor changing its dividend data, a missed split, or a bug in the
+  reconstruction at the moment it happens rather than in a backtest months later. Consistent with
+  D-09, D-10 and D-11 failing loudly. The tolerance value is the planner's call, anchored to the
+  measured 0.083% worst case above. A test-suite-only check was rejected because it lets a bad
+  refresh be committed first; a log-only record was rejected because nothing would stop a broken
+  series shipping.
+- **D-26:** `raw/` carries **both the derived CSV and the vendor's original JSON**, both committed.
+  D-03 and D-20 then hold unchanged: normalization still happens in the fetch script, the compiler
+  still stores exactly what its input CSV says value-for-value, and a skeptic can re-derive that
+  CSV from committed vendor bytes rather than having to trust the derivation. Cost accepted: roughly
+  9 MB of vendor JSON in the repo. Committing only the derived CSV was rejected because the dividend
+  events the reconstruction is built from would then exist nowhere in the repo, and Yahoo can change
+  them.
+- **D-27:** **Yahoo and FRED are fetched automatically; Nasdaq and Shiller stay manual; Yahoo falls
+  back to `raw/manual/` when the fetch fails.** Yahoo's API answered the user's browser directly but
+  returns HTTP 429 to this development sandbox on the first request, from both `query1` and
+  `query2`, regardless of `User-Agent` or `Accept` headers, while `finance.yahoo.com` itself returns
+  200 from the same host. That is an IP-level block on the API hosts against a shared egress
+  address, not a malformed request — no header change fixes it, and no workaround is known. So the
+  same command must work on a developer machine (where the fetch succeeds) and on a shared-IP CI
+  runner (where it will not).
+
+  The fallback must not become a trap: every run **reports per symbol whether the data was fetched
+  live or read from `raw/manual/`**, the sidecar's `retrievedAt` records it, and a manual file older
+  than a declared threshold **fails the run** rather than being silently used. This reuses D-12's
+  reasoning, which exists for precisely this failure: a stale refresh being indistinguishable from a
+  legitimate one. A `--allow-manual` CLI flag was rejected on D-11's grounds — someone leaves it on
+  in CI.
+- **D-28:** **Committed history is superseded, not rewritten.** `02-03-SUMMARY.md` stays untouched
+  as the honest record of what was built and why; the new plan's SUMMARY supersedes it. The two
+  Stooq rows in PROJECT.md's Key Decisions table are **marked superseded with a pointer to their
+  replacements**, not deleted. Live instruction docs — `tools/fetch-data/README.md` and
+  `MANUAL-DOWNLOAD.md` — **are** rewritten, because they are procedures someone follows, not
+  history. Rewriting everything in place was rejected because it would erase that Stooq was chosen,
+  that it served a dividend-adjusted series under a `Close` label, and that the failure was caught
+  by cross-checking against a second vendor — which is exactly the knowledge that stops it
+  recurring. `MANUAL-DOWNLOAD.md` is rewritten around the two genuinely manual sources (Nasdaq XNDX
+  and Shiller, both browser export plus Excel-to-CSV conversion), with the Yahoo URL template kept
+  as the documented fallback recipe for when the API refuses.
+
 ### Claude's Discretion
 
 Not raised during discussion; planner and researcher decide:
+
+- Whether XNDX's phantom `0.00000000000` bar on **2012-10-29** (the Hurricane Sandy closure —
+  `^GSPC`, `^NDX` and QQQ all correctly have no bar on 2012-10-29 or 2012-10-30) is handled by a
+  drop-zero-valued-rows rule in the normalizer or by a `raw/calendar-exceptions.json` entry under
+  D-11. A drop rule also covers the two other defects in that export: today's row is a
+  `0.00000000000` placeholder, and the file ends with an empty line.
+- The declared tolerance for D-25's gate, anchored to the measured 0.083% worst case.
+- The declared staleness threshold for D-27's manual-fallback check.
+- Whether the four vendor formats (Yahoo JSON, Nasdaq CSV, FRED CSV, Shiller CSV) share a common
+  normalizer interface or stay independent functions.
+- Whether the two `parseShillerCsv` bugs found this session (below, under Specific Ideas) are fixed
+  in the same plan as the source swap or in their own.
+
+
 
 - The exact sidecar field list beyond the required source, URL, retrieval date, series kind, and
   license/terms.
@@ -249,6 +382,28 @@ Not raised during discussion; planner and researcher decide:
 - `CLAUDE.md` (repo root) — the worktree exception.
 - `.claude/CLAUDE.md` §"GSD Workflow Enforcement" — no direct repo edits outside a GSD workflow.
 
+### Source-stack reversal (added 2026-08-17)
+- `tools/fetch-data/src/sources.ts` — the `SourceSpec` table D-04 rewrites. Its `STOOQ_SYMBOLS`
+  comment at line 70 is the record that the symbol conventions were never verified.
+- `tools/fetch-data/src/normalize.ts` — `parseShillerCsv` (two bugs, see Specific Ideas) and the
+  `normalizeStooq` that a `normalizeYahoo` and `normalizeNasdaq` replace.
+- `tools/fetch-data/MANUAL-DOWNLOAD.md` — rewritten per D-28 around Nasdaq XNDX and Shiller only.
+- `tools/fetch-data/README.md` — rewritten per D-28: routes, refresh procedure, per-vendor licence.
+- `.planning/phases/02-compiled-data-bundle/02-03-SUMMARY.md` — **superseded, do not edit** (D-28).
+  Its "Deferred Acceptance Checks" list is still the correct list of checks to re-run.
+- `.planning/phases/02-compiled-data-bundle/02-04-PLAN.md` §line 285 — the abort branch that keys
+  off "plan 02-03's summary lists any symbols with no real total-return series". That list is now
+  empty for the 9 ETFs and the S&P, and NDX resolves via XNDX, so this plan needs revising before
+  it executes.
+- `.planning/phases/02-compiled-data-bundle/02-05-PLAN.md` §line 198, §line 212 — the universe test
+  and its acceptance check assert a price-return and a total-return series for all 11 symbols.
+  Still satisfiable under the new stack, but written against Stooq assumptions.
+- `.planning/phases/02-compiled-data-bundle/02-RESEARCH.md` — assumption A2 ("no total-return data
+  available for this vendor stack") is disproven and needs marking resolved; the "Stooq CSV shape
+  (confirmed this session)" heading around line 600 is false and its own citation line says so.
+- `.planning/PROJECT.md` §Key Decisions — the two Stooq rows to mark superseded (D-28), plus the
+  replacement rows for Yahoo and Nasdaq (D-05/D-06).
+
 </canonical_refs>
 
 <code_context>
@@ -288,6 +443,32 @@ The repo contains the Phase 1 bench harness and nothing else. No `src/`, no Vite
   manifest's typed seam records (D-16), never from hand-authored strings.
 - **Phase 7's** sweep engine benefits from D-21's shared-calendar index alignment.
 
+### Raw inputs already on disk (2026-08-17)
+
+`raw/manual/` holds every vendor input, all validated this session — zero nulls, zero out-of-order
+timestamps, no duplicate dates, every symbol meeting or beating its declared first date:
+
+| File | Bars | Range |
+|---|---|---|
+| `GSPC.json` | 24,773 | 1927-12-30 → 2026-08-17 |
+| `SP500TR.json` | 9,728 | 1988-01-04 → 2026-08-17 |
+| `NDX.json` | 10,298 | 1985-10-01 → 2026-08-17 |
+| `XNDX.csv` | 6,908 | 1999-03-04 → 2026-08-14 |
+| `QQQ.json` | 6,902 | 1999-03-10 → 2026-08-17 |
+| `VTI.json` | 6,329 | 2001-06-15 → 2026-08-17 |
+| `EFA.json` | 6,279 | 2001-08-27 → 2026-08-17 |
+| `TLT.json` | 6,051 | 2002-07-30 → 2026-08-17 |
+| `EEM.json` | 5,873 | 2003-04-14 → 2026-08-17 |
+| `SSO.json`, `QLD.json` | 5,070 each | 2006-06-21 → 2026-08-17 |
+| `UPRO.json` | 4,312 | 2009-06-25 → 2026-08-17 |
+| `TQQQ.json` | 4,153 | 2010-02-11 → 2026-08-17 |
+| `SPX-DIV-MONTHLY.csv` | 1,868 | 1871-01 → 2026-08 (monthly, complete, no gaps) |
+
+`raw/RATE-{DFF,DTB3,TB3MS,NBER}.csv` plus sidecars are already committed from plan 02-03 and are
+unaffected by this reversal. `ie_data.xls` (1.6 MB, the pre-conversion Shiller source) is also in
+`raw/manual/`; whether it is committed alongside the converted CSV follows D-26's reasoning and is
+the planner's call.
+
 </code_context>
 
 <specifics>
@@ -305,6 +486,41 @@ The repo contains the Phase 1 bench harness and nothing else. No `src/`, no Vite
 - The user asked where the licensing terms would physically be recorded. D-06 is that answer:
   authored once in the sidecar, copied to the manifest, rendered by the UI, with the accepted-risk
   reasoning promoted to a PROJECT.md Key Decision.
+
+### From the 2026-08-17 manual-download session
+
+- **The user twice refused a designed-for-hypotheticals answer and was right both times.** Asked to
+  choose a fallback for a total-return ticker that might not exist, the response was to verify it in
+  session instead. `^SP500TR` was confirmed in one request; `^XNDX` was confirmed missing from Yahoo
+  in one request. Neither hypothetical survived contact. The same instinct caught the Yahoo 429:
+  "you get rate limited on the first request, something is missing in the request" prompted the
+  header and host tests that established it as an IP block rather than a malformed request.
+- **`parseShillerCsv` has two bugs, both found by running it against the real converted file.** They
+  are not yet fixed — the user chose to finish the downloads first.
+  1. **October is parsed as January.** Shiller's export drops the trailing zero, so October 1871 is
+     `1871.1`, sitting between `1871.09` and `1871.11`. The parser calls `padStart(2, '0')`, turning
+     `"1"` into `"01"`. All 155 Octobers become January duplicates. It fails loudly downstream
+     (`toCanonicalCsv: rows out of ascending order`), so nothing corrupts silently. Correct rule for
+     this file: a one-digit fraction means ×10; only `.1` ever occurs single-digit, verified across
+     all 155 rows.
+  2. **The last two rows have an empty `D` and become a 0.0% yield.** 2026-07 and 2026-08 have no
+     dividend yet; `Number('')` is `0`, which passes `Number.isFinite`. This is the failure mode
+     that *survives* fixing bug 1 and quietly poisons the tail of the interpolated series.
+  Latent, not currently biting: the naive `split(',')` mis-maps every column right of index 9,
+  because data rows contain quoted thousands separators (`" 5,184,574.52 "`). `Date`/`P`/`D` sit at
+  0/1/2 so today's reads are unaffected.
+- **The Nasdaq XNDX export is a fourth distinct vendor format**: BOM, CRLF, **descending** date
+  order, `M/D/YY` two-digit years, and quoted thousands separators. It downloads as **Excel and
+  needs a manual conversion to CSV** — the same Route B step Shiller needs, and it must be in the
+  refresh procedure.
+- **Yahoo's chart API rejects an over-wide date range on some symbols.** `period1=-2208988800`
+  (1900) worked for `^GSPC` but returned `Unprocessable Entity — Only 100 years worth of day
+  granularity data are allowed to be fetched per request` for `^XNDX`. `period1=0` (1970) is the
+  safe default for anything post-1970.
+- The `^SP500TR`-vs-`^GSPC` and XNDX-vs-`^NDX` comparisons are worth keeping as standing tests, not
+  just one-off checks: both total-return series match their price sibling almost exactly on their
+  first shared bar (256.02 vs 255.94; 1933.03 vs 1933.03) and then diverge monotonically. That
+  signature is what Stooq's data would have failed.
 
 </specifics>
 
@@ -330,3 +546,5 @@ The repo contains the Phase 1 bench harness and nothing else. No `src/`, no Vite
 
 *Phase: 2-Compiled Data Bundle*
 *Context gathered: 2026-08-17*
+*Updated 2026-08-17: source-stack reversal (Stooq → Yahoo + Nasdaq), D-04 through D-07 revised,
+D-14/D-15 confirmed against real data, D-24 through D-28 added.*
