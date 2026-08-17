@@ -23,6 +23,7 @@ import {
   MAX_RECONSTRUCTION_DRIFT,
   measureReconstructionDrift,
   normalizeFred,
+  normalizeNasdaq,
   normalizeShillerDividendYield,
   parseShillerCsv,
   parseYahooChart,
@@ -238,6 +239,10 @@ interface NormalizedSource {
    *  staleness (D-12's ragged right edge is expected), so D-27 must be measured against the raw
    *  file's own newest row, not the series' own last committed value. */
   newestObservationDate?: string
+  /** ISO dates of every zero-valued row `normalizeNasdaq` dropped. Only set for Nasdaq: the drop
+   *  must never be silent (see `normalizeNasdaq`'s doc comment), and the run prints these beneath
+   *  that stem's coverage row. */
+  droppedDates?: string[]
 }
 
 function normalizeBySpec(spec: SourceSpec, text: string): NormalizedSource {
@@ -257,6 +262,10 @@ function normalizeBySpec(spec: SourceSpec, text: string): NormalizedSource {
         rows: normalizeShillerDividendYield(parseShillerCsv(text)),
         newestObservationDate: shillerRawNewestDate(text) ?? undefined,
       }
+    case 'nasdaq': {
+      const result = normalizeNasdaq(text)
+      return { rows: result.rows, droppedDates: result.droppedDates }
+    }
     default:
       throw new Error(`fetch-data: unexpected vendor "${spec.vendor}" for "${spec.stem}"`)
   }
@@ -272,6 +281,8 @@ interface FetchResult {
   /** See `NormalizedSource.newestObservationDate`. Falls back to `rows`' own last date when
    *  absent (every vendor except Shiller). */
   newestObservationDate?: string
+  /** See `NormalizedSource.droppedDates`. Only set for Nasdaq. */
+  droppedDates?: string[]
 }
 
 interface MissingManualSource {
@@ -293,8 +304,8 @@ async function processSource(spec: SourceSpec): Promise<FetchResult | MissingMan
     }
     throw err
   }
-  const { rows, chart, newestObservationDate } = normalizeBySpec(spec, resolution.text)
-  return { spec, rows, route: resolution.route, chart, newestObservationDate }
+  const { rows, chart, newestObservationDate, droppedDates } = normalizeBySpec(spec, resolution.text)
+  return { spec, rows, route: resolution.route, chart, newestObservationDate, droppedDates }
 }
 
 /** Compares an actual first date against `expectedFirstDate`, which is either a bare "YYYY" (year
@@ -322,7 +333,7 @@ function printCoverageTable(results: FetchResult[], driftByStem: ReadonlyMap<str
   )
   let liveCount = 0
   let manualCount = 0
-  for (const { spec, rows, route } of results) {
+  for (const { spec, rows, route, droppedDates } of results) {
     const first = rows[0]?.date ?? '(empty)'
     const last = rows[rows.length - 1]?.date ?? '(empty)'
     const drift = driftByStem.get(spec.stem)
@@ -330,6 +341,9 @@ function printCoverageTable(results: FetchResult[], driftByStem: ReadonlyMap<str
     process.stdout.write(
       `  ${spec.stem} | ${spec.vendorName} | ${spec.vendorColumn} | ${route} | ${first} | ${last} | ${rows.length} | ${driftText}\n`,
     )
+    if (droppedDates && droppedDates.length > 0) {
+      process.stdout.write(`    ${spec.stem}: dropped ${droppedDates.length} zero-valued row(s): ${droppedDates.join(', ')}\n`)
+    }
     if (route === 'live') liveCount++
     else manualCount++
   }

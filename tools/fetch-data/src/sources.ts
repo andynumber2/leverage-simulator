@@ -87,6 +87,15 @@ const YAHOO_LICENSE =
 const YAHOO_TERMS_URL = 'https://legal.yahoo.com/us/en/yahoo/terms/otos/index.html'
 const YAHOO_VENDOR_NAME = 'Yahoo Finance'
 
+/** The index site publishes its own terms of use and redistribution of the index history is not
+ *  explicitly granted. Knowingly accepted risk (D-05/D-06), same posture as `YAHOO_LICENSE`
+ *  above. */
+const NASDAQ_LICENSE =
+  'Index site terms of use; redistribution of the index history is not explicitly granted (accepted risk, D-05/D-06)'
+/** Resolved 200 (no redirect) via a read-only header request on 2026-08-17. */
+const NASDAQ_TERMS_URL = 'https://indexes.nasdaqomx.com/Home/Disclaimer'
+const NASDAQ_VENDOR_NAME = 'Nasdaq, Inc.'
+
 /** period1 = -2208988800 (1900-01-01 UTC) is the wide value confirmed to work for `^GSPC`
  *  (D-17's pre-1928 depth) and confirmed rejected by the vendor for a post-1970 symbol with an
  *  explicit "Only 100 years worth of day granularity data are allowed" error. Every other symbol
@@ -216,9 +225,6 @@ const SPX_TR: SourceSpec = {
   vendorPeriod1: YAHOO_PERIOD1_DEFAULT,
 }
 
-// NDX total return (the Nasdaq-100 Total Return index, XNDX) is a different vendor (Nasdaq, not
-// Yahoo: Yahoo carries the `^XNDX` ticker but stores no history for it, per 02-CONTEXT.md) and is
-// added by plan 02-07, not here. This entry's absence is sequencing, not an omission.
 const NDX_PR: SourceSpec = {
   stem: 'NDX-PR',
   scope: 'NDX',
@@ -238,10 +244,33 @@ const NDX_PR: SourceSpec = {
   vendorPeriod1: YAHOO_PERIOD1_DEFAULT,
 }
 
+/** The Nasdaq-100 Total Return index (XNDX), a distinct vendor from Yahoo: Yahoo carries the
+ *  `^XNDX` ticker but stores no history for it (per `02-CONTEXT.md`), so this series comes from
+ *  the Nasdaq index site's own export instead. Always manual: the index site's history download
+ *  is not scripted (D-04). */
+const NDX_TR: SourceSpec = {
+  stem: 'NDX-TR',
+  scope: 'NDX',
+  seriesKind: 'total-return',
+  units: 'index-level',
+  vendor: 'nasdaq',
+  vendorName: NASDAQ_VENDOR_NAME,
+  url: 'https://indexes.nasdaqomx.com/Index/History/XNDX',
+  vendorColumn: 'Index Value',
+  expectedFirstDate: '1999-03-04',
+  license: NASDAQ_LICENSE,
+  termsUrl: NASDAQ_TERMS_URL,
+  route: 'manual-only',
+  manualFile: 'XNDX.csv',
+  maxStalenessDays: MANUAL_DAILY_STALENESS_DAYS,
+  derivation: 'as-sourced',
+}
+
 export const SOURCES: SourceSpec[] = [
   SPX_PR,
   SPX_TR,
   NDX_PR,
+  NDX_TR,
   ...YAHOO_FUNDS.flatMap(buildYahooFundPair),
   {
     stem: 'SPX-DIV-MONTHLY',
