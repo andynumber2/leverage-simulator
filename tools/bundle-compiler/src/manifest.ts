@@ -67,7 +67,9 @@ export interface BuildManifestInput {
 
 /**
  * Builds the manifest with `series` sorted scope ascending then kind ascending, `assets` sorted
- * filename ascending, and object keys in a fixed authored order (criterion 3, DATA-06 ordering).
+ * filename ascending, `calendarExceptions` sorted scope ascending then date ascending (so a
+ * recompile is byte-reproducible regardless of the exceptions file's authored order), and object
+ * keys in a fixed authored order (criterion 3, DATA-06 ordering).
  */
 export function buildManifest(input: BuildManifestInput): Manifest {
   const series = [...input.series].sort((a, b) => {
@@ -76,6 +78,11 @@ export function buildManifest(input: BuildManifestInput): Manifest {
     return 0
   })
   const assets = [...input.assets].sort((a, b) => (a.file < b.file ? -1 : a.file > b.file ? 1 : 0))
+  const calendarExceptions = [...input.calendarExceptions].sort((a, b) => {
+    if (a.scope !== b.scope) return a.scope < b.scope ? -1 : 1
+    if (a.date !== b.date) return a.date < b.date ? -1 : 1
+    return 0
+  })
 
   return {
     formatVersion: FORMAT_VERSION,
@@ -83,7 +90,7 @@ export function buildManifest(input: BuildManifestInput): Manifest {
     calendar: input.calendar,
     assets,
     series,
-    calendarExceptions: input.calendarExceptions,
+    calendarExceptions,
   }
 }
 
