@@ -1,0 +1,10 @@
+{
+  "source": "FRED (Federal Reserve Bank of St. Louis)",
+  "url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=DFF",
+  "retrievedAt": "2026-08-17",
+  "seriesKind": "rate",
+  "license": "Public Domain (U.S. Government work)",
+  "termsUrl": "https://fred.stlouisfed.org/legal/",
+  "scope": "RATE",
+  "units": "percent-annualized"
+}
