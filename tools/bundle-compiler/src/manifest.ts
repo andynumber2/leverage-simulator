@@ -12,6 +12,7 @@ import { createHash } from 'node:crypto'
 import { FORMAT_VERSION, type SeriesKind } from './binary-format.ts'
 import { contentHashedFilename, writeAsset } from './encode.ts'
 import type { SeamRecord } from './seams.ts'
+import { computeTierRanges } from './tiers.ts'
 
 export interface DateRange {
   firstDate: string
@@ -32,6 +33,9 @@ export interface ManifestSeries {
   seams: SeamRecord[]
   tiers: { strict: DateRange | null; extended: DateRange | null }
 }
+
+/** Everything `buildManifest` needs about one series before its `tiers` field is computed. */
+export type ManifestSeriesInput = Omit<ManifestSeries, 'tiers'>
 
 export interface Manifest {
   formatVersion: number
@@ -61,7 +65,14 @@ export interface BuildManifestInput {
   bundleVersion: string
   calendar: Manifest['calendar']
   assets: Manifest['assets']
-  series: ManifestSeries[]
+  series: ManifestSeriesInput[]
+  /** The shared rate series' own seam records and date range, against which every pair's tier is
+   * computed (D-14, D-16, DATA-05). Passing the rate series' own entry through this same path
+   * (its own seams as both `pairSeams` and `rateSeams`, its own range as both `pairRange` and
+   * `rateRange`) yields the correct self-referential tier for the rate series' own manifest entry,
+   * with no special case needed. */
+  rateSeams: SeamRecord[]
+  rateRange: DateRange
   calendarExceptions: Manifest['calendarExceptions']
 }
 
@@ -69,14 +80,21 @@ export interface BuildManifestInput {
  * Builds the manifest with `series` sorted scope ascending then kind ascending, `assets` sorted
  * filename ascending, `calendarExceptions` sorted scope ascending then date ascending (so a
  * recompile is byte-reproducible regardless of the exceptions file's authored order), and object
- * keys in a fixed authored order (criterion 3, DATA-06 ordering).
+ * keys in a fixed authored order (criterion 3, DATA-06 ordering). Each series' `tiers` is computed
+ * here, by scanning its own seam records against the shared rate series' (D-14, D-16): nothing
+ * upstream declares a tier boundary as a literal.
  */
 export function buildManifest(input: BuildManifestInput): Manifest {
-  const series = [...input.series].sort((a, b) => {
-    if (a.scope !== b.scope) return a.scope < b.scope ? -1 : 1
-    if (a.kind !== b.kind) return a.kind < b.kind ? -1 : 1
-    return 0
-  })
+  const series = [...input.series]
+    .map((s): ManifestSeries => ({
+      ...s,
+      tiers: computeTierRanges(s.seams, input.rateSeams, { firstDate: s.firstDate, lastDate: s.lastDate }, input.rateRange),
+    }))
+    .sort((a, b) => {
+      if (a.scope !== b.scope) return a.scope < b.scope ? -1 : 1
+      if (a.kind !== b.kind) return a.kind < b.kind ? -1 : 1
+      return 0
+    })
   const assets = [...input.assets].sort((a, b) => (a.file < b.file ? -1 : a.file > b.file ? 1 : 0))
   const calendarExceptions = [...input.calendarExceptions].sort((a, b) => {
     if (a.scope !== b.scope) return a.scope < b.scope ? -1 : 1

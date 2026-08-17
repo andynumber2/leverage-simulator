@@ -16,7 +16,7 @@ import { describe, expect, test } from 'vitest'
 import { deriveCalendar, fromDaysSinceEpoch, toDaysSinceEpoch } from '../src/calendar.ts'
 import { compileBundle } from '../src/compile.ts'
 import type { RawSeries, SidecarMeta } from '../src/raw-input.ts'
-import { makeRawFixture } from './fixtures/make-fixture.ts'
+import { DEFAULT_RATE_SERIES, makeRawFixture } from './fixtures/make-fixture.ts'
 
 function consecutiveDates(count: number, startIso: string): string[] {
   const start = toDaysSinceEpoch(startIso)
@@ -42,7 +42,7 @@ function makeSeries(
     scope,
     units,
   }
-  return { scope, meta, dates, values }
+  return { scope, rawStem: scope, meta, dates, values }
 }
 
 function makeOutDir(): string {
@@ -127,9 +127,15 @@ describe('compileBundle gap policy integration', () => {
     const buildFixture = (trail: number) => {
       const shortDates = dates.slice(0, dates.length - trail)
       return makeRawFixture({
+        dates,
         series: [
           { scope: 'AAA', seriesKind: 'price', units: 'index-level', dates },
+          { scope: 'AAA', seriesKind: 'total-return', units: 'index-level', dates },
           { scope: 'CCC', seriesKind: 'price', units: 'index-level', dates: shortDates },
+          // Only CCC's price series trails; its total-return sibling stays current, so exactly
+          // one series (and therefore exactly one warning) is stale in this fixture.
+          { scope: 'CCC', seriesKind: 'total-return', units: 'index-level', dates },
+          ...DEFAULT_RATE_SERIES,
         ],
       })
     }
@@ -157,9 +163,13 @@ describe('compileBundle gap policy integration', () => {
     const dates = consecutiveDates(40, '2024-10-01')
     const laterStart = dates.slice(20)
     const fixture = makeRawFixture({
+      dates,
       series: [
         { scope: 'AAA', seriesKind: 'price', units: 'index-level', dates },
+        { scope: 'AAA', seriesKind: 'total-return', units: 'index-level', dates },
         { scope: 'DDD', seriesKind: 'price', units: 'index-level', dates: laterStart },
+        { scope: 'DDD', seriesKind: 'total-return', units: 'index-level', dates: laterStart },
+        ...DEFAULT_RATE_SERIES,
       ],
     })
     const outDir = makeOutDir()
@@ -176,10 +186,13 @@ describe('compileBundle gap policy integration', () => {
     const fullDates = consecutiveDates(10, '2024-11-01')
     const calendarDates = fullDates.filter((_, i) => i !== 4)
     const fixture = makeRawFixture({
+      dates: calendarDates,
       series: [
         { scope: 'AAA', seriesKind: 'price', units: 'index-level', dates: calendarDates },
+        { scope: 'AAA', seriesKind: 'total-return', units: 'index-level', dates: calendarDates },
         { scope: 'BBB', seriesKind: 'rate', units: 'percent-annualized', dates: fullDates },
         { scope: 'CCC', seriesKind: 'rate', units: 'percent-annualized', dates: fullDates },
+        ...DEFAULT_RATE_SERIES,
       ],
     })
     writeFileSync(

@@ -18,7 +18,7 @@ import { describe, expect, test } from 'vitest'
 import { decodeHeader, encodeHeader, seriesView, type SeriesDescriptor } from '../src/binary-format.ts'
 import { compileBundle } from '../src/compile.ts'
 import { encodeSeriesAsset } from '../src/encode.ts'
-import { makeRawFixture } from './fixtures/make-fixture.ts'
+import { DEFAULT_RATE_SERIES, makeRawFixture } from './fixtures/make-fixture.ts'
 
 function makeOutDir(): string {
   return mkdtempSync(path.join(tmpdir(), 'bundle-compiler-out-'))
@@ -58,7 +58,7 @@ describe('compileBundle round trip', () => {
         expect(descriptor).toBeDefined()
 
         const view = seriesView(arrayBuffer, header, descriptor!)
-        const expectedValues = fixture.expected[entry.scope]!.values
+        const expectedValues = fixture.expected[entry.id]!.values
         expect(view.length).toBe(expectedValues.length)
         for (let i = 0; i < expectedValues.length; i++) {
           expect(view[i]).toBe(expectedValues[i])
@@ -74,14 +74,19 @@ describe('compileBundle round trip', () => {
     const fixture = makeRawFixture({
       series: [
         { scope: 'AAA', seriesKind: 'price', units: 'index-level' },
+        { scope: 'AAA', seriesKind: 'total-return', units: 'index-level' },
         { scope: 'BBB', seriesKind: 'price', units: 'index-level' },
+        { scope: 'BBB', seriesKind: 'total-return', units: 'index-level' },
         { scope: 'CCC', seriesKind: 'price', units: 'index-level', values: undefined },
+        { scope: 'CCC', seriesKind: 'total-return', units: 'index-level' },
+        ...DEFAULT_RATE_SERIES,
       ],
     })
     const outDir = makeOutDir()
     try {
       const result = compileBundle(fixture.dir, outDir)
-      expect(result.assetFiles.length).toBe(3)
+      // 3 symbol-scope assets (AAA, BBB, CCC) plus the shared rate asset.
+      expect(result.assetFiles.length).toBe(4)
     } finally {
       rmSync(fixture.dir, { recursive: true, force: true })
       rmSync(outDir, { recursive: true, force: true })
