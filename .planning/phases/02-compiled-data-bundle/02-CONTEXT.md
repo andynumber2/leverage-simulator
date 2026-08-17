@@ -501,9 +501,19 @@ timestamps, no duplicate dates, every symbol meeting or beating its declared fir
 | `SPX-DIV-MONTHLY.csv` | 1,868 | 1871-01 → 2026-08 (monthly, complete, no gaps) |
 
 `raw/RATE-{DFF,DTB3,TB3MS,NBER}.csv` plus sidecars are already committed from plan 02-03 and are
-unaffected by this reversal. `ie_data.xls` (1.6 MB, the pre-conversion Shiller source) is also in
-`raw/manual/`; whether it is committed alongside the converted CSV follows D-26's reasoning and is
-the planner's call.
+unaffected by this reversal.
+
+**`ie_data.xls` is NOT committed and NOT kept** (settled 2026-08-17, after the planner argued the
+opposite and was overruled). D-26's argument is that a derived series must stay re-derivable from
+committed vendor bytes, and it is decisive for the Yahoo JSON: `fetch.ts` reads it, and the
+total-return reconstruction depends on dividend events that exist nowhere else and that Yahoo
+revises retroactively. It does **not** carry over to Shiller. Nothing in the codebase reads `.xls`
+(`fetch.ts` reads `raw/manual/<stem>.csv` and the Yahoo JSON only), and the converted
+`SPX-DIV-MONTHLY.csv` already carries the full source sheet including `P` and `D`, so the canonical
+`D / P` series is checkable against the committed CSV alone. The workbook sits one level further
+back than any input. The one artifact the LibreOffice conversion introduces (October as a one-digit
+fraction, `1871.1`) is already characterised above and handled by the parser, so there is no
+unaudited conversion left for the workbook to audit. Do not re-add it.
 
 </code_context>
 
