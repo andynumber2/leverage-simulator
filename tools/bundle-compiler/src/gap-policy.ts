@@ -230,6 +230,9 @@ export function applyGapPolicy(
           sourceBefore: source,
           sourceAfter: source,
           method: `Rate-series gap of ${widthDays} day(s) carried forward by repeating the previous observation, checked against the declared ${RATE_CARRY_FORWARD_LIMIT_DAYS}-day carry-forward limit.`,
+          // A bond-market holiday inside a daily source does not make that source stop being
+          // daily; treating it as a degradation would collapse every strict tier to nothing.
+          degradesToNonDaily: false,
         })
       } else {
         fatalGapDates.push(...runDates)
@@ -250,6 +253,9 @@ export function applyGapPolicy(
           sourceBefore: source,
           sourceAfter: source,
           method: `Exception-approved interior gap filled by repeating the previous observation (raw/calendar-exceptions.json).`,
+          // Same reasoning as the rate-series carry-forward above: a single-day fill inside an
+          // otherwise-daily source is not a degradation to a lower frequency.
+          degradesToNonDaily: false,
         })
       } else {
         for (const date of runDates) {
