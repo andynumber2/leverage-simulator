@@ -12,6 +12,8 @@ import {
   parseShillerCsv,
   parseYahooChart,
   reconstructYahooTotalReturn,
+  shillerRawNewestDate,
+  splitCsvFields,
   toCanonicalCsv,
   type YahooChart,
 } from '../src/normalize.ts'
@@ -22,6 +24,7 @@ import { loadSidecarOrThrow } from '../../bundle-compiler/src/raw-input.ts'
 const REPO_ROOT = path.resolve(import.meta.dirname, '..', '..', '..')
 const QQQ_JSON_PATH = path.join(REPO_ROOT, 'raw', 'manual', 'QQQ.json')
 const QQQ_JSON_TEXT = readFileSync(QQQ_JSON_PATH, 'utf8')
+const SPX_DIV_MONTHLY_CSV_TEXT = readFileSync(path.join(REPO_ROOT, 'raw', 'manual', 'SPX-DIV-MONTHLY.csv'), 'utf8')
 
 function tsFor(y: number, m: number, d: number, hourUtc = 14, minuteUtc = 30): number {
   return Math.floor(Date.UTC(y, m - 1, d, hourUtc, minuteUtc) / 1000)
@@ -311,6 +314,18 @@ describe('normalizeShillerDividendYield', () => {
   })
 })
 
+describe('splitCsvFields', () => {
+  test('splits on commas outside double quotes and strips the quotes from a quoted field', () => {
+    const fields = splitCsvFields('a,"b,c",d')
+    expect(fields).toEqual(['a', 'b,c', 'd'])
+    expect(fields[1]).not.toMatch(/"/)
+  })
+
+  test('trims each field', () => {
+    expect(splitCsvFields(' a , b ,c')).toEqual(['a', 'b', 'c'])
+  })
+})
+
 describe('parseShillerCsv', () => {
   test('finds the header row past preamble lines and reads Date/P/D by name', () => {
     const csv = [
@@ -328,17 +343,110 @@ describe('parseShillerCsv', () => {
     ])
   })
 
-  test('does not confuse "1871.1" (January, single-digit month) with October', () => {
-    // NOTE: this pins the parser's *current* (buggy) left-padding behavior, which plan 02-06
-    // Task 3 fixes at its root (right-pad the fraction, since "1871.1" is Shiller's own encoding
-    // for October, not January). Left as-is here because Task 1 does not touch parseShillerCsv.
+  test('a date cell whose fraction is the single digit "1" parses to the tenth month (October)', () => {
     const csv = ['Date,P,D,E', '1871.1,4.44,0.26,0.4'].join('\n')
+    const rows = parseShillerCsv(csv)
+    expect(rows).toEqual([{ date: '1871-10-01', price: 4.44, dividend: 0.26 }])
+  })
+
+  test('a date cell whose fraction is "01" parses to the first month (January), so padding direction is pinned by behavior', () => {
+    const csv = ['Date,P,D,E', '1871.01,4.44,0.26,0.4'].join('\n')
     const rows = parseShillerCsv(csv)
     expect(rows).toEqual([{ date: '1871-01-01', price: 4.44, dividend: 0.26 }])
   })
 
   test('throws when no Date/P/D header row is found', () => {
     expect(() => parseShillerCsv('a,b,c\n1,2,3')).toThrowError(/header row/)
+  })
+
+  test('throws when a price cell is empty, at a middle row', () => {
+    const csv = ['Date,P,D,E', '1871.01,4.44,0.26,0.4', '1871.02,,0.27,0.4', '1871.03,4.61,0.28,0.4'].join('\n')
+    expect(() => parseShillerCsv(csv)).toThrowError(/empty price/)
+  })
+
+  test('throws when a price cell is empty, at the final row', () => {
+    const csv = ['Date,P,D,E', '1871.01,4.44,0.26,0.4', '1871.02,,0.27,0.4'].join('\n')
+    expect(() => parseShillerCsv(csv)).toThrowError(/empty price/)
+  })
+
+  test('throws when a dividend cell is empty but a later row carries one, naming the line and date', () => {
+    const csv = [
+      'Date,P,D,E',
+      '1871.01,4.44,0.26,0.4',
+      '1871.02,4.50,,0.4',
+      '1871.03,4.61,0.28,0.4',
+    ].join('\n')
+    expect(() => parseShillerCsv(csv)).toThrowError(/line 3.*1871-02-01/)
+  })
+
+  test('drops a trailing run of rows whose dividend cell is empty, without throwing', () => {
+    const csv = [
+      'Date,P,D,E',
+      '1871.01,4.44,0.26,0.4',
+      '1871.02,4.50,0.27,0.4',
+      '1871.03,4.61,,0.4',
+      '1871.04,4.70,,0.4',
+    ].join('\n')
+    const rows = parseShillerCsv(csv)
+    expect(rows).toEqual([
+      { date: '1871-01-01', price: 4.44, dividend: 0.26 },
+      { date: '1871-02-01', price: 4.5, dividend: 0.27 },
+    ])
+  })
+
+  test('a quoted field carrying a thousands-separator comma right of the read columns does not corrupt Date/P/D', () => {
+    const csv = ['Date,P,D,E,CPI,Fraction,Rate,Price,Dividend,"Price"', '1871.01,4.44,0.26,0.4,12.46,1871.04,5.32,118.65,6.95," 118,650.00 "'].join(
+      '\n',
+    )
+    const rows = parseShillerCsv(csv)
+    expect(rows).toEqual([{ date: '1871-01-01', price: 4.44, dividend: 0.26 }])
+  })
+
+  describe('against the real committed file', () => {
+    const rows = parseShillerCsv(SPX_DIV_MONTHLY_CSV_TEXT)
+
+    test('returns 1866 rows from 1871-01-01 through 2026-06-01, with 155 Octobers and 156 Januaries', () => {
+      expect(rows).toHaveLength(1866)
+      expect(rows[0]!.date).toBe('1871-01-01')
+      expect(rows[rows.length - 1]!.date).toBe('2026-06-01')
+      expect(rows.filter((r) => r.date.slice(5, 7) === '10')).toHaveLength(155)
+      expect(rows.filter((r) => r.date.slice(5, 7) === '01')).toHaveLength(156)
+    })
+
+    test('is strictly ascending with no duplicate date', () => {
+      for (let i = 1; i < rows.length; i++) {
+        expect(rows[i]!.date > rows[i - 1]!.date).toBe(true)
+      }
+    })
+
+    test('normalizeShillerDividendYield produces 1866 strictly positive yields, and toCanonicalCsv accepts them', () => {
+      const yields = normalizeShillerDividendYield(rows)
+      expect(yields).toHaveLength(1866)
+      expect(yields.every((y) => y.value > 0)).toBe(true)
+      expect(() => toCanonicalCsv(yields)).not.toThrow()
+    })
+  })
+})
+
+describe('shillerRawNewestDate', () => {
+  test('returns the raw file newest row date even when its dividend cell is empty (D-27)', () => {
+    // The real committed file's parsed (post-drop) series ends 2026-06-01, but the raw table's
+    // own newest row is 2026-08 (dividend not yet published). D-27's staleness check must see
+    // the raw newest row, not the drop-adjusted series' last value, or an unpublished-dividend
+    // lag (D-12's expected ragged right edge) would be misread as a stale file.
+    const parsedRows = parseShillerCsv(SPX_DIV_MONTHLY_CSV_TEXT)
+    const rawNewest = shillerRawNewestDate(SPX_DIV_MONTHLY_CSV_TEXT)
+    expect(rawNewest).toBe('2026-08-01')
+    expect(rawNewest).not.toBe(parsedRows[parsedRows.length - 1]!.date)
+  })
+
+  test('on a fixture with no trailing drop, matches the last parsed row', () => {
+    const csv = ['Date,P,D,E', '1871.01,4.44,0.26,0.4', '1871.02,4.50,0.27,0.4'].join('\n')
+    expect(shillerRawNewestDate(csv)).toBe('1871-02-01')
+  })
+
+  test('returns null when the table has no data rows', () => {
+    expect(shillerRawNewestDate('Date,P,D,E')).toBeNull()
   })
 })
 

@@ -27,6 +27,7 @@ import {
   parseShillerCsv,
   parseYahooChart,
   reconstructYahooTotalReturn,
+  shillerRawNewestDate,
   toCanonicalCsv,
   type CanonicalRow,
   type ReconstructionDrift,
@@ -228,7 +229,18 @@ export function checkManualStaleness(spec: SourceSpec, rows: readonly CanonicalR
   return null
 }
 
-function normalizeBySpec(spec: SourceSpec, text: string): { rows: CanonicalRow[]; chart?: YahooChart } {
+interface NormalizedSource {
+  rows: CanonicalRow[]
+  chart?: YahooChart
+  /** The newest observation's date for D-27 purposes (staleness check, sidecar `retrievedAt`),
+   *  when it differs from `rows`' own last date. Only set for Shiller: an unpublished trailing
+   *  dividend cell means `rows` stops earlier than the raw file's newest row, and that lag is not
+   *  staleness (D-12's ragged right edge is expected), so D-27 must be measured against the raw
+   *  file's own newest row, not the series' own last committed value. */
+  newestObservationDate?: string
+}
+
+function normalizeBySpec(spec: SourceSpec, text: string): NormalizedSource {
   switch (spec.vendor) {
     case 'yahoo': {
       const chart = parseYahooChart(text)
@@ -241,7 +253,10 @@ function normalizeBySpec(spec: SourceSpec, text: string): { rows: CanonicalRow[]
     case 'fred':
       return { rows: normalizeFred(text) }
     case 'shiller':
-      return { rows: normalizeShillerDividendYield(parseShillerCsv(text)) }
+      return {
+        rows: normalizeShillerDividendYield(parseShillerCsv(text)),
+        newestObservationDate: shillerRawNewestDate(text) ?? undefined,
+      }
     default:
       throw new Error(`fetch-data: unexpected vendor "${spec.vendor}" for "${spec.stem}"`)
   }
@@ -254,6 +269,9 @@ interface FetchResult {
   /** Present only for a reconstructed-total-return stem, carried forward for the D-25 drift gate
    *  (added in plan 02-06 Task 2). */
   chart?: YahooChart
+  /** See `NormalizedSource.newestObservationDate`. Falls back to `rows`' own last date when
+   *  absent (every vendor except Shiller). */
+  newestObservationDate?: string
 }
 
 interface MissingManualSource {
@@ -275,8 +293,8 @@ async function processSource(spec: SourceSpec): Promise<FetchResult | MissingMan
     }
     throw err
   }
-  const { rows, chart } = normalizeBySpec(spec, resolution.text)
-  return { spec, rows, route: resolution.route, chart }
+  const { rows, chart, newestObservationDate } = normalizeBySpec(spec, resolution.text)
+  return { spec, rows, route: resolution.route, chart, newestObservationDate }
 }
 
 /** Compares an actual first date against `expectedFirstDate`, which is either a bare "YYYY" (year
@@ -344,11 +362,12 @@ async function main(): Promise<void> {
   // exception silently withholding every series after it in iteration order.
   const written: FetchResult[] = []
   for (const result of results) {
-    const { spec, rows, route } = result
+    const { spec, rows, route, newestObservationDate } = result
     try {
       const csvPath = path.join(RAW_DIR, `${spec.stem}.csv`)
       const sidecarPath = path.join(RAW_DIR, `${spec.stem}.meta.json`)
-      const retrievedAt = route === 'live' ? runDate : (rows[rows.length - 1]?.date ?? runDate)
+      const retrievedAt =
+        route === 'live' ? runDate : (newestObservationDate ?? rows[rows.length - 1]?.date ?? runDate)
       writeFileAtomic(csvPath, toCanonicalCsv(rows))
       writeFileAtomic(sidecarPath, `${JSON.stringify(buildSidecar(spec, retrievedAt), null, 2)}\n`)
       written.push(result)
@@ -395,10 +414,13 @@ async function main(): Promise<void> {
 
   // D-27 staleness gate: every series resolved through the manual route, checked against its
   // declared threshold, measured from the newest observation in the data rather than file mtime.
+  // Uses `newestObservationDate` when the normalizer supplied one (Shiller), since that is the
+  // raw file's own newest row rather than the last row that survived a vendor-specific drop rule.
   const staleHalts: string[] = []
-  for (const { spec, rows, route } of results) {
+  for (const { spec, rows, route, newestObservationDate } of results) {
     if (route !== 'manual') continue
-    const halt = checkManualStaleness(spec, rows, new Date())
+    const stalenessRows = newestObservationDate ? [{ date: newestObservationDate, value: 0 }] : rows
+    const halt = checkManualStaleness(spec, stalenessRows, new Date())
     if (halt) staleHalts.push(halt)
   }
 

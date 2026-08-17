@@ -460,22 +460,76 @@ export function normalizeShillerDividendYield(rows: ShillerRow[]): CanonicalRow[
 }
 
 /**
+ * Splits one CSV line on commas outside double quotes, strips the surrounding quotes from a
+ * quoted field, and trims each field. Generic (not Shiller-specific): Shiller's data rows carry
+ * quoted thousands separators from column 9 onward (e.g. `" 4,693,745.68 "`), so a naive
+ * `split(',')` mis-maps every column to the right of index 9. `Date`/`P`/`D` sit at indices
+ * 0/1/2, so nothing currently reads a mis-mapped column, but this parser should not be one column
+ * addition away from silently reading the wrong number. Plan 02-07 reuses this helper for the
+ * Nasdaq export, which carries the same quoted-thousands-separator shape.
+ */
+export function splitCsvFields(line: string): string[] {
+  const fields: string[] = []
+  let current = ''
+  let inQuotes = false
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i]!
+    if (ch === '"') {
+      inQuotes = !inQuotes
+      continue
+    }
+    if (ch === ',' && !inQuotes) {
+      fields.push(current.trim())
+      current = ''
+      continue
+    }
+    current += ch
+  }
+  fields.push(current.trim())
+  return fields
+}
+
+/**
  * Parses a human-converted copy of Shiller's `ie_data.xls` "Data" sheet (saved to CSV, e.g. via
  * `soffice --headless --convert-to csv`) into `ShillerRow`s. Locates the header row by scanning
- * for a row whose cells include both "Date" and "P" (Shiller's sheet carries several preamble
+ * for a row whose cells include "Date", "P" and "D" (Shiller's sheet carries several preamble
  * rows before the real table), then reads columns by header name so a column reorder doesn't
- * silently mis-map. Shiller's Date column is a decimal year.month where the month is NOT
- * zero-padded in a way that survives numeric round-tripping (e.g. "1871.1" is ambiguous between
- * January and October if read as a bare float) — this parser requires the Date cell to be a
- * zero-padded string of the form "YYYY.MM" or "YYYY.M" with M read from the string, never from
- * the parsed float, and throws naming the raw cell when it isn't.
+ * silently mis-map.
  *
- * UNVERIFIED against the real converted file: this session has no network path to
- * econ.yale.edu (see sources.ts), so this parser has not been run against Shiller's actual
- * output. Re-verify column names and the preamble-row-skip logic against the real
- * `raw/manual/SPX-DIV-MONTHLY.csv` once a human supplies it, per MANUAL-DOWNLOAD.md.
+ * Shiller's Date cell is a two-place decimal fraction of the year, not a bare "month digit": the
+ * fraction must be right-padded to two digits, never left-padded. "1871.1" is October, encoded as
+ * fraction ".1" meaning ".10"; "1871.01" is January, fraction ".01". Left-padding (as an earlier
+ * version of this parser did) turns the single-digit tenth month into the first month, colliding
+ * every October with January and tripping the canonical writer's ascending-order check.
+ *
+ * An empty price cell throws at any position: Shiller's price column is never legitimately
+ * unpublished for a row that exists at all. An empty dividend cell is legitimate only at the
+ * trailing edge of the table (D-12's ragged right edge: Shiller has not yet published this
+ * month's trailing-twelve-month dividend sum), so it is dropped only when every later row's
+ * dividend cell is also empty; an empty dividend cell followed by any later row that does carry a
+ * dividend throws naming the line and the date, because that is a real defect (a hole in the
+ * middle of the table), not an unpublished month.
+ *
+ * Verified against the real committed `raw/manual/SPX-DIV-MONTHLY.csv` on 2026-08-17: 1866 rows
+ * from 1871-01-01 through 2026-06-01 once the two trailing rows with an empty dividend cell
+ * (2026-07, 2026-08) are dropped, 155 Octobers and 156 Januaries, strictly ascending, no
+ * duplicate date.
  */
-export function parseShillerCsv(csvText: string): ShillerRow[] {
+interface ShillerParsedLine {
+  lineNumber: number
+  isoDate: string
+  price: number
+  dividendCell: string
+}
+
+/**
+ * Shared header-location and row-parsing walk used by both `parseShillerCsv` (which additionally
+ * validates and drops trailing empty-dividend rows) and `shillerRawNewestDate` (which needs every
+ * dated row, including ones `parseShillerCsv` would drop, for D-27's staleness check: an
+ * unpublished dividend does not mean a stale file, and the declared 75-day threshold was derived
+ * against the raw file's own newest row, not the newest row that survives the drop rule).
+ */
+function parseShillerLines(csvText: string): ShillerParsedLine[] {
   const lines = splitLines(csvText)
   let headerIndex = -1
   let dateIdx = -1
@@ -483,7 +537,7 @@ export function parseShillerCsv(csvText: string): ShillerRow[] {
   let dividendIdx = -1
 
   for (let i = 0; i < lines.length; i++) {
-    const cells = lines[i]!.split(',').map((c) => c.trim())
+    const cells = splitCsvFields(lines[i]!)
     const candidateDateIdx = cells.indexOf('Date')
     const candidatePriceIdx = cells.indexOf('P')
     const candidateDividendIdx = cells.indexOf('D')
@@ -502,10 +556,10 @@ export function parseShillerCsv(csvText: string): ShillerRow[] {
     )
   }
 
-  const rows: ShillerRow[] = []
+  const parsed: ShillerParsedLine[] = []
   for (let i = headerIndex + 1; i < lines.length; i++) {
     const lineNumber = i + 1
-    const cells = lines[i]!.split(',').map((c) => c.trim())
+    const cells = splitCsvFields(lines[i]!)
     const dateCell = cells[dateIdx]
     const priceCell = cells[priceIdx]
     const dividendCell = cells[dividendIdx]
@@ -520,25 +574,65 @@ export function parseShillerCsv(csvText: string): ShillerRow[] {
       throw new Error(`parseShillerCsv: line ${lineNumber} date "${dateCell}" is not "YYYY.M" or "YYYY.MM"`)
     }
     const year = dateMatch[1]!
-    const month = dateMatch[2]!.padStart(2, '0')
+    const fraction = dateMatch[2]!
+    // The cell is a two-place decimal fraction of the year: right-pad, never left-pad.
+    const month = fraction.length === 1 ? `${fraction}0` : fraction
     if (Number(month) < 1 || Number(month) > 12) {
       throw new Error(`parseShillerCsv: line ${lineNumber} date "${dateCell}" has an out-of-range month`)
     }
     const isoDate = `${year}-${month}-01`
 
+    if (priceCell === undefined || priceCell === '') {
+      throw new Error(`parseShillerCsv: line ${lineNumber} (${isoDate}) has an empty price cell`)
+    }
     const price = Number(priceCell)
-    const dividend = Number(dividendCell)
     if (!Number.isFinite(price)) {
       throw new Error(`parseShillerCsv: line ${lineNumber} price "${priceCell}" is not a finite number`)
     }
-    if (!Number.isFinite(dividend)) {
-      throw new Error(`parseShillerCsv: line ${lineNumber} dividend "${dividendCell}" is not a finite number`)
-    }
 
-    rows.push({ date: isoDate, price, dividend })
+    parsed.push({ lineNumber, isoDate, price, dividendCell: dividendCell ?? '' })
   }
 
-  return rows
+  return parsed
+}
+
+export function parseShillerCsv(csvText: string): ShillerRow[] {
+  const parsed = parseShillerLines(csvText)
+
+  let lastNonEmptyDividendIndex = -1
+  for (let i = 0; i < parsed.length; i++) {
+    if (parsed[i]!.dividendCell !== '') lastNonEmptyDividendIndex = i
+  }
+  for (let i = 0; i <= lastNonEmptyDividendIndex; i++) {
+    if (parsed[i]!.dividendCell === '') {
+      throw new Error(
+        `parseShillerCsv: line ${parsed[i]!.lineNumber} (${parsed[i]!.isoDate}) has an empty dividend cell, but a later row carries one; this is a hole, not an unpublished month`,
+      )
+    }
+  }
+
+  const kept = parsed.slice(0, lastNonEmptyDividendIndex + 1)
+  const dropped = parsed.slice(lastNonEmptyDividendIndex + 1)
+  if (dropped.length > 0) {
+    process.stdout.write(
+      `parseShillerCsv: dropped ${dropped.length} trailing row(s) with an empty dividend cell: ${dropped.map((r) => r.isoDate).join(', ')}\n`,
+    )
+  }
+
+  return kept.map((row) => ({ date: row.isoDate, price: row.price, dividend: Number(row.dividendCell) }))
+}
+
+/**
+ * The newest dated row's ISO date in a Shiller-shaped CSV, including a trailing row whose
+ * dividend cell is empty. D-27's staleness check needs this rather than `parseShillerCsv`'s
+ * return value: an unpublished trailing dividend does not mean a stale file (the committed file
+ * may have just been freshly re-downloaded and simply reflects that Shiller has not published
+ * this month's trailing-twelve-month sum yet), and the 75-day threshold was derived against this
+ * raw newest-row date. Returns null when the table has no data rows.
+ */
+export function shillerRawNewestDate(csvText: string): string | null {
+  const parsed = parseShillerLines(csvText)
+  return parsed[parsed.length - 1]?.isoDate ?? null
 }
 
 /**
