@@ -31,6 +31,20 @@ jobs:
 
       - run: npm ci
 
+      # DATA-09/D-22: proves the committed public/data/ bundle is provably the output of the
+      # committed raw/ inputs beside it. Guarded with a shell check (not an `if:` path expression,
+      # which GitHub evaluates before checkout content is known) because raw/ does not exist until
+      # plan 02-03 commits real inputs, and public/data/ does not exist until plan 02-05 compiles
+      # them. Plan 02-05 removes the guard once both directories are committed.
+      - name: Recompile-determinism gate (DATA-09)
+        run: |
+          if [ -d raw ]; then
+            npm run compile-data raw public/data
+            git diff --exit-code -- public/data
+          else
+            echo "raw/ does not exist yet (added in plan 02-03); skipping recompile-determinism gate"
+          fi
+
       - uses: actions/cache@v4
         id: playwright-cache
         with:

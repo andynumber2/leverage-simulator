@@ -14,5 +14,5 @@
     "noEmit": true,
     "allowImportingTsExtensions": true
   },
-  "include": ["*.ts", "bench/**/*.ts", "tests/**/*.ts"]
+  "include": ["*.ts", "bench/**/*.ts", "tests/**/*.ts", "tools/**/*.ts", "src/**/*.ts"]
 }
