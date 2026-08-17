@@ -1,99 +1,114 @@
-# Manual download instructions (Route C / Route B)
+# Manual download instructions
 
-`npm run fetch-data` cannot pull these 23 series itself. Stooq serves a JavaScript
-proof-of-work bot challenge to every plain-https request, so no scripted fetch against it
-returns real data (confirmed this session; no workaround was attempted or should be attempted
-— see `README.md`). Shiller's `ie_data.xls` is unreachable from this development sandbox
-(`curl -L https://www.econ.yale.edu/~shiller/data/ie_data.xls` returned connection failure,
-curl exit 7), so it is also a manual pull, by design (Route B) rather than a network fault to
-route around.
+Two sources need a one-time browser export plus a spreadsheet-to-CSV conversion, because both
+distribute the requested history as a spreadsheet download rather than through a scriptable
+endpoint: Nasdaq's index-history page and Shiller's `ie_data.xls`. Yahoo Finance additionally has
+a manual fallback path, documented below as a recipe rather than a required step: `npm run
+fetch-data` fetches Yahoo live wherever it can and only needs a manual file when the live fetch
+fails.
 
-For each row below: open the **Download** URL in a real browser, save the file exactly as
-named under **Save to**, then re-run `npm run fetch-data`. The script reads whatever is
-present and reports whatever is still missing — you can do these in any order, in one sitting
-or across several.
+## 1. Nasdaq-100 Total Return index (XNDX)
 
-## Browser steps (Stooq rows)
+1. Open `https://indexes.nasdaqomx.com/Index/History/XNDX` in a browser and download the full
+   history export.
+2. Save the file exactly as `raw/manual/XNDX.csv`, at the repo root, without opening it in a
+   spreadsheet program first.
+3. Do not clean up the file before saving it. `normalizeNasdaq` (`tools/fetch-data/src/
+   normalize.ts`) depends on three things the vendor's export carries as-is: a leading UTF-8 byte
+   order mark, Windows-style CRLF line endings, and descending row order (newest first).
+   Stripping the BOM, converting line endings, or re-sorting the rows produces a file the parser
+   was never tested against.
+4. Re-run `npm run fetch-data`. The script drops two known zero-valued rows from this export
+   (today's not-yet-published placeholder and the 2012-10-29 Hurricane Sandy phantom bar) and
+   reports both; that is expected, not a failure.
 
-1. Open the Download URL. Stooq's bot-challenge page runs a short JavaScript proof-of-work in
-   your real browser and then serves the CSV; this only works in a browser, not a script.
-2. Save the resulting file (Stooq serves it as a plain CSV download) as the exact filename in
-   **Save to**, inside `raw/manual/` at the repo root.
-3. Do not rename columns, edit values, or open-and-resave through a spreadsheet program — the
-   file must be Stooq's own bytes so `normalizeStooq` sees the vendor's real column layout.
-
-## Browser steps (Shiller row)
+## 2. Shiller monthly dividend input (SPX-DIV-MONTHLY)
 
 1. Open `https://www.econ.yale.edu/~shiller/data/ie_data.xls` and save `ie_data.xls`.
-2. Convert it to CSV once, keeping the "Data" sheet (the sheet with monthly `Date`, `P`, `D`,
-   `E` columns): `soffice --headless --convert-to csv ie_data.xls` (LibreOffice headless), or
-   open in a spreadsheet program and "Save As" CSV.
-3. Save the result as `raw/manual/SPX-DIV-MONTHLY.csv`.
-4. **`parseShillerCsv` (tools/fetch-data/src/normalize.ts) has not been run against a real
-   converted file this session** — there was no network path to verify it against. If it
-   throws or produces obviously wrong dates/values, check that the header row still contains
-   literal `Date`, `P`, `D` cells and that `Date` cells look like `1871.01` (not reformatted by
-   the spreadsheet program into a different date type), then adjust the parser.
+2. Convert it to CSV once, keeping the "Data" sheet (the sheet whose header row carries the
+   literal `Date`, `P`, `D` column names): `soffice --headless --convert-to csv ie_data.xls`
+   (LibreOffice headless), or open in a spreadsheet program and "Save As" CSV.
+3. Save the result as `raw/manual/SPX-DIV-MONTHLY.csv`. Do not commit `ie_data.xls` itself:
+   nothing in this codebase reads it, and the converted CSV already carries the full source sheet
+   (D-26).
+4. The date cells must survive the conversion as text of the year-point-fraction form (for
+   example `1871.01`, `1871.1`), not reformatted into a spreadsheet date type. `parseShillerCsv`
+   (`tools/fetch-data/src/normalize.ts`) reads the fraction as a two-place decimal of the year and
+   right-pads a single digit, never left-pads, so `1871.1` parses as October, not January.
 
-## UNVERIFIED total-return symbols (RESEARCH.md assumption A2)
-
-Every `*-TR` row below reuses the **identical Stooq symbol** as its `*-PR` sibling. This is a
-placeholder, not a confirmed total-return endpoint: Stooq's column set was only ever confirmed
-as `Date,Open,High,Low,Close,Volume`, with no adjusted-close or dividend-reinvested column
-documented for any symbol in this universe. **Before downloading a `[GUESS]` row as-is**,
-check Stooq's site for a distinct total-return variant of that symbol (their search box, or a
-`.tr`/similar suffix convention if one exists for that instrument). If you find a real
-distinct symbol, use its download URL instead and note the substitution when you report back.
-If no distinct symbol exists, download the `[GUESS]` URL anyway — `fetch.ts`'s coverage pass
-will detect that the file is byte-identical to the price-return sibling and halt naming the
-symbol, which is the intended outcome: a real "no total-return data available for this
-symbol" finding recorded as a D-04 Key Decision, not a silently wrong series.
-
-**When you're done, report back which `[GUESS]` symbols 404'd, which ones downloaded fine,
-and which (if any) you found a real distinct TR symbol for.**
+Running the fixed parser against the real converted file established two things this document
+used to flag as unverified. First, the October/January collision: an earlier version of the
+parser left-padded a single-digit month fraction, so `1871.1` (October) parsed as `1871.01`
+(January); the fix right-pads instead. Second, a fabricated zero-dividend tail: the parser used
+to treat every empty dividend cell as a zero, which would have invented a false dividend drop at
+the end of the table; it now drops only a trailing run of empty cells (Shiller has not yet
+published that month's trailing-twelve-month sum) and throws if an empty cell appears anywhere
+earlier, where it would be a real hole. Against the committed `raw/manual/SPX-DIV-MONTHLY.csv`
+this produces 1866 rows, 1871-01-01 through 2026-06-01, 155 Octobers and 156 Januaries, no
+collision.
 
 ## Full download table
 
-| Stem | Download URL | Save to | Expected first date | Total-return symbol |
-|---|---|---|---|---|
-| `SPX-PR` | `https://stooq.com/q/d/l/?s=^spx&i=d` | `raw/manual/SPX-PR.csv` | 1928 | — |
-| `SPX-TR` | `https://stooq.com/q/d/l/?s=^spx&i=d` | `raw/manual/SPX-TR.csv` | 1928 | **[GUESS]** |
-| `NDX-PR` | `https://stooq.com/q/d/l/?s=^ndx&i=d` | `raw/manual/NDX-PR.csv` | unverified (research open question 2) | — |
-| `NDX-TR` | `https://stooq.com/q/d/l/?s=^ndx&i=d` | `raw/manual/NDX-TR.csv` | unverified | **[GUESS]** |
-| `QQQ-PR` | `https://stooq.com/q/d/l/?s=qqq.us&i=d` | `raw/manual/QQQ-PR.csv` | 1999 | — |
-| `QQQ-TR` | `https://stooq.com/q/d/l/?s=qqq.us&i=d` | `raw/manual/QQQ-TR.csv` | 1999 | **[GUESS]** |
-| `UPRO-PR` | `https://stooq.com/q/d/l/?s=upro.us&i=d` | `raw/manual/UPRO-PR.csv` | 2009 | — |
-| `UPRO-TR` | `https://stooq.com/q/d/l/?s=upro.us&i=d` | `raw/manual/UPRO-TR.csv` | 2009 | **[GUESS]** |
-| `TQQQ-PR` | `https://stooq.com/q/d/l/?s=tqqq.us&i=d` | `raw/manual/TQQQ-PR.csv` | 2010 | — |
-| `TQQQ-TR` | `https://stooq.com/q/d/l/?s=tqqq.us&i=d` | `raw/manual/TQQQ-TR.csv` | 2010 | **[GUESS]** |
-| `SSO-PR` | `https://stooq.com/q/d/l/?s=sso.us&i=d` | `raw/manual/SSO-PR.csv` | 2006 | — |
-| `SSO-TR` | `https://stooq.com/q/d/l/?s=sso.us&i=d` | `raw/manual/SSO-TR.csv` | 2006 | **[GUESS]** |
-| `QLD-PR` | `https://stooq.com/q/d/l/?s=qld.us&i=d` | `raw/manual/QLD-PR.csv` | 2006 | — |
-| `QLD-TR` | `https://stooq.com/q/d/l/?s=qld.us&i=d` | `raw/manual/QLD-TR.csv` | 2006 | **[GUESS]** |
-| `VTI-PR` | `https://stooq.com/q/d/l/?s=vti.us&i=d` | `raw/manual/VTI-PR.csv` | 2001 | — |
-| `VTI-TR` | `https://stooq.com/q/d/l/?s=vti.us&i=d` | `raw/manual/VTI-TR.csv` | 2001 | **[GUESS]** |
-| `EFA-PR` | `https://stooq.com/q/d/l/?s=efa.us&i=d` | `raw/manual/EFA-PR.csv` | 2001 | — |
-| `EFA-TR` | `https://stooq.com/q/d/l/?s=efa.us&i=d` | `raw/manual/EFA-TR.csv` | 2001 | **[GUESS]** |
-| `EEM-PR` | `https://stooq.com/q/d/l/?s=eem.us&i=d` | `raw/manual/EEM-PR.csv` | 2003 | — |
-| `EEM-TR` | `https://stooq.com/q/d/l/?s=eem.us&i=d` | `raw/manual/EEM-TR.csv` | 2003 | **[GUESS]** |
-| `TLT-PR` | `https://stooq.com/q/d/l/?s=tlt.us&i=d` | `raw/manual/TLT-PR.csv` | 2002 | — |
-| `TLT-TR` | `https://stooq.com/q/d/l/?s=tlt.us&i=d` | `raw/manual/TLT-TR.csv` | 2002 | **[GUESS]** |
-| `SPX-DIV-MONTHLY` | `https://www.econ.yale.edu/~shiller/data/ie_data.xls` | `raw/manual/SPX-DIV-MONTHLY.csv` (after conversion, see above) | 1871-01 | n/a (dividend input, not a return series) |
+| Stem | Download URL | Save to | Conversion |
+|---|---|---|---|
+| `NDX-TR` | `https://indexes.nasdaqomx.com/Index/History/XNDX` | `raw/manual/XNDX.csv` | none, save the export as-is |
+| `SPX-DIV-MONTHLY` | `https://www.econ.yale.edu/~shiller/data/ie_data.xls` | `raw/manual/SPX-DIV-MONTHLY.csv` | spreadsheet to CSV, keep the "Data" sheet |
 
-The FRED rate series (`RATE-DFF`, `RATE-DTB3`, `RATE-TB3MS`, `RATE-NBER`) are **not** in this
-table — `npm run fetch-data` already pulls and writes those automatically over https.
+Re-run `npm run fetch-data` after either file lands. The script reads whatever is present and
+reports whatever is still missing; both files can be dropped in any order, in one sitting or
+across several.
 
-## After downloading
+## Yahoo fallback recipe
 
-Run `npm run fetch-data` again. Once every file above is present, the script prints a
-per-series coverage table (source, vendor column, first date, last date, row count) and halts
-naming any series that:
+`npm run fetch-data` fetches Yahoo Finance live wherever it can (`route:
+'live-with-manual-fallback'` in `sources.ts`) and only reads a manual file when the live fetch
+fails. This section documents that fallback as a supported route (D-27), not an emergency: it
+was needed on every run from this development sandbox.
 
-- falls short of its declared expected first date, or
-- is a `*-TR` file that's byte-identical to its `*-PR` sibling (no real total-return data was
-  obtained from Stooq for that symbol).
+**What was established.** Yahoo's chart API (`query1.finance.yahoo.com`,
+`query2.finance.yahoo.com`) returned HTTP 429 to a direct request from this sandbox on the first
+attempt, regardless of headers (`User-Agent`, `Accept` made no difference), while
+`finance.yahoo.com`'s own web host returned 200 from the same machine, and the same chart API
+answered a real browser directly. That pattern, one address blocked and a different address on
+the same vendor succeeding with no header fixing it, is an address-level block against a shared
+egress address, not a malformed request. No workaround was attempted or should be attempted.
 
-A halt is not a bug to route around — it's the mechanism that turns "Stooq might not have
-total-return data for TQQQ" from an assumption into a recorded finding. If it fires, that's a
-D-04 Key Decision for the developer: accept price-return-only for that symbol, or find another
-source, not something `fetch.ts` should paper over.
+**Request template.**
+
+```
+https://query1.finance.yahoo.com/v8/finance/chart/<SYMBOL>?period1=<PERIOD1>&period2=<PERIOD2>&interval=1d&events=div%2Csplit
+```
+
+`<PERIOD2>` is always computed as the start of tomorrow (UTC) at request time. `<PERIOD1>` takes
+one of two values, and which one to use depends on the symbol: `^GSPC` (the S&P 500 index,
+reaching back to 1927-12-30 per D-17's pre-1928 depth) uses the wide value `-2208988800`
+(1900-01-01 UTC); every other symbol in this universe starts after 1970 and uses the default
+value `0` (1970-01-01 UTC). The wide value is not a safe default for every symbol: requesting it
+against a symbol whose real history starts after 1970 produced an explicit "Only 100 years worth
+of day granularity data are allowed" error from the vendor.
+
+**If the live fetch fails, download and save one JSON file per symbol** to `raw/manual/`, using
+the request template above with that symbol's own `<PERIOD1>` value:
+
+| Symbol | `<PERIOD1>` | Save to |
+|---|---|---|
+| `^GSPC` | wide (`-2208988800`) | `raw/manual/GSPC.json` |
+| `^SP500TR` | default (`0`) | `raw/manual/SP500TR.json` |
+| `^NDX` | default (`0`) | `raw/manual/NDX.json` |
+| `QQQ` | default (`0`) | `raw/manual/QQQ.json` |
+| `UPRO` | default (`0`) | `raw/manual/UPRO.json` |
+| `TQQQ` | default (`0`) | `raw/manual/TQQQ.json` |
+| `SSO` | default (`0`) | `raw/manual/SSO.json` |
+| `QLD` | default (`0`) | `raw/manual/QLD.json` |
+| `VTI` | default (`0`) | `raw/manual/VTI.json` |
+| `EFA` | default (`0`) | `raw/manual/EFA.json` |
+| `EEM` | default (`0`) | `raw/manual/EEM.json` |
+| `TLT` | default (`0`) | `raw/manual/TLT.json` |
+
+**What the run reports.** Every run prints a coverage table naming, per series, whether that
+series was fetched live or read from `raw/manual/` (the route column), and the sidecar's
+`retrievedAt` records the run date for a live pull or the newest observation's date in the data
+for a manual file, so a stale file cannot carry a fresh-looking sidecar. A manual file whose
+newest observation is older than its declared staleness threshold fails the run outright (10
+days for every daily Yahoo file). There is no flag to bypass that check, on D-11's grounds: a
+bypass flag's failure mode is someone leaving it on in CI.
