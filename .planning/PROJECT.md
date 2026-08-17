@@ -77,14 +77,19 @@ against real leveraged ETF price history.
 
 **Data**
 
-- [ ] Bundled binary data assets, no runtime backend and no external API calls
-- [ ] A CLI bundle compiler in the repo that ingests raw CSVs and emits versioned binary
+- [x] Bundled binary data assets, no runtime backend and no external API calls
+      (Phase 2: compiled data bundle)
+- [x] A CLI bundle compiler in the repo that ingests raw CSVs and emits versioned binary
       bundles plus a JSON manifest, so adding a symbol is "drop in a CSV, recompile, redeploy"
-- [ ] Bundled universe: S&P 500 (daily to 1928), Nasdaq-100/QQQ, real leveraged ETFs
+      (Phase 2: compiled data bundle)
+- [x] Bundled universe: S&P 500 (daily to 1928), Nasdaq-100/QQQ, real leveraged ETFs
       (UPRO, TQQQ, SSO, QLD) for model validation, and VTI, EFA, EEM, TLT
-- [ ] Bundled short-rate series (Fed funds / 3M T-bill) covering the full date range
-- [ ] Two user-selectable history tiers: **strict** (every input genuinely daily) and
+      (Phase 2: compiled data bundle)
+- [x] Bundled short-rate series (Fed funds / 3M T-bill) covering the full date range
+      (Phase 2: compiled data bundle)
+- [x] Two user-selectable history tiers: **strict** (every input genuinely daily) and
       **extended** (deep history, with monthly rate and dividend data interpolated to daily)
+      (Phase 2: tier ranges computed from seam records)
 - [ ] The GUI states explicitly and prominently what each tier means, including the actual
       seam dates and data sources. Provenance is visible, never a footnote
 
@@ -196,4 +201,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-08-15 after initialization*
+*Last updated: 2026-08-17 after Phase 2 (Compiled Data Bundle) completed*
