@@ -94,6 +94,13 @@ export function buildTotalReturnSeries(
     return { values: realTotalReturnSeries.values, calendarStartIndex: realTotalReturnSeries.calendarStartIndex }
   }
 
+  if (priceStartIndex + priceSeries.values.length - 1 < sIndex) {
+    throw new Error(
+      `compile-data: total-return construction for "${scope}": price series ends before ` +
+        `real total-return series' own first date "${realTotalReturnSeries.firstDate}"`,
+    )
+  }
+
   const yieldRows = monthlyYieldSeries.dates.map((date, i) => ({ date, value: monthlyYieldSeries.values[i]! }))
   // Interpolated yield across the constructed run AND day S itself: day S's own yield value is
   // what the last backward step (S-1 -> S) accrues against.
