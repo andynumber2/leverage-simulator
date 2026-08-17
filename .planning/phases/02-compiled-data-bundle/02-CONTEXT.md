@@ -81,8 +81,14 @@ against a measurement.
     equity and ETF prices, their dividend and split events, `^GSPC` (24,773 bars from
     **1927-12-30**), `^NDX` (10,298 bars from 1985-10-01) and `^SP500TR` (9,728 bars from
     **1988-01-04**).
-  - **Nasdaq** (`indexes.nasdaqomx.com/Index/History/XNDX`, EOD) for the Nasdaq-100 Total Return
-    index, 6,908 rows from **1999-03-04**. Yahoo carries the `^XNDX` ticker but stores **no
+  - **Nasdaq** (`indexes.nasdaqomx.com/Index/History/XNDX`, **EOD**) for the Nasdaq-100 Total Return
+    index, from **1999-03-04**. **Export EOD, never start-of-day.** The export form offers both, and
+    the choice is not cosmetic: every other input in the bundle is a close (Yahoo's `close` and
+    `adjclose`, FRED's daily rates), and the kernel derives daily returns close-to-close. A
+    start-of-day series would sit one half-session out of phase with every other input and would
+    misstate the daily-rebalance volatility drag, which is the quantity this project exists to
+    measure. Anyone re-exporting this file must pick EOD for that reason, not merely for
+    consistency. Yahoo carries the `^XNDX` ticker but stores **no
     history** for it (`firstTradeDate: null`, `validRanges: ["1d","5d"]`), which is why this is a
     separate vendor rather than a fifth Yahoo symbol.
   - **FRED** for `DFF`/`DTB3`/`TB3MS` plus the pre-1934 short rate in D-13. Unchanged, already
