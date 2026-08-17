@@ -7,10 +7,11 @@
 
 import { afterEach, beforeEach, describe, expect, test } from 'vitest'
 
-import { BENCH_TOTAL_RUNTIME_CAP_MS } from '../perf-budgets.ts'
+import { BENCH_TOTAL_RUNTIME_CAP_MS, PERF_BUDGETS } from '../perf-budgets.ts'
 import {
   assertRunInvariants,
   assertWithinBudget,
+  buildFullRowSet,
   checkBudget,
   escalationTriggered,
   formatMeasured,
@@ -281,6 +282,65 @@ describe('assertWithinBudget', () => {
     expect(() =>
       assertWithinBudget({ budgetId: 'PERF-05', normalizedMs: 16, budgetMs: 16 }),
     ).not.toThrow()
+  })
+})
+
+describe('D-23: unit-denominated rows (DATA-BUNDLE-BYTES, DATA-BUNDLE-DECODE)', () => {
+  const byteRow: MeasurementRow = {
+    budgetId: 'DATA-BUNDLE-BYTES',
+    requirementId: 'PERF-08',
+    measuredMs: 900_000,
+    normalizedMs: 900_000,
+    budgetMs: 1_125_000,
+    anchorMs: 1_125_000,
+    anchorLabel: '900ms of PERF-08b at the declared 10 Mbps connection',
+    source: 'production',
+    verdict: 'pass',
+  }
+
+  test('renderTable prints a byte suffix for a byte-denominated row and a millisecond suffix for a millisecond row', () => {
+    const msRow = row({ budgetId: 'PERF-02', requirementId: 'PERF-02', normalizedMs: 5, measuredMs: 5, budgetMs: 16, anchorMs: 16, verdict: 'pass' })
+    const output = renderTable([byteRow, msRow], environment, 500)
+    expect(output).toContain('measured=900000.00bytes')
+    expect(output).toContain('budget=1125000bytes')
+    expect(output).toContain('anchor=1125000bytes')
+    expect(output).toContain('measured=5.00ms')
+    expect(output).toContain('budget=16ms')
+  })
+
+  test('buildFullRowSet synthesizes unmeasured rows for both new budget ids, carrying their real threshold and anchor', () => {
+    const full = buildFullRowSet([])
+    const bytesRow = full.find((r) => r.budgetId === 'DATA-BUNDLE-BYTES')
+    const decodeRow = full.find((r) => r.budgetId === 'DATA-BUNDLE-DECODE')
+    expect(bytesRow).toBeDefined()
+    expect(bytesRow!.verdict).toBe('unmeasured')
+    expect(bytesRow!.budgetMs).toBe(PERF_BUDGETS['DATA-BUNDLE-BYTES'].thresholdMs)
+    expect(bytesRow!.anchorMs).toBe(PERF_BUDGETS['DATA-BUNDLE-BYTES'].anchorMs)
+    expect(decodeRow).toBeDefined()
+    expect(decodeRow!.verdict).toBe('unmeasured')
+    expect(decodeRow!.budgetMs).toBe(PERF_BUDGETS['DATA-BUNDLE-DECODE'].thresholdMs)
+    expect(decodeRow!.anchorMs).toBe(PERF_BUDGETS['DATA-BUNDLE-DECODE'].anchorMs)
+  })
+
+  test('assertRunInvariants does not treat a byte row (normalizedMs === measuredMs) as score-divergent when the machine score is not 1.0', () => {
+    const full = buildFullRowSet([byteRow])
+    const nonUnitScoreEnvironment: EnvironmentBlock = { ...environment, calibrationScore: 3.7 }
+    expect(() => assertRunInvariants(full, 500, nonUnitScoreEnvironment)).not.toThrow()
+  })
+
+  test('assertRunInvariants still throws for a divergent millisecond row even when a coherent byte row is also present', () => {
+    const divergentMsRow = row({
+      budgetId: 'PERF-02',
+      requirementId: 'PERF-02',
+      measuredMs: 10,
+      normalizedMs: 5,
+      budgetMs: 16,
+      anchorMs: 16,
+      verdict: 'pass',
+    })
+    const full = buildFullRowSet([byteRow, divergentMsRow])
+    const environmentScoreOne: EnvironmentBlock = { ...environment, calibrationScore: 1 }
+    expect(() => assertRunInvariants(full, 500, environmentScoreOne)).toThrow(/PERF-02/)
   })
 })
 
