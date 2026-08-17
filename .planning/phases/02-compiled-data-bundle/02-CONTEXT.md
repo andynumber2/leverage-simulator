@@ -249,11 +249,30 @@ against a measurement.
   exactly one changed line.
 
   **Verified workable before deciding.** Reconstructing forward as
-  `TR_t = TR_{t-1} × (close_t + D_t) / close_{t-1}` reproduces Yahoo's own `adjclose` over each
-  full history to: QQQ 0.0033%, UPRO 0.0080%, VTI 0.0147%, TLT 0.0150%, TQQQ 0.0828% (worst case,
-  across 372× of growth over 16 years). That residual is float rounding in Yahoo's adjustment
-  factors, not a modelling difference. Dividend and split events are present in every downloaded
-  file (QQQ 89 dividends, TLT 287, UPRO 46 + 5 splits, TQQQ 21 + 8 splits).
+  `TR_t = TR_{t-1} × (close_t + D_t) / close_{t-1}` reproduces Yahoo's own `adjclose` closely.
+  Dividend and split events are present in every downloaded file (QQQ 89 dividends, TLT 287,
+  UPRO 46 + 5 splits, TQQQ 21 + 8 splits).
+
+  **[CORRECTED 2026-08-17]** An earlier revision of this decision cited "QQQ 0.0033%, UPRO 0.0080%,
+  VTI 0.0147%, TLT 0.0150%, TQQQ 0.0828% (worst case)". That figure was wrong twice over: it was a
+  **final-bar** deviation rather than the maximum over the path, and it covered only 5 of the 9
+  ETFs. The plan-02-06 planner caught it and re-measured all nine. Corrected figures:
+
+  | Symbol | Final-bar deviation | Max over path |
+  |---|---|---|
+  | QQQ | 0.00328% | 0.01810% |
+  | EFA | 0.00377% | 0.11790% |
+  | UPRO | 0.00797% | 0.03783% |
+  | VTI | 0.01470% | 0.04214% |
+  | TLT | 0.01502% | 0.04412% |
+  | SSO | 0.02177% | 0.04178% |
+  | TQQQ | 0.08279% | 0.09269% |
+  | EEM | 0.11287% | **0.17642%** |
+  | QLD | 0.14374% | 0.16916% |
+
+  The true worst case is **EEM at 0.17642% over the path**. D-25's tolerance must be anchored to
+  that, not to the withdrawn 0.0828%: a gate set at 0.0828% would have failed on its first run.
+  The residual is still float rounding in Yahoo's adjustment factors, not a modelling difference.
   — **Reversibility:** costly — every `-TR` raw CSV, the D-25 gate and its tolerance, and the
   manifest's seam records for the ETF series all derive from this choice.
 - **D-25:** The reconstruction-vs-`adjclose` agreement is a **hard gate in the fetch script**: every
@@ -261,7 +280,7 @@ against a measurement.
   tolerance. This catches a vendor changing its dividend data, a missed split, or a bug in the
   reconstruction at the moment it happens rather than in a backtest months later. Consistent with
   D-09, D-10 and D-11 failing loudly. The tolerance value is the planner's call, anchored to the
-  measured 0.083% worst case above. A test-suite-only check was rejected because it lets a bad
+  corrected 0.17642% max-over-path worst case above. A test-suite-only check was rejected because it lets a bad
   refresh be committed first; a log-only record was rejected because nothing would stop a broken
   series shipping.
 - **D-26:** `raw/` carries **both the derived CSV and the vendor's original JSON**, both committed.
@@ -453,7 +472,7 @@ timestamps, no duplicate dates, every symbol meeting or beating its declared fir
 | `GSPC.json` | 24,773 | 1927-12-30 → 2026-08-17 |
 | `SP500TR.json` | 9,728 | 1988-01-04 → 2026-08-17 |
 | `NDX.json` | 10,298 | 1985-10-01 → 2026-08-17 |
-| `XNDX.csv` | 6,908 | 1999-03-04 → 2026-08-14 |
+| `XNDX.csv` | 6,905 usable | 1999-03-04 → 2026-08-14 |
 | `QQQ.json` | 6,902 | 1999-03-10 → 2026-08-17 |
 | `VTI.json` | 6,329 | 2001-06-15 → 2026-08-17 |
 | `EFA.json` | 6,279 | 2001-08-27 → 2026-08-17 |
@@ -512,7 +531,9 @@ the planner's call.
 - **The Nasdaq XNDX export is a fourth distinct vendor format**: BOM, CRLF, **descending** date
   order, `M/D/YY` two-digit years, and quoted thousands separators. It downloads as **Excel and
   needs a manual conversion to CSV** — the same Route B step Shiller needs, and it must be in the
-  refresh procedure.
+  refresh procedure. **Bar count [CORRECTED 2026-08-17]:** 6,907 data lines, of which 2 carry a
+  `0.00000000000` placeholder (today's row and the 2012-10-29 Sandy row), leaving **6,905 usable
+  bars**. An earlier revision of this file said 6,908, which was the newline count.
 - **Yahoo's chart API rejects an over-wide date range on some symbols.** `period1=-2208988800`
   (1900) worked for `^GSPC` but returned `Unprocessable Entity — Only 100 years worth of day
   granularity data are allowed to be fetched per request` for `^XNDX`. `period1=0` (1970) is the
