@@ -301,7 +301,18 @@ against a measurement.
 
   The fallback must not become a trap: every run **reports per symbol whether the data was fetched
   live or read from `raw/manual/`**, the sidecar's `retrievedAt` records it, and a manual file older
-  than a declared threshold **fails the run** rather than being silently used. This reuses D-12's
+  than a declared threshold **fails the run** rather than being silently used.
+
+  **[CLARIFIED 2026-08-17, user decision]** `retrievedAt` records **recency, not route**. It is the
+  run date for a live pull and **the newest observation's date in the data** for a manual file, so a
+  stale file cannot carry a fresh-looking sidecar. `SidecarMeta` gains **no** new key and
+  `raw-input.ts`'s strict `ALLOWED_KEYS` validator is untouched. The route (fetched vs manual) is
+  printed in the run output but not stored. A machine-readable `route` field for Phase 5's
+  provenance surface was considered and declined; adding one later means regenerating every sidecar.
+
+  Staleness is deliberately measured against the newest observation **in the data**, never file
+  mtime: mtime does not survive a `git clone`, so an mtime gate would report every fresh clone as
+  pristine and defeat the check for exactly the reader D-01 exists to serve. This reuses D-12's
   reasoning, which exists for precisely this failure: a stale refresh being indistinguishable from a
   legitimate one. A `--allow-manual` CLI flag was rejected on D-11's grounds — someone leaves it on
   in CI.
