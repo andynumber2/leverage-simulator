@@ -224,9 +224,12 @@ export function renderTable(
     const groupRows = sorted.filter((r) => r.requirementId === requirementId)
     for (const row of groupRows) {
       const escalate = escalationTriggered(row.normalizedMs, row.budgetMs) ? 'yes' : 'no'
+      // D-23: the row's declared unit (bytes vs ms), not a hardcoded "ms" suffix, so a
+      // byte-denominated row (DATA-BUNDLE-BYTES) reads as bytes rather than a false duration.
+      const unit = PERF_BUDGETS[row.budgetId].unit
       lines.push(
-        `  ${row.budgetId} | source=${row.source} | measured=${formatMeasured(row.normalizedMs)}ms` +
-          ` | budget=${row.budgetMs}ms | anchor=${row.anchorMs}ms (${row.anchorLabel})` +
+        `  ${row.budgetId} | source=${row.source} | measured=${formatMeasured(row.normalizedMs)}${unit}` +
+          ` | budget=${row.budgetMs}${unit} | anchor=${row.anchorMs}${unit} (${row.anchorLabel})` +
           ` | verdict=${row.verdict} | escalate=${escalate}`,
       )
     }
@@ -308,6 +311,11 @@ export function assertRunInvariants(
   if (environment) {
     const divergent = rows
       .filter((r) => r.measuredMs !== null && r.normalizedMs !== null)
+      // D-23: a byte-denominated row's normalizedMs equals its measuredMs by design (a byte
+      // count is never divided by a calibration score), so its implied score is always 1
+      // regardless of the machine's real score. Without this exemption the coherence check
+      // would fail every byte row on any machine whose score is not exactly 1.0.
+      .filter((r) => PERF_BUDGETS[r.budgetId].unit === 'ms')
       .filter((r) => {
         const measuredMs = r.measuredMs as number
         const normalizedMs = r.normalizedMs as number

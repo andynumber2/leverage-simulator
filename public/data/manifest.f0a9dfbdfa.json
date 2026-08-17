@@ -1,0 +1,942 @@
+{
+  "formatVersion": 1,
+  "bundleVersion": "45a9f1ae6444",
+  "calendar": {
+    "file": "calendar.51c75c1cba.bin",
+    "bytes": 99164,
+    "length": 24773,
+    "firstDate": "1927-12-30",
+    "lastDate": "2026-08-17"
+  },
+  "assets": [
+    {
+      "file": "eem.c208940eb7.bin",
+      "bytes": 94072,
+      "series": [
+        "EEM/price-return",
+        "EEM/total-return"
+      ]
+    },
+    {
+      "file": "efa.911daa0ea7.bin",
+      "bytes": 100568,
+      "series": [
+        "EFA/price-return",
+        "EFA/total-return"
+      ]
+    },
+    {
+      "file": "ndx.1f119cbe6e.bin",
+      "bytes": 137728,
+      "series": [
+        "NDX/price-return",
+        "NDX/total-return"
+      ]
+    },
+    {
+      "file": "qld.154550972e.bin",
+      "bytes": 81224,
+      "series": [
+        "QLD/price-return",
+        "QLD/total-return"
+      ]
+    },
+    {
+      "file": "qqq.a3788acc3f.bin",
+      "bytes": 110536,
+      "series": [
+        "QQQ/price-return",
+        "QQQ/total-return"
+      ]
+    },
+    {
+      "file": "rate-rate.2a001d2da2.bin",
+      "bytes": 198240,
+      "series": [
+        "@rate/rate"
+      ]
+    },
+    {
+      "file": "spx.4960dca187.bin",
+      "bytes": 396472,
+      "series": [
+        "SPX/price-return",
+        "SPX/total-return"
+      ]
+    },
+    {
+      "file": "sso.0bb510848d.bin",
+      "bytes": 81224,
+      "series": [
+        "SSO/price-return",
+        "SSO/total-return"
+      ]
+    },
+    {
+      "file": "tlt.8cd08603d7.bin",
+      "bytes": 96920,
+      "series": [
+        "TLT/price-return",
+        "TLT/total-return"
+      ]
+    },
+    {
+      "file": "tqqq.da2ad59840.bin",
+      "bytes": 66560,
+      "series": [
+        "TQQQ/price-return",
+        "TQQQ/total-return"
+      ]
+    },
+    {
+      "file": "upro.68e0ae8e2e.bin",
+      "bytes": 69104,
+      "series": [
+        "UPRO/price-return",
+        "UPRO/total-return"
+      ]
+    },
+    {
+      "file": "vti.9108795d0e.bin",
+      "bytes": 101368,
+      "series": [
+        "VTI/price-return",
+        "VTI/total-return"
+      ]
+    }
+  ],
+  "series": [
+    {
+      "id": "@rate/rate",
+      "scope": "@rate",
+      "kind": "rate",
+      "asset": "rate-rate.2a001d2da2.bin",
+      "calendarStartIndex": 0,
+      "length": 24772,
+      "firstDate": "1927-12-30",
+      "lastDate": "2026-08-14",
+      "units": "percent-annualized",
+      "sources": [
+        {
+          "source": "FRED (Federal Reserve Bank of St. Louis)",
+          "url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=DFF",
+          "retrievedAt": "2026-08-17",
+          "license": "Public Domain (U.S. Government work)",
+          "termsUrl": "https://fred.stlouisfed.org/legal/"
+        },
+        {
+          "source": "FRED (Federal Reserve Bank of St. Louis)",
+          "url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=DTB3",
+          "retrievedAt": "2026-08-17",
+          "license": "Public Domain (U.S. Government work)",
+          "termsUrl": "https://fred.stlouisfed.org/legal/"
+        },
+        {
+          "source": "FRED (Federal Reserve Bank of St. Louis)",
+          "url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=TB3MS",
+          "retrievedAt": "2026-08-17",
+          "license": "Public Domain (U.S. Government work)",
+          "termsUrl": "https://fred.stlouisfed.org/legal/"
+        },
+        {
+          "source": "FRED (Federal Reserve Bank of St. Louis)",
+          "url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=M1329AUSM193NNBR",
+          "retrievedAt": "2026-08-17",
+          "license": "Public Domain (U.S. Government work)",
+          "termsUrl": "https://fred.stlouisfed.org/legal/"
+        }
+      ],
+      "seams": [
+        {
+          "kind": "interpolation",
+          "firstDate": "1920-01-01",
+          "lastDate": "1933-12-31",
+          "sourceBefore": "RATE-NBER",
+          "sourceAfter": "RATE-NBER",
+          "method": "Linear interpolation of \"RATE-NBER\"'s monthly observations to daily, bounded by its own month-anchor dates.",
+          "degradesToNonDaily": true
+        },
+        {
+          "kind": "splice",
+          "firstDate": "1920-01-01",
+          "lastDate": "1933-12-31",
+          "sourceBefore": "RATE-NBER",
+          "sourceAfter": "RATE-TB3MS",
+          "method": "Rate source hand-off from \"RATE-NBER\" to \"RATE-TB3MS\" at \"RATE-TB3MS\"'s own first date (1934-01-01), per the declared rate source precedence order (D-04).",
+          "degradesToNonDaily": true
+        },
+        {
+          "kind": "interpolation",
+          "firstDate": "1934-01-01",
+          "lastDate": "1954-01-03",
+          "sourceBefore": "RATE-TB3MS",
+          "sourceAfter": "RATE-TB3MS",
+          "method": "Linear interpolation of \"RATE-TB3MS\"'s monthly observations to daily, bounded by its own month-anchor dates.",
+          "degradesToNonDaily": true
+        },
+        {
+          "kind": "splice",
+          "firstDate": "1934-01-01",
+          "lastDate": "1954-01-03",
+          "sourceBefore": "RATE-TB3MS",
+          "sourceAfter": "RATE-DTB3",
+          "method": "Rate source hand-off from \"RATE-TB3MS\" to \"RATE-DTB3\" at \"RATE-DTB3\"'s own first date (1954-01-04), per the declared rate source precedence order (D-04).",
+          "degradesToNonDaily": true
+        },
+        {
+          "kind": "splice",
+          "firstDate": "1954-01-04",
+          "lastDate": "1954-06-30",
+          "sourceBefore": "RATE-DTB3",
+          "sourceAfter": "RATE-DFF",
+          "method": "Rate source hand-off from \"RATE-DTB3\" to \"RATE-DFF\" at \"RATE-DFF\"'s own first date (1954-07-01), per the declared rate source precedence order (D-04).",
+          "degradesToNonDaily": false
+        },
+        {
+          "kind": "carry-forward",
+          "firstDate": "1954-01-19",
+          "lastDate": "1954-01-19",
+          "sourceBefore": "RATE-DTB3",
+          "sourceAfter": "RATE-DTB3",
+          "method": "Rate source \"RATE-DTB3\" gap carried forward by repeating the previous observation, checked against the declared 4-day carry-forward limit.",
+          "degradesToNonDaily": false
+        },
+        {
+          "kind": "carry-forward",
+          "firstDate": "1954-02-12",
+          "lastDate": "1954-02-12",
+          "sourceBefore": "RATE-DTB3",
+          "sourceAfter": "RATE-DTB3",
+          "method": "Rate source \"RATE-DTB3\" gap carried forward by repeating the previous observation, checked against the declared 4-day carry-forward limit.",
+          "degradesToNonDaily": false
+        }
+      ],
+      "tiers": {
+        "strict": {
+          "firstDate": "1954-01-04",
+          "lastDate": "2026-08-14"
+        },
+        "extended": {
+          "firstDate": "1927-12-30",
+          "lastDate": "2026-08-14"
+        }
+      }
+    },
+    {
+      "id": "EEM/price-return",
+      "scope": "EEM",
+      "kind": "price-return",
+      "asset": "eem.c208940eb7.bin",
+      "calendarStartIndex": 18900,
+      "length": 5873,
+      "firstDate": "2003-04-14",
+      "lastDate": "2026-08-17",
+      "units": "index-level",
+      "sources": [
+        {
+          "source": "Yahoo Finance",
+          "url": "https://query1.finance.yahoo.com/v8/finance/chart/EEM?period1=0&period2=1787011200&interval=1d&events=div%2Csplit",
+          "retrievedAt": "2026-08-17",
+          "license": "Personal-use terms; chart endpoint is undocumented with no published redistribution grant (accepted risk, D-05/D-06)",
+          "termsUrl": "https://legal.yahoo.com/us/en/yahoo/terms/otos/index.html"
+        }
+      ],
+      "seams": [],
+      "tiers": {
+        "strict": {
+          "firstDate": "2003-04-14",
+          "lastDate": "2026-08-14"
+        },
+        "extended": {
+          "firstDate": "2003-04-14",
+          "lastDate": "2026-08-14"
+        }
+      }
+    },
+    {
+      "id": "EEM/total-return",
+      "scope": "EEM",
+      "kind": "total-return",
+      "asset": "eem.c208940eb7.bin",
+      "calendarStartIndex": 18900,
+      "length": 5873,
+      "firstDate": "2003-04-14",
+      "lastDate": "2026-08-17",
+      "units": "index-level",
+      "sources": [
+        {
+          "source": "Yahoo Finance",
+          "url": "https://query1.finance.yahoo.com/v8/finance/chart/EEM?period1=0&period2=1787011200&interval=1d&events=div%2Csplit",
+          "retrievedAt": "2026-08-17",
+          "license": "Personal-use terms; chart endpoint is undocumented with no published redistribution grant (accepted risk, D-05/D-06)",
+          "termsUrl": "https://legal.yahoo.com/us/en/yahoo/terms/otos/index.html"
+        }
+      ],
+      "seams": [],
+      "tiers": {
+        "strict": {
+          "firstDate": "2003-04-14",
+          "lastDate": "2026-08-14"
+        },
+        "extended": {
+          "firstDate": "2003-04-14",
+          "lastDate": "2026-08-14"
+        }
+      }
+    },
+    {
+      "id": "EFA/price-return",
+      "scope": "EFA",
+      "kind": "price-return",
+      "asset": "efa.911daa0ea7.bin",
+      "calendarStartIndex": 18494,
+      "length": 6279,
+      "firstDate": "2001-08-27",
+      "lastDate": "2026-08-17",
+      "units": "index-level",
+      "sources": [
+        {
+          "source": "Yahoo Finance",
+          "url": "https://query1.finance.yahoo.com/v8/finance/chart/EFA?period1=0&period2=1787011200&interval=1d&events=div%2Csplit",
+          "retrievedAt": "2026-08-17",
+          "license": "Personal-use terms; chart endpoint is undocumented with no published redistribution grant (accepted risk, D-05/D-06)",
+          "termsUrl": "https://legal.yahoo.com/us/en/yahoo/terms/otos/index.html"
+        }
+      ],
+      "seams": [],
+      "tiers": {
+        "strict": {
+          "firstDate": "2001-08-27",
+          "lastDate": "2026-08-14"
+        },
+        "extended": {
+          "firstDate": "2001-08-27",
+          "lastDate": "2026-08-14"
+        }
+      }
+    },
+    {
+      "id": "EFA/total-return",
+      "scope": "EFA",
+      "kind": "total-return",
+      "asset": "efa.911daa0ea7.bin",
+      "calendarStartIndex": 18494,
+      "length": 6279,
+      "firstDate": "2001-08-27",
+      "lastDate": "2026-08-17",
+      "units": "index-level",
+      "sources": [
+        {
+          "source": "Yahoo Finance",
+          "url": "https://query1.finance.yahoo.com/v8/finance/chart/EFA?period1=0&period2=1787011200&interval=1d&events=div%2Csplit",
+          "retrievedAt": "2026-08-17",
+          "license": "Personal-use terms; chart endpoint is undocumented with no published redistribution grant (accepted risk, D-05/D-06)",
+          "termsUrl": "https://legal.yahoo.com/us/en/yahoo/terms/otos/index.html"
+        }
+      ],
+      "seams": [],
+      "tiers": {
+        "strict": {
+          "firstDate": "2001-08-27",
+          "lastDate": "2026-08-14"
+        },
+        "extended": {
+          "firstDate": "2001-08-27",
+          "lastDate": "2026-08-14"
+        }
+      }
+    },
+    {
+      "id": "NDX/price-return",
+      "scope": "NDX",
+      "kind": "price-return",
+      "asset": "ndx.1f119cbe6e.bin",
+      "calendarStartIndex": 14475,
+      "length": 10298,
+      "firstDate": "1985-10-01",
+      "lastDate": "2026-08-17",
+      "units": "index-level",
+      "sources": [
+        {
+          "source": "Yahoo Finance",
+          "url": "https://query1.finance.yahoo.com/v8/finance/chart/%5ENDX?period1=0&period2=1787011200&interval=1d&events=div%2Csplit",
+          "retrievedAt": "2026-08-17",
+          "license": "Personal-use terms; chart endpoint is undocumented with no published redistribution grant (accepted risk, D-05/D-06)",
+          "termsUrl": "https://legal.yahoo.com/us/en/yahoo/terms/otos/index.html"
+        }
+      ],
+      "seams": [],
+      "tiers": {
+        "strict": {
+          "firstDate": "1985-10-01",
+          "lastDate": "2026-08-14"
+        },
+        "extended": {
+          "firstDate": "1985-10-01",
+          "lastDate": "2026-08-14"
+        }
+      }
+    },
+    {
+      "id": "NDX/total-return",
+      "scope": "NDX",
+      "kind": "total-return",
+      "asset": "ndx.1f119cbe6e.bin",
+      "calendarStartIndex": 17867,
+      "length": 6905,
+      "firstDate": "1999-03-04",
+      "lastDate": "2026-08-14",
+      "units": "index-level",
+      "sources": [
+        {
+          "source": "Nasdaq, Inc.",
+          "url": "https://indexes.nasdaqomx.com/Index/History/XNDX",
+          "retrievedAt": "2026-08-14",
+          "license": "Index site terms of use; redistribution of the index history is not explicitly granted (accepted risk, D-05/D-06)",
+          "termsUrl": "https://indexes.nasdaqomx.com/Home/Disclaimer"
+        }
+      ],
+      "seams": [],
+      "tiers": {
+        "strict": {
+          "firstDate": "1999-03-04",
+          "lastDate": "2026-08-14"
+        },
+        "extended": {
+          "firstDate": "1999-03-04",
+          "lastDate": "2026-08-14"
+        }
+      }
+    },
+    {
+      "id": "QLD/price-return",
+      "scope": "QLD",
+      "kind": "price-return",
+      "asset": "qld.154550972e.bin",
+      "calendarStartIndex": 19703,
+      "length": 5070,
+      "firstDate": "2006-06-21",
+      "lastDate": "2026-08-17",
+      "units": "index-level",
+      "sources": [
+        {
+          "source": "Yahoo Finance",
+          "url": "https://query1.finance.yahoo.com/v8/finance/chart/QLD?period1=0&period2=1787011200&interval=1d&events=div%2Csplit",
+          "retrievedAt": "2026-08-17",
+          "license": "Personal-use terms; chart endpoint is undocumented with no published redistribution grant (accepted risk, D-05/D-06)",
+          "termsUrl": "https://legal.yahoo.com/us/en/yahoo/terms/otos/index.html"
+        }
+      ],
+      "seams": [],
+      "tiers": {
+        "strict": {
+          "firstDate": "2006-06-21",
+          "lastDate": "2026-08-14"
+        },
+        "extended": {
+          "firstDate": "2006-06-21",
+          "lastDate": "2026-08-14"
+        }
+      }
+    },
+    {
+      "id": "QLD/total-return",
+      "scope": "QLD",
+      "kind": "total-return",
+      "asset": "qld.154550972e.bin",
+      "calendarStartIndex": 19703,
+      "length": 5070,
+      "firstDate": "2006-06-21",
+      "lastDate": "2026-08-17",
+      "units": "index-level",
+      "sources": [
+        {
+          "source": "Yahoo Finance",
+          "url": "https://query1.finance.yahoo.com/v8/finance/chart/QLD?period1=0&period2=1787011200&interval=1d&events=div%2Csplit",
+          "retrievedAt": "2026-08-17",
+          "license": "Personal-use terms; chart endpoint is undocumented with no published redistribution grant (accepted risk, D-05/D-06)",
+          "termsUrl": "https://legal.yahoo.com/us/en/yahoo/terms/otos/index.html"
+        }
+      ],
+      "seams": [],
+      "tiers": {
+        "strict": {
+          "firstDate": "2006-06-21",
+          "lastDate": "2026-08-14"
+        },
+        "extended": {
+          "firstDate": "2006-06-21",
+          "lastDate": "2026-08-14"
+        }
+      }
+    },
+    {
+      "id": "QQQ/price-return",
+      "scope": "QQQ",
+      "kind": "price-return",
+      "asset": "qqq.a3788acc3f.bin",
+      "calendarStartIndex": 17871,
+      "length": 6902,
+      "firstDate": "1999-03-10",
+      "lastDate": "2026-08-17",
+      "units": "index-level",
+      "sources": [
+        {
+          "source": "Yahoo Finance",
+          "url": "https://query1.finance.yahoo.com/v8/finance/chart/QQQ?period1=0&period2=1787011200&interval=1d&events=div%2Csplit",
+          "retrievedAt": "2026-08-17",
+          "license": "Personal-use terms; chart endpoint is undocumented with no published redistribution grant (accepted risk, D-05/D-06)",
+          "termsUrl": "https://legal.yahoo.com/us/en/yahoo/terms/otos/index.html"
+        }
+      ],
+      "seams": [],
+      "tiers": {
+        "strict": {
+          "firstDate": "1999-03-10",
+          "lastDate": "2026-08-14"
+        },
+        "extended": {
+          "firstDate": "1999-03-10",
+          "lastDate": "2026-08-14"
+        }
+      }
+    },
+    {
+      "id": "QQQ/total-return",
+      "scope": "QQQ",
+      "kind": "total-return",
+      "asset": "qqq.a3788acc3f.bin",
+      "calendarStartIndex": 17871,
+      "length": 6902,
+      "firstDate": "1999-03-10",
+      "lastDate": "2026-08-17",
+      "units": "index-level",
+      "sources": [
+        {
+          "source": "Yahoo Finance",
+          "url": "https://query1.finance.yahoo.com/v8/finance/chart/QQQ?period1=0&period2=1787011200&interval=1d&events=div%2Csplit",
+          "retrievedAt": "2026-08-17",
+          "license": "Personal-use terms; chart endpoint is undocumented with no published redistribution grant (accepted risk, D-05/D-06)",
+          "termsUrl": "https://legal.yahoo.com/us/en/yahoo/terms/otos/index.html"
+        }
+      ],
+      "seams": [],
+      "tiers": {
+        "strict": {
+          "firstDate": "1999-03-10",
+          "lastDate": "2026-08-14"
+        },
+        "extended": {
+          "firstDate": "1999-03-10",
+          "lastDate": "2026-08-14"
+        }
+      }
+    },
+    {
+      "id": "SPX/price-return",
+      "scope": "SPX",
+      "kind": "price-return",
+      "asset": "spx.4960dca187.bin",
+      "calendarStartIndex": 0,
+      "length": 24773,
+      "firstDate": "1927-12-30",
+      "lastDate": "2026-08-17",
+      "units": "index-level",
+      "sources": [
+        {
+          "source": "Yahoo Finance",
+          "url": "https://query1.finance.yahoo.com/v8/finance/chart/%5EGSPC?period1=-2208988800&period2=1787011200&interval=1d&events=div%2Csplit",
+          "retrievedAt": "2026-08-17",
+          "license": "Personal-use terms; chart endpoint is undocumented with no published redistribution grant (accepted risk, D-05/D-06)",
+          "termsUrl": "https://legal.yahoo.com/us/en/yahoo/terms/otos/index.html"
+        }
+      ],
+      "seams": [],
+      "tiers": {
+        "strict": {
+          "firstDate": "1954-01-04",
+          "lastDate": "2026-08-14"
+        },
+        "extended": {
+          "firstDate": "1927-12-30",
+          "lastDate": "2026-08-14"
+        }
+      }
+    },
+    {
+      "id": "SPX/total-return",
+      "scope": "SPX",
+      "kind": "total-return",
+      "asset": "spx.4960dca187.bin",
+      "calendarStartIndex": 0,
+      "length": 24773,
+      "firstDate": "1927-12-30",
+      "lastDate": "2026-08-17",
+      "units": "index-level",
+      "sources": [
+        {
+          "source": "Robert Shiller (Yale)",
+          "url": "https://www.econ.yale.edu/~shiller/data/ie_data.xls",
+          "retrievedAt": "2026-08-01",
+          "license": "Publicly available academic dataset, explicitly redistributable (D-05)",
+          "termsUrl": "https://www.econ.yale.edu/~shiller/data.htm"
+        },
+        {
+          "source": "Yahoo Finance",
+          "url": "https://query1.finance.yahoo.com/v8/finance/chart/%5EGSPC?period1=-2208988800&period2=1787011200&interval=1d&events=div%2Csplit",
+          "retrievedAt": "2026-08-17",
+          "license": "Personal-use terms; chart endpoint is undocumented with no published redistribution grant (accepted risk, D-05/D-06)",
+          "termsUrl": "https://legal.yahoo.com/us/en/yahoo/terms/otos/index.html"
+        },
+        {
+          "source": "Yahoo Finance",
+          "url": "https://query1.finance.yahoo.com/v8/finance/chart/%5ESP500TR?period1=0&period2=1787011200&interval=1d&events=div%2Csplit",
+          "retrievedAt": "2026-08-17",
+          "license": "Personal-use terms; chart endpoint is undocumented with no published redistribution grant (accepted risk, D-05/D-06)",
+          "termsUrl": "https://legal.yahoo.com/us/en/yahoo/terms/otos/index.html"
+        }
+      ],
+      "seams": [
+        {
+          "kind": "interpolation",
+          "firstDate": "1927-12-30",
+          "lastDate": "1987-12-31",
+          "sourceBefore": "SPX-DIV-MONTHLY",
+          "sourceAfter": "SPX-DIV-MONTHLY",
+          "method": "Constructed pre-\"1988-01-04\" total return for \"SPX\" from daily price return plus a dividend yield linearly interpolated from \"SPX-DIV-MONTHLY\"'s monthly observations, with calendar-day accrual (SIM-03 convention).",
+          "degradesToNonDaily": true
+        },
+        {
+          "kind": "splice",
+          "firstDate": "1988-01-04",
+          "lastDate": "1988-01-04",
+          "sourceBefore": "SPX-PR + SPX-DIV-MONTHLY (interpolated)",
+          "sourceAfter": "SPX-TR",
+          "method": "Hand-off from the constructed pre-\"1988-01-04\" run to \"SPX-TR\"'s real daily total-return value, exactly one source contributing on the splice date.",
+          "degradesToNonDaily": true
+        }
+      ],
+      "tiers": {
+        "strict": {
+          "firstDate": "1988-01-05",
+          "lastDate": "2026-08-14"
+        },
+        "extended": {
+          "firstDate": "1927-12-30",
+          "lastDate": "2026-08-14"
+        }
+      }
+    },
+    {
+      "id": "SSO/price-return",
+      "scope": "SSO",
+      "kind": "price-return",
+      "asset": "sso.0bb510848d.bin",
+      "calendarStartIndex": 19703,
+      "length": 5070,
+      "firstDate": "2006-06-21",
+      "lastDate": "2026-08-17",
+      "units": "index-level",
+      "sources": [
+        {
+          "source": "Yahoo Finance",
+          "url": "https://query1.finance.yahoo.com/v8/finance/chart/SSO?period1=0&period2=1787011200&interval=1d&events=div%2Csplit",
+          "retrievedAt": "2026-08-17",
+          "license": "Personal-use terms; chart endpoint is undocumented with no published redistribution grant (accepted risk, D-05/D-06)",
+          "termsUrl": "https://legal.yahoo.com/us/en/yahoo/terms/otos/index.html"
+        }
+      ],
+      "seams": [],
+      "tiers": {
+        "strict": {
+          "firstDate": "2006-06-21",
+          "lastDate": "2026-08-14"
+        },
+        "extended": {
+          "firstDate": "2006-06-21",
+          "lastDate": "2026-08-14"
+        }
+      }
+    },
+    {
+      "id": "SSO/total-return",
+      "scope": "SSO",
+      "kind": "total-return",
+      "asset": "sso.0bb510848d.bin",
+      "calendarStartIndex": 19703,
+      "length": 5070,
+      "firstDate": "2006-06-21",
+      "lastDate": "2026-08-17",
+      "units": "index-level",
+      "sources": [
+        {
+          "source": "Yahoo Finance",
+          "url": "https://query1.finance.yahoo.com/v8/finance/chart/SSO?period1=0&period2=1787011200&interval=1d&events=div%2Csplit",
+          "retrievedAt": "2026-08-17",
+          "license": "Personal-use terms; chart endpoint is undocumented with no published redistribution grant (accepted risk, D-05/D-06)",
+          "termsUrl": "https://legal.yahoo.com/us/en/yahoo/terms/otos/index.html"
+        }
+      ],
+      "seams": [],
+      "tiers": {
+        "strict": {
+          "firstDate": "2006-06-21",
+          "lastDate": "2026-08-14"
+        },
+        "extended": {
+          "firstDate": "2006-06-21",
+          "lastDate": "2026-08-14"
+        }
+      }
+    },
+    {
+      "id": "TLT/price-return",
+      "scope": "TLT",
+      "kind": "price-return",
+      "asset": "tlt.8cd08603d7.bin",
+      "calendarStartIndex": 18722,
+      "length": 6051,
+      "firstDate": "2002-07-30",
+      "lastDate": "2026-08-17",
+      "units": "index-level",
+      "sources": [
+        {
+          "source": "Yahoo Finance",
+          "url": "https://query1.finance.yahoo.com/v8/finance/chart/TLT?period1=0&period2=1787011200&interval=1d&events=div%2Csplit",
+          "retrievedAt": "2026-08-17",
+          "license": "Personal-use terms; chart endpoint is undocumented with no published redistribution grant (accepted risk, D-05/D-06)",
+          "termsUrl": "https://legal.yahoo.com/us/en/yahoo/terms/otos/index.html"
+        }
+      ],
+      "seams": [],
+      "tiers": {
+        "strict": {
+          "firstDate": "2002-07-30",
+          "lastDate": "2026-08-14"
+        },
+        "extended": {
+          "firstDate": "2002-07-30",
+          "lastDate": "2026-08-14"
+        }
+      }
+    },
+    {
+      "id": "TLT/total-return",
+      "scope": "TLT",
+      "kind": "total-return",
+      "asset": "tlt.8cd08603d7.bin",
+      "calendarStartIndex": 18722,
+      "length": 6051,
+      "firstDate": "2002-07-30",
+      "lastDate": "2026-08-17",
+      "units": "index-level",
+      "sources": [
+        {
+          "source": "Yahoo Finance",
+          "url": "https://query1.finance.yahoo.com/v8/finance/chart/TLT?period1=0&period2=1787011200&interval=1d&events=div%2Csplit",
+          "retrievedAt": "2026-08-17",
+          "license": "Personal-use terms; chart endpoint is undocumented with no published redistribution grant (accepted risk, D-05/D-06)",
+          "termsUrl": "https://legal.yahoo.com/us/en/yahoo/terms/otos/index.html"
+        }
+      ],
+      "seams": [],
+      "tiers": {
+        "strict": {
+          "firstDate": "2002-07-30",
+          "lastDate": "2026-08-14"
+        },
+        "extended": {
+          "firstDate": "2002-07-30",
+          "lastDate": "2026-08-14"
+        }
+      }
+    },
+    {
+      "id": "TQQQ/price-return",
+      "scope": "TQQQ",
+      "kind": "price-return",
+      "asset": "tqqq.da2ad59840.bin",
+      "calendarStartIndex": 20620,
+      "length": 4153,
+      "firstDate": "2010-02-11",
+      "lastDate": "2026-08-17",
+      "units": "index-level",
+      "sources": [
+        {
+          "source": "Yahoo Finance",
+          "url": "https://query1.finance.yahoo.com/v8/finance/chart/TQQQ?period1=0&period2=1787011200&interval=1d&events=div%2Csplit",
+          "retrievedAt": "2026-08-17",
+          "license": "Personal-use terms; chart endpoint is undocumented with no published redistribution grant (accepted risk, D-05/D-06)",
+          "termsUrl": "https://legal.yahoo.com/us/en/yahoo/terms/otos/index.html"
+        }
+      ],
+      "seams": [],
+      "tiers": {
+        "strict": {
+          "firstDate": "2010-02-11",
+          "lastDate": "2026-08-14"
+        },
+        "extended": {
+          "firstDate": "2010-02-11",
+          "lastDate": "2026-08-14"
+        }
+      }
+    },
+    {
+      "id": "TQQQ/total-return",
+      "scope": "TQQQ",
+      "kind": "total-return",
+      "asset": "tqqq.da2ad59840.bin",
+      "calendarStartIndex": 20620,
+      "length": 4153,
+      "firstDate": "2010-02-11",
+      "lastDate": "2026-08-17",
+      "units": "index-level",
+      "sources": [
+        {
+          "source": "Yahoo Finance",
+          "url": "https://query1.finance.yahoo.com/v8/finance/chart/TQQQ?period1=0&period2=1787011200&interval=1d&events=div%2Csplit",
+          "retrievedAt": "2026-08-17",
+          "license": "Personal-use terms; chart endpoint is undocumented with no published redistribution grant (accepted risk, D-05/D-06)",
+          "termsUrl": "https://legal.yahoo.com/us/en/yahoo/terms/otos/index.html"
+        }
+      ],
+      "seams": [],
+      "tiers": {
+        "strict": {
+          "firstDate": "2010-02-11",
+          "lastDate": "2026-08-14"
+        },
+        "extended": {
+          "firstDate": "2010-02-11",
+          "lastDate": "2026-08-14"
+        }
+      }
+    },
+    {
+      "id": "UPRO/price-return",
+      "scope": "UPRO",
+      "kind": "price-return",
+      "asset": "upro.68e0ae8e2e.bin",
+      "calendarStartIndex": 20461,
+      "length": 4312,
+      "firstDate": "2009-06-25",
+      "lastDate": "2026-08-17",
+      "units": "index-level",
+      "sources": [
+        {
+          "source": "Yahoo Finance",
+          "url": "https://query1.finance.yahoo.com/v8/finance/chart/UPRO?period1=0&period2=1787011200&interval=1d&events=div%2Csplit",
+          "retrievedAt": "2026-08-17",
+          "license": "Personal-use terms; chart endpoint is undocumented with no published redistribution grant (accepted risk, D-05/D-06)",
+          "termsUrl": "https://legal.yahoo.com/us/en/yahoo/terms/otos/index.html"
+        }
+      ],
+      "seams": [],
+      "tiers": {
+        "strict": {
+          "firstDate": "2009-06-25",
+          "lastDate": "2026-08-14"
+        },
+        "extended": {
+          "firstDate": "2009-06-25",
+          "lastDate": "2026-08-14"
+        }
+      }
+    },
+    {
+      "id": "UPRO/total-return",
+      "scope": "UPRO",
+      "kind": "total-return",
+      "asset": "upro.68e0ae8e2e.bin",
+      "calendarStartIndex": 20461,
+      "length": 4312,
+      "firstDate": "2009-06-25",
+      "lastDate": "2026-08-17",
+      "units": "index-level",
+      "sources": [
+        {
+          "source": "Yahoo Finance",
+          "url": "https://query1.finance.yahoo.com/v8/finance/chart/UPRO?period1=0&period2=1787011200&interval=1d&events=div%2Csplit",
+          "retrievedAt": "2026-08-17",
+          "license": "Personal-use terms; chart endpoint is undocumented with no published redistribution grant (accepted risk, D-05/D-06)",
+          "termsUrl": "https://legal.yahoo.com/us/en/yahoo/terms/otos/index.html"
+        }
+      ],
+      "seams": [],
+      "tiers": {
+        "strict": {
+          "firstDate": "2009-06-25",
+          "lastDate": "2026-08-14"
+        },
+        "extended": {
+          "firstDate": "2009-06-25",
+          "lastDate": "2026-08-14"
+        }
+      }
+    },
+    {
+      "id": "VTI/price-return",
+      "scope": "VTI",
+      "kind": "price-return",
+      "asset": "vti.9108795d0e.bin",
+      "calendarStartIndex": 18444,
+      "length": 6329,
+      "firstDate": "2001-06-15",
+      "lastDate": "2026-08-17",
+      "units": "index-level",
+      "sources": [
+        {
+          "source": "Yahoo Finance",
+          "url": "https://query1.finance.yahoo.com/v8/finance/chart/VTI?period1=0&period2=1787011200&interval=1d&events=div%2Csplit",
+          "retrievedAt": "2026-08-17",
+          "license": "Personal-use terms; chart endpoint is undocumented with no published redistribution grant (accepted risk, D-05/D-06)",
+          "termsUrl": "https://legal.yahoo.com/us/en/yahoo/terms/otos/index.html"
+        }
+      ],
+      "seams": [],
+      "tiers": {
+        "strict": {
+          "firstDate": "2001-06-15",
+          "lastDate": "2026-08-14"
+        },
+        "extended": {
+          "firstDate": "2001-06-15",
+          "lastDate": "2026-08-14"
+        }
+      }
+    },
+    {
+      "id": "VTI/total-return",
+      "scope": "VTI",
+      "kind": "total-return",
+      "asset": "vti.9108795d0e.bin",
+      "calendarStartIndex": 18444,
+      "length": 6329,
+      "firstDate": "2001-06-15",
+      "lastDate": "2026-08-17",
+      "units": "index-level",
+      "sources": [
+        {
+          "source": "Yahoo Finance",
+          "url": "https://query1.finance.yahoo.com/v8/finance/chart/VTI?period1=0&period2=1787011200&interval=1d&events=div%2Csplit",
+          "retrievedAt": "2026-08-17",
+          "license": "Personal-use terms; chart endpoint is undocumented with no published redistribution grant (accepted risk, D-05/D-06)",
+          "termsUrl": "https://legal.yahoo.com/us/en/yahoo/terms/otos/index.html"
+        }
+      ],
+      "seams": [],
+      "tiers": {
+        "strict": {
+          "firstDate": "2001-06-15",
+          "lastDate": "2026-08-14"
+        },
+        "extended": {
+          "firstDate": "2001-06-15",
+          "lastDate": "2026-08-14"
+        }
+      }
+    }
+  ],
+  "calendarExceptions": []
+}

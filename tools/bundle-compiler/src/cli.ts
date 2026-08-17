@@ -47,13 +47,17 @@ function main(): void {
   const cwd = process.cwd()
   const rawDir = resolveContained(rawDirArg, cwd)
   const outDir = resolveContained(outDirArg, cwd)
-  if (rawDir === null || outDir === null) {
+  // D-22: the generated pointer module always lands at "src" under the working directory,
+  // resolved and containment-checked the same way as the two positional arguments (T-02-02).
+  // Not a third positional: the CLI's own usage stays "compile-data <rawDir> <outDir>".
+  const srcDir = resolveContained('src', cwd)
+  if (rawDir === null || outDir === null || srcDir === null) {
     process.exitCode = 1
     return
   }
 
   try {
-    const result = compileBundle(rawDir, outDir)
+    const result = compileBundle(rawDir, outDir, srcDir)
     for (const warning of result.warnings) {
       process.stderr.write(`compile-data: warning: ${warning}\n`)
     }

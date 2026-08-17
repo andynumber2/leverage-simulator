@@ -24,7 +24,7 @@
  */
 
 import { createHash } from 'node:crypto'
-import { existsSync, mkdirSync, readdirSync, rmSync } from 'node:fs'
+import { existsSync, mkdirSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 
 import type { ReferenceCalendar } from './calendar.ts'
@@ -178,6 +178,44 @@ export function assertRateCoversAllTiers(
   }
 }
 
+const GENERATED_POINTER_FILENAME = 'data-bundle.generated.ts'
+
+/**
+ * Writes `src/data-bundle.generated.ts` (D-22): the browser-reachable, content-hashed manifest
+ * path and the bundle version stamped into every asset header, so Phase 4 locates the manifest
+ * through a generated pointer module rather than an unhashed, fetched-by-fixed-path document.
+ * `manifestPath` is the URL the app fetches (`/data/<manifestFile>`), not a filesystem path.
+ * Deterministic (a pure function of `manifestFile` and `bundleVersion`, no wall-clock value), so
+ * recompiling unchanged inputs produces byte-identical output. Uses the same write-then-rename
+ * discipline as `writeAsset` so an interrupted compile never leaves a truncated pointer module.
+ */
+function writeGeneratedPointerModule(srcDir: string, manifestFile: string, bundleVersion: string): void {
+  mkdirSync(srcDir, { recursive: true })
+  const manifestPath = `/data/${manifestFile}`
+  const contents = `/**
+ * GENERATED FILE. Do not hand-edit.
+ *
+ * Regenerated on every \`npm run compile-data raw public/data\` run (tools/bundle-compiler/src/
+ * compile.ts's writeGeneratedPointerModule). Points at the content-hashed manifest this build
+ * produced and carries the bundle version stamped into every compiled asset's header, so a
+ * consumer can locate the manifest without fetching it from a fixed, unhashed path (D-22).
+ */
+
+/** Browser-reachable, content-hashed path to this build's manifest. */
+export const MANIFEST_PATH = '${manifestPath}'
+
+/** The bundle version stamped into every compiled asset header, matching the manifest's own field. */
+export const BUNDLE_VERSION = '${bundleVersion}'
+`
+  const finalPath = path.join(srcDir, GENERATED_POINTER_FILENAME)
+  const tmpPath = path.join(
+    srcDir,
+    `.${GENERATED_POINTER_FILENAME}.tmp-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+  )
+  writeFileSync(tmpPath, contents)
+  renameSync(tmpPath, finalPath)
+}
+
 function rangeOf(result: { calendarStartIndex: number; values: Float64Array | number[] }, calendar: ReferenceCalendar): DateRange {
   const length = 'length' in result.values ? result.values.length : 0
   return {
@@ -191,8 +229,16 @@ function rangeOf(result: { calendarStartIndex: number; values: Float64Array | nu
  * reserved `@rate` scope, one content-hashed asset per symbol scope, and a deterministic
  * manifest. Adding a symbol (an additional CSV+sidecar pair) changes only the emitted set, not
  * this function.
+ *
+ * `srcDir`, when given, also emits `${srcDir}/data-bundle.generated.ts` (D-22). Optional and
+ * defaulted to skip: the compiler's own unit tests call `compileBundle` against throwaway
+ * temp-directory fixtures with no real `src/` sibling, and unconditionally writing there would
+ * either fail (no writable path two levels above an arbitrary OS temp directory) or, worse,
+ * silently clobber the real repo's committed pointer module with fixture-derived content on
+ * every test run. Only the CLI entry point (`cli.ts`), which resolves `srcDir` against the
+ * actual working directory the same way it already resolves `rawDir`/`outDir`, passes it.
  */
-export function compileBundle(rawDir: string, outDir: string): CompileResult {
+export function compileBundle(rawDir: string, outDir: string, srcDir?: string): CompileResult {
   const allInputs = loadRawInputs(rawDir)
   const calendar = deriveCalendar(allInputs)
   const exceptions = loadCalendarExceptions(rawDir)
@@ -432,6 +478,10 @@ export function compileBundle(rawDir: string, outDir: string): CompileResult {
   assertRateCoversAllTiers(manifest.series, rateRange, RATE_SCOPE)
 
   const manifestFile = writeManifest(outDir, manifest)
+
+  if (srcDir !== undefined) {
+    writeGeneratedPointerModule(srcDir, manifestFile, bundleVersion)
+  }
 
   return { bundleVersion, calendarFile, assetFiles, manifestFile, warnings }
 }

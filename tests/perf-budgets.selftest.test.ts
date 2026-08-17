@@ -134,9 +134,9 @@ describe('PERF-01a anchor invariant: relaxed thresholds must carry a written rea
     expect(hasNonEmptyReason({ relaxationReason: undefined })).toBe(false)
   })
 
-  test('PERF_BUDGETS has exactly 11 entries across exactly the 8 requirement ids PERF-02..PERF-09', () => {
+  test('PERF_BUDGETS has exactly 13 entries across exactly the 8 requirement ids PERF-02..PERF-09', () => {
     const entries = Object.values(PERF_BUDGETS)
-    expect(entries).toHaveLength(11)
+    expect(entries).toHaveLength(13)
 
     const requirementIds = new Set(entries.map((b) => b.requirementId))
     expect(Array.from(requirementIds).sort()).toEqual([
@@ -149,5 +149,15 @@ describe('PERF-01a anchor invariant: relaxed thresholds must carry a written rea
       'PERF-08',
       'PERF-09',
     ])
+  })
+
+  test('every entry carries a unit, and exactly one entry carries the bytes unit (D-23)', () => {
+    const entries = Object.values(PERF_BUDGETS)
+    for (const budget of entries) {
+      expect(budget.unit, budget.id).toBeDefined()
+    }
+    const byteEntries = entries.filter((b) => b.unit === 'bytes')
+    expect(byteEntries).toHaveLength(1)
+    expect(byteEntries[0]!.id).toBe('DATA-BUNDLE-BYTES')
   })
 })

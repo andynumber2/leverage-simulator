@@ -23,8 +23,11 @@ export type RequirementId =
   | 'PERF-08'
   | 'PERF-09'
 
-/** The eleven budget rows. PERF-07 and PERF-08 each split into multiple sub-budgets because
- * their requirement text names more than one numeric ceiling. */
+/** The thirteen budget rows. PERF-07 and PERF-08 each split into multiple sub-budgets because
+ * their requirement text names more than one numeric ceiling. `DATA-BUNDLE-BYTES` and
+ * `DATA-BUNDLE-DECODE` (phase 2, D-23) both reuse `requirementId: 'PERF-08'` rather than adding a
+ * ninth requirement id, so `RequirementId` gains no member and the compile-time exhaustiveness
+ * check below is untouched. */
 export type BudgetId =
   | 'PERF-02'
   | 'PERF-03'
@@ -37,6 +40,17 @@ export type BudgetId =
   | 'PERF-08b'
   | 'PERF-08c'
   | 'PERF-09'
+  | 'DATA-BUNDLE-BYTES'
+  | 'DATA-BUNDLE-DECODE'
+
+/** `'ms'` for every duration-denominated row, `'bytes'` for a transfer-size row (D-23). */
+export type BudgetUnit = 'ms' | 'bytes'
+
+/** 10 Mbps, expressed as bytes per second. A deliberately conservative "typical broadband" floor
+ * (also covers poor mobile), used to derive `DATA-BUNDLE-BYTES`'s threshold from the transfer
+ * share of PERF-08b's cold-load budget (D-23): chosen so the budget is meaningful rather than
+ * comfortable. */
+export const DECLARED_CONNECTION_BYTES_PER_SEC = 1_250_000
 
 export interface PerfBudget {
   id: BudgetId
@@ -49,6 +63,12 @@ export interface PerfBudget {
   /** Required (by the self-test in tests/perf-budgets.selftest.test.ts, not the type system
    * alone) whenever thresholdMs > anchorMs. Absent when the two are equal. */
   relaxationReason?: string
+  /** Authoritative for how `thresholdMs`/`anchorMs` are read: `'ms'` for a duration, `'bytes'`
+   * for a transfer size (D-23). The `Ms` suffix on those two field names is historical, kept only
+   * because renaming it would touch `MeasurementRow`, `checkBudget`, `assertWithinBudget`,
+   * `renderTable`, `assertRunInvariants`, every bench file and both self-test fixtures for no
+   * behavioural gain; `unit`, not the field name, is what a reader should trust. */
+  unit: BudgetUnit
 }
 
 /** Escalation trigger per D-20: measured value at or above 70% of budget escalates
@@ -73,6 +93,7 @@ export const PERF_BUDGETS: Record<BudgetId, PerfBudget> = {
     anchorMs: 16,
     anchorLabel: 'one frame',
     implementedInPhase: 3,
+    unit: 'ms',
   },
   'PERF-03': {
     id: 'PERF-03',
@@ -82,6 +103,7 @@ export const PERF_BUDGETS: Record<BudgetId, PerfBudget> = {
     anchorMs: 1000,
     anchorLabel: 'holds attention',
     implementedInPhase: 7,
+    unit: 'ms',
   },
   'PERF-04': {
     id: 'PERF-04',
@@ -91,6 +113,7 @@ export const PERF_BUDGETS: Record<BudgetId, PerfBudget> = {
     anchorMs: 100,
     anchorLabel: 'feels instant',
     implementedInPhase: 7,
+    unit: 'ms',
   },
   'PERF-05': {
     id: 'PERF-05',
@@ -100,6 +123,7 @@ export const PERF_BUDGETS: Record<BudgetId, PerfBudget> = {
     anchorMs: 16,
     anchorLabel: 'one frame',
     implementedInPhase: 7,
+    unit: 'ms',
   },
   'PERF-06': {
     id: 'PERF-06',
@@ -109,6 +133,7 @@ export const PERF_BUDGETS: Record<BudgetId, PerfBudget> = {
     anchorMs: 16,
     anchorLabel: 'one frame',
     implementedInPhase: 7,
+    unit: 'ms',
   },
   'PERF-07a': {
     id: 'PERF-07a',
@@ -118,6 +143,7 @@ export const PERF_BUDGETS: Record<BudgetId, PerfBudget> = {
     anchorMs: 50,
     anchorLabel: 'long task threshold',
     implementedInPhase: 4,
+    unit: 'ms',
   },
   'PERF-07b': {
     id: 'PERF-07b',
@@ -127,6 +153,7 @@ export const PERF_BUDGETS: Record<BudgetId, PerfBudget> = {
     anchorMs: 16,
     anchorLabel: 'one frame',
     implementedInPhase: 4,
+    unit: 'ms',
   },
   'PERF-08a': {
     id: 'PERF-08a',
@@ -136,6 +163,7 @@ export const PERF_BUDGETS: Record<BudgetId, PerfBudget> = {
     anchorMs: 1500,
     anchorLabel: 'cold load ceiling',
     implementedInPhase: 4,
+    unit: 'ms',
   },
   'PERF-08b': {
     id: 'PERF-08b',
@@ -145,6 +173,7 @@ export const PERF_BUDGETS: Record<BudgetId, PerfBudget> = {
     anchorMs: 1000,
     anchorLabel: 'holds attention',
     implementedInPhase: 4,
+    unit: 'ms',
   },
   'PERF-08c': {
     id: 'PERF-08c',
@@ -154,6 +183,7 @@ export const PERF_BUDGETS: Record<BudgetId, PerfBudget> = {
     anchorMs: 300,
     anchorLabel: 'warm load ceiling',
     implementedInPhase: 4,
+    unit: 'ms',
   },
   'PERF-09': {
     id: 'PERF-09',
@@ -163,6 +193,37 @@ export const PERF_BUDGETS: Record<BudgetId, PerfBudget> = {
     anchorMs: 16,
     anchorLabel: 'one frame',
     implementedInPhase: 7,
+    unit: 'ms',
+  },
+  'DATA-BUNDLE-BYTES': {
+    id: 'DATA-BUNDLE-BYTES',
+    requirementId: 'PERF-08',
+    description:
+      "Total brotli-compressed transfer size of every file the compiled bundle emits (public/data/). " +
+      "Derivation: PERF-08b's 1000ms cold-load budget splits into 100ms decode (DATA-BUNDLE-DECODE) " +
+      'and 900ms transfer share; 900ms at the declared DECLARED_CONNECTION_BYTES_PER_SEC (1,250,000, ' +
+      "10 Mbps, a deliberately conservative typical-broadband floor) is 1,125,000 bytes. Denominated " +
+      "in bytes, not milliseconds: PerfBudget's unit field is what tells the report and the run-level " +
+      'invariants never to normalize a byte count by a calibration score (D-23).',
+    thresholdMs: 1_125_000,
+    anchorMs: 1_125_000,
+    anchorLabel: '900ms of PERF-08b at the declared 10 Mbps connection',
+    implementedInPhase: 2,
+    unit: 'bytes',
+  },
+  'DATA-BUNDLE-DECODE': {
+    id: 'DATA-BUNDLE-DECODE',
+    requirementId: 'PERF-08',
+    description:
+      "Decode-to-typed-array time for the compiled bundle, carved out of PERF-08b's 1000ms cold-load " +
+      'budget as the 100ms complement to DATA-BUNDLE-BYTES\'s 900ms transfer share (D-23), so a decode ' +
+      "that passes on its own cannot quietly consume the whole cold-load budget once Phase 4 adds " +
+      'fetch and first render on top.',
+    thresholdMs: 100,
+    anchorMs: 100,
+    anchorLabel: 'feels instant',
+    implementedInPhase: 2,
+    unit: 'ms',
   },
 }
 
