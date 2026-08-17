@@ -99,9 +99,19 @@ const YAHOO_PERIOD1_DEFAULT = 0
  *  days is two and a half times that. */
 const MANUAL_DAILY_STALENESS_DAYS = 10
 
+/** `period2` for a fresh request: the start of tomorrow (UTC). Always covers every bar through
+ *  today's close (the latest a US market session can end is well before UTC midnight), and is
+ *  stable across every run within the same UTC calendar day, so refetching the same day twice
+ *  produces a byte-identical url instead of a spurious per-second diff in the committed sidecar.
+ *  Still satisfies "current unix time computed at request time, never a far-future sentinel": it
+ *  is built from `Date.now()` on every call and is at most 24 hours ahead of it. */
+function nextUtcMidnightSeconds(): number {
+  const now = new Date()
+  return Math.floor(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1) / 1000)
+}
+
 function yahooUrl(vendorSymbol: string, vendorPeriod1: number): string {
-  const period2 = Math.floor(Date.now() / 1000)
-  return `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(vendorSymbol)}?period1=${vendorPeriod1}&period2=${period2}&interval=1d&events=div%2Csplit`
+  return `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(vendorSymbol)}?period1=${vendorPeriod1}&period2=${nextUtcMidnightSeconds()}&interval=1d&events=div%2Csplit`
 }
 
 /**
@@ -150,13 +160,89 @@ function buildYahooFundPair(entry: {
   ]
 }
 
+/** The nine exchange-traded funds that get a real Yahoo price-return series plus a reconstructed
+ *  total-return series (D-24). Each fund's own ticker doubles as its Yahoo symbol. */
+const YAHOO_FUNDS: { scope: string; yahooSymbol: string; manualFile: string; expectedFirstDate: string }[] = [
+  { scope: 'QQQ', yahooSymbol: 'QQQ', manualFile: 'QQQ.json', expectedFirstDate: '1999-03-10' },
+  { scope: 'UPRO', yahooSymbol: 'UPRO', manualFile: 'UPRO.json', expectedFirstDate: '2009-06-25' },
+  { scope: 'TQQQ', yahooSymbol: 'TQQQ', manualFile: 'TQQQ.json', expectedFirstDate: '2010-02-11' },
+  { scope: 'SSO', yahooSymbol: 'SSO', manualFile: 'SSO.json', expectedFirstDate: '2006-06-21' },
+  { scope: 'QLD', yahooSymbol: 'QLD', manualFile: 'QLD.json', expectedFirstDate: '2006-06-21' },
+  { scope: 'VTI', yahooSymbol: 'VTI', manualFile: 'VTI.json', expectedFirstDate: '2001-06-15' },
+  { scope: 'EFA', yahooSymbol: 'EFA', manualFile: 'EFA.json', expectedFirstDate: '2001-08-27' },
+  { scope: 'EEM', yahooSymbol: 'EEM', manualFile: 'EEM.json', expectedFirstDate: '2003-04-14' },
+  { scope: 'TLT', yahooSymbol: 'TLT', manualFile: 'TLT.json', expectedFirstDate: '2002-07-30' },
+]
+
+/** The S&P 500 index (`^GSPC`) reaches 1927-12-30 (D-17's pre-1928 depth), so its price-return
+ *  spec uses the wide `period1`. Its real total return comes from the S&P 500 Total Return index
+ *  (`^SP500TR`), not a reconstruction: an index pays no dividends itself, so `^GSPC`'s own
+ *  `adjclose` carries no dividend information to reconstruct from (D-15). */
+const SPX_PR: SourceSpec = {
+  stem: 'SPX-PR',
+  scope: 'SPX',
+  seriesKind: 'price',
+  units: 'index-level',
+  vendor: 'yahoo',
+  vendorName: YAHOO_VENDOR_NAME,
+  url: yahooUrl('^GSPC', YAHOO_PERIOD1_WIDE),
+  vendorColumn: 'close',
+  expectedFirstDate: '1927-12-30',
+  license: YAHOO_LICENSE,
+  termsUrl: YAHOO_TERMS_URL,
+  route: 'live-with-manual-fallback',
+  manualFile: 'GSPC.json',
+  maxStalenessDays: MANUAL_DAILY_STALENESS_DAYS,
+  derivation: 'as-sourced',
+  vendorPeriod1: YAHOO_PERIOD1_WIDE,
+}
+
+const SPX_TR: SourceSpec = {
+  stem: 'SPX-TR',
+  scope: 'SPX',
+  seriesKind: 'total-return',
+  units: 'index-level',
+  vendor: 'yahoo',
+  vendorName: YAHOO_VENDOR_NAME,
+  url: yahooUrl('^SP500TR', YAHOO_PERIOD1_DEFAULT),
+  vendorColumn: 'close',
+  expectedFirstDate: '1988-01-04',
+  license: YAHOO_LICENSE,
+  termsUrl: YAHOO_TERMS_URL,
+  route: 'live-with-manual-fallback',
+  manualFile: 'SP500TR.json',
+  maxStalenessDays: MANUAL_DAILY_STALENESS_DAYS,
+  derivation: 'as-sourced',
+  vendorPeriod1: YAHOO_PERIOD1_DEFAULT,
+}
+
+// NDX total return (the Nasdaq-100 Total Return index, XNDX) is a different vendor (Nasdaq, not
+// Yahoo: Yahoo carries the `^XNDX` ticker but stores no history for it, per 02-CONTEXT.md) and is
+// added by plan 02-07, not here. This entry's absence is sequencing, not an omission.
+const NDX_PR: SourceSpec = {
+  stem: 'NDX-PR',
+  scope: 'NDX',
+  seriesKind: 'price',
+  units: 'index-level',
+  vendor: 'yahoo',
+  vendorName: YAHOO_VENDOR_NAME,
+  url: yahooUrl('^NDX', YAHOO_PERIOD1_DEFAULT),
+  vendorColumn: 'close',
+  expectedFirstDate: '1985-10-01',
+  license: YAHOO_LICENSE,
+  termsUrl: YAHOO_TERMS_URL,
+  route: 'live-with-manual-fallback',
+  manualFile: 'NDX.json',
+  maxStalenessDays: MANUAL_DAILY_STALENESS_DAYS,
+  derivation: 'as-sourced',
+  vendorPeriod1: YAHOO_PERIOD1_DEFAULT,
+}
+
 export const SOURCES: SourceSpec[] = [
-  ...buildYahooFundPair({
-    scope: 'QQQ',
-    yahooSymbol: 'QQQ',
-    manualFile: 'QQQ.json',
-    expectedFirstDate: '1999-03-10',
-  }),
+  SPX_PR,
+  SPX_TR,
+  NDX_PR,
+  ...YAHOO_FUNDS.flatMap(buildYahooFundPair),
   {
     stem: 'SPX-DIV-MONTHLY',
     scope: 'SPX',

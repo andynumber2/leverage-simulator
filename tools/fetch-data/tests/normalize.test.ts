@@ -15,8 +15,8 @@ import {
   toCanonicalCsv,
   type YahooChart,
 } from '../src/normalize.ts'
-import { fetchText, resolveSource } from '../src/fetch.ts'
-import type { SourceSpec } from '../src/sources.ts'
+import { checkManualStaleness, checkReconstructionDrift, fetchText, resolveSource } from '../src/fetch.ts'
+import { RATE_SOURCES, SOURCES, type SourceSpec } from '../src/sources.ts'
 import { loadSidecarOrThrow } from '../../bundle-compiler/src/raw-input.ts'
 
 const REPO_ROOT = path.resolve(import.meta.dirname, '..', '..', '..')
@@ -487,6 +487,87 @@ describe('resolveSource', () => {
       maxStalenessDays: undefined,
     })
     await expect(resolveSource(spec)).rejects.toThrowError(/DNS failure/)
+  })
+})
+
+describe('checkManualStaleness', () => {
+  test('returns a halt when the newest observation is eleven days old at a ten-day threshold', () => {
+    const spec = baseYahooSpec({ maxStalenessDays: 10 })
+    const rows = [{ date: '2020-01-01', value: 1 }]
+    const today = new Date(Date.UTC(2020, 0, 12)) // 11 calendar days after 2020-01-01
+    const halt = checkManualStaleness(spec, rows, today)
+    expect(halt).toMatch(/QQQ-PR/)
+    expect(halt).toMatch(/11/)
+  })
+
+  test('returns null when the newest observation is exactly at the threshold', () => {
+    const spec = baseYahooSpec({ maxStalenessDays: 10 })
+    const rows = [{ date: '2020-01-01', value: 1 }]
+    const today = new Date(Date.UTC(2020, 0, 11)) // exactly 10 calendar days after 2020-01-01
+    expect(checkManualStaleness(spec, rows, today)).toBeNull()
+  })
+
+  test('returns null when the spec has no declared threshold (a live-route spec)', () => {
+    const spec = baseYahooSpec({ maxStalenessDays: undefined })
+    const rows = [{ date: '2000-01-01', value: 1 }]
+    expect(checkManualStaleness(spec, rows, new Date())).toBeNull()
+  })
+})
+
+describe('checkReconstructionDrift', () => {
+  test('over the committed QQQ file, does not halt', () => {
+    const spec = baseYahooSpec({ stem: 'QQQ-TR', derivation: 'reconstructed-total-return' })
+    const chart = parseYahooChart(QQQ_JSON_TEXT)
+    const rows = reconstructYahooTotalReturn(chart)
+    const result = checkReconstructionDrift(spec, chart, rows)
+    expect(result.halt).toBeNull()
+    expect(result.drift.maxRelDeviation).toBeLessThan(MAX_RECONSTRUCTION_DRIFT)
+  })
+
+  test('halts naming the stem, the measured drift and a date on a damaged fixture', () => {
+    const spec = baseYahooSpec({ stem: 'FIXTURE-TR', derivation: 'reconstructed-total-return' })
+    const dates = ['2020-01-02', '2020-01-03', '2020-01-06']
+    const closes = [100, 100, 100]
+    const trueChart: YahooChart = {
+      symbol: 'FIXTURE',
+      dates,
+      closes,
+      adjCloses: [100, 100, 100],
+      dividends: new Map([['2020-01-03', 5]]),
+      splits: new Map(),
+    }
+    const trueReconstruction = reconstructYahooTotalReturn(trueChart)
+    const damagedChart: YahooChart = {
+      ...trueChart,
+      adjCloses: trueReconstruction.map((r) => r.value),
+      dividends: new Map(),
+    }
+    const damagedReconstruction = reconstructYahooTotalReturn(damagedChart)
+    const result = checkReconstructionDrift(spec, damagedChart, damagedReconstruction)
+    expect(result.halt).not.toBeNull()
+    expect(result.halt).toMatch(/FIXTURE-TR/)
+    expect(result.halt).toMatch(/%/)
+    expect(result.halt).toMatch(/2020-01-0[36]/)
+  })
+})
+
+describe('route invariant', () => {
+  test('every non-live-route spec in SOURCES and RATE_SOURCES carries a manualFile and a positive maxStalenessDays; every live-route spec carries neither', () => {
+    for (const spec of [...SOURCES, ...RATE_SOURCES]) {
+      if (spec.route === 'live') {
+        expect(spec.manualFile, `${spec.stem}: live-route spec should not carry manualFile`).toBeUndefined()
+        expect(
+          spec.maxStalenessDays,
+          `${spec.stem}: live-route spec should not carry maxStalenessDays`,
+        ).toBeUndefined()
+      } else {
+        expect(spec.manualFile, `${spec.stem}: non-live-route spec must carry a manualFile`).toBeTruthy()
+        expect(
+          spec.maxStalenessDays,
+          `${spec.stem}: non-live-route spec must carry a positive maxStalenessDays`,
+        ).toBeGreaterThan(0)
+      }
+    }
   })
 })
 

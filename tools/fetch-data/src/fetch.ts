@@ -20,6 +20,8 @@ import path from 'node:path'
 
 import { MANUAL_DIR_NAME, RATE_SOURCES, SOURCES, type SourceSpec } from './sources.ts'
 import {
+  MAX_RECONSTRUCTION_DRIFT,
+  measureReconstructionDrift,
   normalizeFred,
   normalizeShillerDividendYield,
   parseShillerCsv,
@@ -27,6 +29,7 @@ import {
   reconstructYahooTotalReturn,
   toCanonicalCsv,
   type CanonicalRow,
+  type ReconstructionDrift,
   type YahooChart,
 } from './normalize.ts'
 import type { SidecarMeta } from '../../bundle-compiler/src/raw-input.ts'
@@ -165,6 +168,66 @@ export async function resolveSource(spec: SourceSpec): Promise<SourceResolution>
   return { text: readFileSync(manualPath, 'utf8'), route: 'manual' }
 }
 
+export interface DriftCheckResult {
+  drift: ReconstructionDrift
+  /** A halt message naming the stem, the measured drift and the date it occurred on, or null when
+   *  the measured drift is below `MAX_RECONSTRUCTION_DRIFT`. */
+  halt: string | null
+}
+
+/** Percentage string to 5 decimal places, matching the precision the D-24/D-25 derivation table
+ *  in the plan was measured and recorded at. */
+function formatDriftPercent(drift: ReconstructionDrift): string {
+  return `${(drift.maxRelDeviation * 100).toFixed(5)}%`
+}
+
+/**
+ * The D-25 reconstruction gate for one reconstructed-total-return stem: recomputes drift between
+ * `rows` (the stored reconstruction) and `chart`'s own adjusted-close growth path, and returns a
+ * halt message naming the stem, the measured drift and the date when the drift is at or above
+ * `MAX_RECONSTRUCTION_DRIFT`.
+ */
+export function checkReconstructionDrift(
+  spec: SourceSpec,
+  chart: YahooChart,
+  rows: readonly CanonicalRow[],
+): DriftCheckResult {
+  const drift = measureReconstructionDrift(chart, rows)
+  if (drift.maxRelDeviation >= MAX_RECONSTRUCTION_DRIFT) {
+    return {
+      drift,
+      halt: `${spec.stem}: reconstruction drift ${formatDriftPercent(drift)} on ${drift.maxRelDeviationDate} is at or above the ${(MAX_RECONSTRUCTION_DRIFT * 100).toFixed(3)}% tolerance`,
+    }
+  }
+  return { drift, halt: null }
+}
+
+function daysBetween(isoDate: string, today: Date): number {
+  const parts = isoDate.split('-').map(Number)
+  const dateUtc = Date.UTC(parts[0]!, parts[1]! - 1, parts[2]!)
+  const todayUtc = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate())
+  return Math.round((todayUtc - dateUtc) / (24 * 60 * 60 * 1000))
+}
+
+/**
+ * Measures the age of the newest observation in `rows` against `spec.maxStalenessDays`, using
+ * calendar days computed from the data itself, never file modification time: an mtime does not
+ * survive a git clone, so an mtime-based gate would call every fresh clone pristine and defeat the
+ * check for exactly the reader D-01 exists to serve. Returns a halt message naming the stem, the
+ * newest observation's date and its age when the age exceeds the threshold; returns null when
+ * within the threshold or when `spec.maxStalenessDays` is not declared (a `route: 'live'` spec).
+ */
+export function checkManualStaleness(spec: SourceSpec, rows: readonly CanonicalRow[], today: Date): string | null {
+  if (spec.maxStalenessDays === undefined) return null
+  const newest = rows[rows.length - 1]?.date
+  if (!newest) return null
+  const ageDays = daysBetween(newest, today)
+  if (ageDays > spec.maxStalenessDays) {
+    return `${spec.stem}: manual source is stale, newest observation ${newest} is ${ageDays} day(s) old, exceeds the declared ${spec.maxStalenessDays}-day threshold`
+  }
+  return null
+}
+
 function normalizeBySpec(spec: SourceSpec, text: string): { rows: CanonicalRow[]; chart?: YahooChart } {
   switch (spec.vendor) {
     case 'yahoo': {
@@ -235,17 +298,24 @@ function checkExpectedFirstDate(spec: SourceSpec, actualFirstDate: string): stri
   return null
 }
 
-function printCoverageTable(results: FetchResult[]): void {
+function printCoverageTable(results: FetchResult[], driftByStem: ReadonlyMap<string, ReconstructionDrift>): void {
   process.stdout.write(
-    '\nfetch-data coverage: series | source | vendor column | route | first date | last date | rows\n',
+    '\nfetch-data coverage: series | source | vendor column | route | first date | last date | rows | drift\n',
   )
+  let liveCount = 0
+  let manualCount = 0
   for (const { spec, rows, route } of results) {
     const first = rows[0]?.date ?? '(empty)'
     const last = rows[rows.length - 1]?.date ?? '(empty)'
+    const drift = driftByStem.get(spec.stem)
+    const driftText = drift ? formatDriftPercent(drift) : '-'
     process.stdout.write(
-      `  ${spec.stem} | ${spec.vendorName} | ${spec.vendorColumn} | ${route} | ${first} | ${last} | ${rows.length}\n`,
+      `  ${spec.stem} | ${spec.vendorName} | ${spec.vendorColumn} | ${route} | ${first} | ${last} | ${rows.length} | ${driftText}\n`,
     )
+    if (route === 'live') liveCount++
+    else manualCount++
   }
+  process.stdout.write(`fetch-data: ${liveCount} series live, ${manualCount} series manual\n`)
 }
 
 async function main(): Promise<void> {
@@ -310,10 +380,32 @@ async function main(): Promise<void> {
     return
   }
 
-  // Coverage pass only runs once every source produced data (no partial, silent commit).
-  printCoverageTable(results)
+  // D-25 reconstruction gate: recompute drift for every reconstructed total-return stem against
+  // its own parsed chart, before the coverage table is judged. Computed for every such stem
+  // regardless of outcome, so a value creeping toward the tolerance is visible in the coverage
+  // output even on a run that does not halt.
+  const driftByStem = new Map<string, ReconstructionDrift>()
+  const driftHalts: string[] = []
+  for (const result of results) {
+    if (result.spec.derivation !== 'reconstructed-total-return' || !result.chart) continue
+    const { drift, halt } = checkReconstructionDrift(result.spec, result.chart, result.rows)
+    driftByStem.set(result.spec.stem, drift)
+    if (halt) driftHalts.push(halt)
+  }
 
-  const halts: string[] = []
+  // D-27 staleness gate: every series resolved through the manual route, checked against its
+  // declared threshold, measured from the newest observation in the data rather than file mtime.
+  const staleHalts: string[] = []
+  for (const { spec, rows, route } of results) {
+    if (route !== 'manual') continue
+    const halt = checkManualStaleness(spec, rows, new Date())
+    if (halt) staleHalts.push(halt)
+  }
+
+  // Coverage pass only runs once every source produced data (no partial, silent commit).
+  printCoverageTable(results, driftByStem)
+
+  const halts: string[] = [...driftHalts, ...staleHalts]
   for (const { spec, rows } of results) {
     const first = rows[0]?.date
     if (first) {
