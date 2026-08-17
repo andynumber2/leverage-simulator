@@ -210,6 +210,13 @@ export function parseCanonicalCsv(text: string): CanonicalCsvRow[] {
 
 export interface RawSeries {
   scope: string
+  /**
+   * The raw CSV's filename stem (no directory, no `.csv` extension), e.g. `"RATE-DFF"`. Distinct
+   * from `scope`: several raw stems can share one derived `scope` (all four rate inputs derive
+   * scope `"RATE"`), so `rawStem` is what `rate-series.ts` matches against `RATE_SOURCE_PRECEDENCE`
+   * (plan 02-04).
+   */
+  rawStem: string
   meta: SidecarMeta
   dates: string[]
   values: number[]
@@ -231,6 +238,7 @@ export function loadRawInputs(rawDir: string): RawSeries[] {
     const rows = parseCanonicalCsv(text)
     return {
       scope: meta.scope,
+      rawStem: path.basename(file, '.csv'),
       meta,
       dates: rows.map((r) => r.date),
       values: rows.map((r) => r.value),

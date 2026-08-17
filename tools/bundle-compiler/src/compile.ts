@@ -4,19 +4,23 @@
  * The compile pipeline as a callable function, independent of argv.
  *
  * Order: load raw inputs and their sidecars, load calendar-exceptions.json once, derive the
- * reference calendar, resolve every series' gap policy (D-09 through D-12) exactly once, group
- * the resolved series by scope, compute each asset's bytes, compute the bundle version from the
- * asset hashes, re-encode each asset with that bundle version in its header, write the calendar
- * asset, write one asset per scope, then build and write the manifest.
+ * reference calendar, resolve every price/total-return series' gap policy (D-09 through D-12)
+ * exactly once, splice the four rate inputs into one shared daily rate series (D-04, D-13,
+ * rate-series.ts), construct each scope's pre-real-total-return run where a dividend-monthly
+ * input exists (D-15, total-return.ts), compute strict/extended tiers per pair by scanning seam
+ * records (D-14, D-16, tiers.ts), group the resolved series by scope, compute each asset's bytes,
+ * compute the bundle version from the asset hashes, re-encode each asset with that bundle version
+ * in its header, write the calendar asset, write one asset per scope plus the shared rate asset,
+ * then build and write the manifest.
  *
  * Bundle version derivation is necessarily two-pass to avoid circularity: an asset's header
  * embeds the bundle version, but the bundle version is derived from the assets' own content
  * hashes. Pass 1 encodes every asset with an empty placeholder bundle version and hashes those
  * bytes; `computeBundleVersion` combines those hashes into the real bundle version. Pass 2
- * re-encodes every asset with that real bundle version. Because the underlying data bytes never
- * change between passes, this is deterministic and reproducible: recompiling unchanged raw inputs
- * always yields the same bundle version and the same final asset bytes. Gap policy resolution
- * (which determines those data bytes) is resolved once, up front, and reused by both passes.
+ * re-encodes every asset with that real value. Because the underlying data bytes never change
+ * between passes, this is deterministic and reproducible. Gap policy resolution and total-return
+ * construction (which determine those data bytes) are resolved once, up front, and reused by both
+ * passes.
  */
 
 import { createHash } from 'node:crypto'
@@ -24,12 +28,14 @@ import { existsSync, mkdirSync, readdirSync, rmSync } from 'node:fs'
 import path from 'node:path'
 
 import type { ReferenceCalendar } from './calendar.ts'
-import { deriveCalendar, fromDaysSinceEpoch } from './calendar.ts'
+import { deriveCalendar, fromDaysSinceEpoch, toDaysSinceEpoch } from './calendar.ts'
 import { contentHashedFilename, encodeCalendarAsset, encodeSeriesAsset, writeAsset } from './encode.ts'
 import { applyGapPolicy, loadCalendarExceptions, type CalendarException, type GapPolicyResult } from './gap-policy.ts'
-import { buildManifest, computeBundleVersion, writeManifest, type ManifestSeries } from './manifest.ts'
+import { buildManifest, computeBundleVersion, writeManifest, type DateRange, type ManifestSeriesInput } from './manifest.ts'
 import { loadRawInputs, type RawSeries, type SidecarMeta } from './raw-input.ts'
-import { SeamCollector, type SeamRecord } from './seams.ts'
+import { buildShortRateSeries, RATE_SOURCE_PRECEDENCE } from './rate-series.ts'
+import { SeamCollector } from './seams.ts'
+import { assertTotalReturnSourceExists, buildTotalReturnSeries, type AlignedInputSeries } from './total-return.ts'
 import type { SeriesDescriptor, SeriesKind } from './binary-format.ts'
 
 export interface CompileResult {
@@ -42,6 +48,11 @@ export interface CompileResult {
 
 const BIN_FILE_PATTERN = /\.bin$/
 const MANIFEST_FILE_PATTERN = /^manifest\..*\.json$/
+/** The raw-input scope that all four `RATE_SOURCE_PRECEDENCE` stems share (their sidecars all
+ * declare `"scope": "RATE"`, derived from each filename's stem up to its first "-"). */
+const RATE_SOURCE_SCOPE = 'RATE'
+/** The synthetic scope the spliced rate series is emitted under in the compiled bundle. */
+const RATE_SCOPE = '@rate'
 
 function pruneOutputDir(outDir: string): void {
   if (!existsSync(outDir)) return
@@ -62,7 +73,7 @@ function seriesKindToBinary(sidecarKind: SidecarMeta['seriesKind']): SeriesKind 
       return 'rate'
     case 'dividend-monthly':
       throw new Error(
-        'compile-data: seriesKind "dividend-monthly" is an interpolation input for a later plan, not a directly compiled series',
+        'compile-data: seriesKind "dividend-monthly" is a total-return construction input, not a directly compiled series',
       )
     default: {
       const exhaustive: never = sidecarKind
@@ -91,13 +102,16 @@ interface AlignedSeries {
   series: RawSeries
   kind: SeriesKind
   result: GapPolicyResult
-  seams: SeamRecord[]
+  seamCollector: SeamCollector
+  /** Overrides the default single-source `sources` entry when set (total-return construction). */
+  extraSourceMetas?: SidecarMeta[]
 }
 
 /**
- * Resolves every loaded series' gap policy exactly once. `applyGapPolicy` owns every fatal
- * decision (D-09 through D-12); this function does nothing but call it once per series with a
- * fresh SeamCollector, so each series' seams stay independent of every other series'.
+ * Resolves every compilable (price/total-return) series' gap policy exactly once. `applyGapPolicy`
+ * owns every fatal decision (D-09 through D-12); this function does nothing but call it once per
+ * series with a fresh SeamCollector, so each series' seams stay independent of every other
+ * series'.
  */
 function alignAllSeries(
   inputs: ReadonlyArray<RawSeries>,
@@ -107,18 +121,14 @@ function alignAllSeries(
 ): AlignedSeries[] {
   return inputs.map((series) => {
     const kind = seriesKindToBinary(series.meta.seriesKind)
-    const seams = new SeamCollector()
-    const result = applyGapPolicy(series, calendar, exceptions, seams, newestDate)
-    return { series, kind, result, seams: seams.records() }
+    const seamCollector = new SeamCollector()
+    const result = applyGapPolicy(series, calendar, exceptions, seamCollector, newestDate)
+    return { series, kind, result, seamCollector }
   })
 }
 
 function sortAlignedByKind(items: ReadonlyArray<AlignedSeries>): AlignedSeries[] {
-  return [...items].sort((a, b) => {
-    const ka = a.series.meta.seriesKind
-    const kb = b.series.meta.seriesKind
-    return ka < kb ? -1 : ka > kb ? 1 : 0
-  })
+  return [...items].sort((a, b) => (a.kind < b.kind ? -1 : a.kind > b.kind ? 1 : 0))
 }
 
 function buildScopeAssetBytes(bundleVersion: string, scope: string, aligned: ReadonlyArray<AlignedSeries>): Uint8Array {
@@ -139,18 +149,69 @@ function buildScopeAssetBytes(bundleVersion: string, scope: string, aligned: Rea
   return encodeSeriesAsset(bundleVersion, scope, descriptors, values)
 }
 
+function sourceEntry(meta: SidecarMeta): ManifestSeriesInput['sources'][number] {
+  return { source: meta.source, url: meta.url, retrievedAt: meta.retrievedAt, license: meta.license, termsUrl: meta.termsUrl }
+}
+
 /**
- * Compiles `rawDir` into `outDir`: one shared calendar asset, one content-hashed asset per scope,
- * and a deterministic manifest. Adding a symbol (an additional CSV+sidecar pair) changes only the
- * emitted set, not this function.
+ * DATA-04's coverage guarantee: the shared rate series must cover every pair's own extended tier
+ * at both ends. `extended` is defined as the intersection with the rate range (tiers.ts), so this
+ * always holds by construction when `computeTierRanges` is correct; this assertion is what keeps
+ * that true as symbols are added, naming the pair and both dates when it does not. Exported
+ * (rather than inlined) so the guard is directly unit-testable against a fault-injected series
+ * list, independent of whether the full pipeline can naturally produce a violating input.
+ */
+export function assertRateCoversAllTiers(
+  series: ReadonlyArray<{ id: string; scope: string; tiers: { extended: DateRange | null } }>,
+  rateRange: DateRange,
+  rateScope: string,
+): void {
+  for (const entry of series) {
+    if (entry.scope === rateScope) continue
+    const extended = entry.tiers.extended
+    if (extended === null) continue
+    if (rateRange.firstDate > extended.firstDate || rateRange.lastDate < extended.lastDate) {
+      throw new Error(
+        `compile-data: the shared rate series (${rateRange.firstDate} to ${rateRange.lastDate}) does not cover pair "${entry.id}"'s extended tier (${extended.firstDate} to ${extended.lastDate}) (DATA-04)`,
+      )
+    }
+  }
+}
+
+function rangeOf(result: { calendarStartIndex: number; values: Float64Array | number[] }, calendar: ReferenceCalendar): DateRange {
+  const length = 'length' in result.values ? result.values.length : 0
+  return {
+    firstDate: fromDaysSinceEpoch(calendar.days[result.calendarStartIndex]!),
+    lastDate: fromDaysSinceEpoch(calendar.days[result.calendarStartIndex + length - 1]!),
+  }
+}
+
+/**
+ * Compiles `rawDir` into `outDir`: one shared calendar asset, one shared rate asset under the
+ * reserved `@rate` scope, one content-hashed asset per symbol scope, and a deterministic
+ * manifest. Adding a symbol (an additional CSV+sidecar pair) changes only the emitted set, not
+ * this function.
  */
 export function compileBundle(rawDir: string, outDir: string): CompileResult {
-  const inputs = loadRawInputs(rawDir)
-  const calendar = deriveCalendar(inputs)
+  const allInputs = loadRawInputs(rawDir)
+  const calendar = deriveCalendar(allInputs)
   const exceptions = loadCalendarExceptions(rawDir)
 
+  // The reserved rate-source scope (all four RATE_SOURCE_PRECEDENCE raw stems share it) is
+  // matched by its own `scope`, not by `seriesKind === 'rate'`: a scope other than "RATE" can
+  // carry its own ordinary rate-kind series (e.g. a test fixture exercising D-09's carry-forward
+  // path on a non-reserved scope), which stays in the normal per-scope compile path below.
+  const rateInputs = allInputs.filter((input) => input.scope === RATE_SOURCE_SCOPE)
+  const dividendMonthlyByScope = new Map<string, RawSeries>()
+  for (const input of allInputs) {
+    if (input.meta.seriesKind === 'dividend-monthly') dividendMonthlyByScope.set(input.scope, input)
+  }
+  const compilableInputs = allInputs.filter(
+    (input) => input.scope !== RATE_SOURCE_SCOPE && input.meta.seriesKind !== 'dividend-monthly',
+  )
+
   const byScope = new Map<string, RawSeries[]>()
-  for (const input of inputs) {
+  for (const input of compilableInputs) {
     const existing = byScope.get(input.scope)
     if (existing) {
       existing.push(input)
@@ -171,8 +232,8 @@ export function compileBundle(rawDir: string, outDir: string): CompileResult {
     }
   }
 
-  const newestDate = newestLastDate(inputs)
-  const aligned = alignAllSeries(inputs, calendar, exceptions, newestDate)
+  const newestDate = newestLastDate(compilableInputs)
+  const aligned = alignAllSeries(compilableInputs, calendar, exceptions, newestDate)
 
   const alignedByScope = new Map<string, AlignedSeries[]>()
   for (const item of aligned) {
@@ -187,6 +248,68 @@ export function compileBundle(rawDir: string, outDir: string): CompileResult {
   const warnings: string[] = []
   for (const item of aligned) warnings.push(...item.result.warnings)
 
+  // D-04/D-13: splice the four locked rate inputs into one shared daily rate series.
+  const rateSeamCollector = new SeamCollector()
+  const rateResult = buildShortRateSeries(rateInputs, calendar, rateSeamCollector)
+  const rateRange: DateRange = {
+    firstDate: fromDaysSinceEpoch(calendar.days[rateResult.calendarStartIndex]!),
+    lastDate: fromDaysSinceEpoch(calendar.days[rateResult.calendarStartIndex + rateResult.values.length - 1]!),
+  }
+
+  // D-15: construct each scope's pre-real-total-return run wherever a dividend-monthly input
+  // exists for it. Applies generically (no scope literal): in the current universe, only the
+  // S&P carries a dividend-monthly raw input.
+  for (const scope of scopes) {
+    const items = alignedByScope.get(scope)!
+    const priceItem = items.find((i) => i.kind === 'price-return')
+    const totalReturnItem = items.find((i) => i.kind === 'total-return')
+    const dividendInput = dividendMonthlyByScope.get(scope)
+
+    // Only a scope that carries its own price-return series is a "symbol" D-15 requires a
+    // total-return counterpart for; a scope whose only series is e.g. a bare rate-kind fixture
+    // input is exempt (never a (price, total-return) pair in the first place).
+    if (priceItem === undefined) continue
+
+    assertTotalReturnSourceExists(scope, totalReturnItem !== undefined, dividendInput !== undefined)
+
+    if (totalReturnItem === undefined || dividendInput === undefined) continue
+
+    const priceAligned: AlignedInputSeries = {
+      values: priceItem.result.values,
+      calendarStartIndex: priceItem.result.calendarStartIndex,
+      firstDate: priceItem.result.firstDate,
+      lastDate: priceItem.result.lastDate,
+      sourceName: priceItem.series.rawStem,
+    }
+    const realTrAligned: AlignedInputSeries = {
+      values: totalReturnItem.result.values,
+      calendarStartIndex: totalReturnItem.result.calendarStartIndex,
+      firstDate: totalReturnItem.result.firstDate,
+      lastDate: totalReturnItem.result.lastDate,
+      sourceName: totalReturnItem.series.rawStem,
+    }
+
+    const constructed = buildTotalReturnSeries(
+      scope,
+      priceAligned,
+      realTrAligned,
+      dividendInput,
+      calendar,
+      totalReturnItem.seamCollector,
+    )
+
+    if (constructed.calendarStartIndex !== realTrAligned.calendarStartIndex) {
+      totalReturnItem.result = {
+        ...totalReturnItem.result,
+        values: constructed.values,
+        calendarStartIndex: constructed.calendarStartIndex,
+        firstDate: fromDaysSinceEpoch(calendar.days[constructed.calendarStartIndex]!),
+        lastDate: totalReturnItem.result.lastDate,
+      }
+      totalReturnItem.extraSourceMetas = [priceItem.series.meta, dividendInput.meta, totalReturnItem.series.meta]
+    }
+  }
+
   // Pass 1: placeholder bundle version, used only to derive a stable bundleVersion string.
   const PLACEHOLDER_BUNDLE_VERSION = ''
   const calendarBytesPass1 = encodeCalendarAsset(PLACEHOLDER_BUNDLE_VERSION, calendar.days)
@@ -194,9 +317,17 @@ export function compileBundle(rawDir: string, outDir: string): CompileResult {
   for (const scope of scopes) {
     scopeBytesPass1.set(scope, buildScopeAssetBytes(PLACEHOLDER_BUNDLE_VERSION, scope, alignedByScope.get(scope)!))
   }
+  const rateDescriptorPass1: Omit<SeriesDescriptor, 'dataByteOffset'> = {
+    kind: 'rate',
+    id: `${RATE_SCOPE}/rate`,
+    calendarStartIndex: rateResult.calendarStartIndex,
+    length: rateResult.values.length,
+  }
+  const rateBytesPass1 = encodeSeriesAsset(PLACEHOLDER_BUNDLE_VERSION, RATE_SCOPE, [rateDescriptorPass1], [rateResult.values])
 
   const hashEntries: Array<{ name: string; hash: string }> = [
     { name: 'calendar', hash: sha256Hex10(calendarBytesPass1) },
+    { name: RATE_SCOPE, hash: sha256Hex10(rateBytesPass1) },
     ...scopes.map((scope) => ({ name: scope, hash: sha256Hex10(scopeBytesPass1.get(scope)!) })),
   ]
   hashEntries.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))
@@ -208,6 +339,7 @@ export function compileBundle(rawDir: string, outDir: string): CompileResult {
   for (const scope of scopes) {
     scopeBytesFinal.set(scope, buildScopeAssetBytes(bundleVersion, scope, alignedByScope.get(scope)!))
   }
+  const rateBytesFinal = encodeSeriesAsset(bundleVersion, RATE_SCOPE, [rateDescriptorPass1], [rateResult.values])
 
   pruneOutputDir(outDir)
   mkdirSync(outDir, { recursive: true })
@@ -216,8 +348,32 @@ export function compileBundle(rawDir: string, outDir: string): CompileResult {
   writeAsset(outDir, calendarFile, calendarBytesFinal)
 
   const assetFiles: string[] = []
-  const manifestSeries: ManifestSeries[] = []
+  const manifestSeries: ManifestSeriesInput[] = []
   const manifestAssets: Array<{ file: string; bytes: number; series: string[] }> = []
+
+  // The shared rate asset and its manifest entry.
+  const rateFile = contentHashedFilename(RATE_SCOPE.replace('@', 'rate-').toLowerCase(), 'bin', rateBytesFinal)
+  writeAsset(outDir, rateFile, rateBytesFinal)
+  assetFiles.push(rateFile)
+  const rateSeamRecords = rateSeamCollector.records()
+  const rateContributingMetas = RATE_SOURCE_PRECEDENCE.map((stem) => rateInputs.find((i) => i.rawStem === stem)?.meta).filter(
+    (m): m is SidecarMeta => m !== undefined,
+  )
+  const rateId = `${RATE_SCOPE}/rate`
+  manifestSeries.push({
+    id: rateId,
+    scope: RATE_SCOPE,
+    kind: 'rate',
+    asset: rateFile,
+    calendarStartIndex: rateResult.calendarStartIndex,
+    length: rateResult.values.length,
+    firstDate: rateRange.firstDate,
+    lastDate: rateRange.lastDate,
+    units: 'percent-annualized',
+    sources: rateContributingMetas.map(sourceEntry),
+    seams: rateSeamRecords,
+  })
+  manifestAssets.push({ file: rateFile, bytes: rateBytesFinal.length, series: [rateId] })
 
   for (const scope of scopes) {
     const bytes = scopeBytesFinal.get(scope)!
@@ -230,8 +386,10 @@ export function compileBundle(rawDir: string, outDir: string): CompileResult {
     for (const item of sorted) {
       const id = `${scope}/${item.kind}`
       seriesIds.push(id)
-      const firstDate = fromDaysSinceEpoch(calendar.days[item.result.calendarStartIndex]!)
-      const lastDate = fromDaysSinceEpoch(calendar.days[item.result.calendarStartIndex + item.result.values.length - 1]!)
+      const pairRange = rangeOf(item.result, calendar)
+      const contributingMetas = item.extraSourceMetas ?? [item.series.meta]
+      const sortedMetas = [...contributingMetas].sort((a, b) => (a.source < b.source ? -1 : a.source > b.source ? 1 : 0))
+      const pairSeamRecords = item.seamCollector.records()
       manifestSeries.push({
         id,
         scope,
@@ -239,23 +397,11 @@ export function compileBundle(rawDir: string, outDir: string): CompileResult {
         asset: filename,
         calendarStartIndex: item.result.calendarStartIndex,
         length: item.result.values.length,
-        firstDate,
-        lastDate,
+        firstDate: pairRange.firstDate,
+        lastDate: pairRange.lastDate,
         units: item.series.meta.units,
-        sources: [
-          {
-            source: item.series.meta.source,
-            url: item.series.meta.url,
-            retrievedAt: item.series.meta.retrievedAt,
-            license: item.series.meta.license,
-            termsUrl: item.series.meta.termsUrl,
-          },
-        ],
-        seams: item.seams,
-        tiers: {
-          strict: { firstDate, lastDate },
-          extended: { firstDate, lastDate },
-        },
+        sources: sortedMetas.map(sourceEntry),
+        seams: pairSeamRecords,
       })
     }
     manifestAssets.push({ file: filename, bytes: bytes.length, series: seriesIds })
@@ -278,8 +424,13 @@ export function compileBundle(rawDir: string, outDir: string): CompileResult {
     },
     assets: manifestAssets,
     series: manifestSeries,
+    rateSeams: rateSeamRecords,
+    rateRange,
     calendarExceptions: exceptions,
   })
+
+  assertRateCoversAllTiers(manifest.series, rateRange, RATE_SCOPE)
+
   const manifestFile = writeManifest(outDir, manifest)
 
   return { bundleVersion, calendarFile, assetFiles, manifestFile, warnings }

@@ -24,7 +24,7 @@ import {
 } from '../src/gap-policy.ts'
 import type { RawSeries, SidecarMeta } from '../src/raw-input.ts'
 import { SeamCollector } from '../src/seams.ts'
-import { makeRawFixture } from './fixtures/make-fixture.ts'
+import { DEFAULT_RATE_SERIES, makeRawFixture } from './fixtures/make-fixture.ts'
 
 const CLI_PATH = fileURLToPath(new URL('../src/cli.ts', import.meta.url))
 
@@ -56,7 +56,7 @@ function makeSeries(
     scope,
     units,
   }
-  return { scope, meta, dates, values }
+  return { scope, rawStem: scope, meta, dates, values }
 }
 
 describe('applyGapPolicy: extra bars (D-10)', () => {
@@ -315,9 +315,13 @@ describe('CLI end to end (acceptance criteria)', () => {
     const dates = consecutiveDates(10, '2024-09-01')
     const gapped = dates.filter((_, i) => i !== 4)
     const fixture = makeRawFixture({
+      dates,
       series: [
         { scope: 'AAA', seriesKind: 'price', units: 'index-level', dates },
+        { scope: 'AAA', seriesKind: 'total-return', units: 'index-level', dates },
         { scope: 'BBB', seriesKind: 'price', units: 'index-level', dates: gapped },
+        { scope: 'BBB', seriesKind: 'total-return', units: 'index-level', dates: gapped },
+        ...DEFAULT_RATE_SERIES,
       ],
     })
     const outDir1 = mkdtempSync(path.join(tmpdir(), 'gap-policy-cli-out-'))
