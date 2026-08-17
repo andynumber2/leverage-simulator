@@ -61,15 +61,15 @@ measured in CI, not an aspiration.
 - [ ] **DATA-02**: The compiler aligns trading calendars across symbols and the rate series, and
       fails loudly on misalignment rather than silently forward-filling
 
-- [ ] **DATA-03**: The compiler emits, per symbol, both a price-return and a total-return series
-- [ ] **DATA-04**: The compiler emits a daily short-rate series covering the full date range of
+- [x] **DATA-03**: The compiler emits, per symbol, both a price-return and a total-return series
+- [x] **DATA-04**: The compiler emits a daily short-rate series covering the full date range of
       each history tier
 
-- [ ] **DATA-05**: The compiler emits two history tiers per symbol where data allows: **strict**
+- [x] **DATA-05**: The compiler emits two history tiers per symbol where data allows: **strict**
       (every input genuinely daily) and **extended** (deep history, with monthly rate and
       dividend data interpolated to daily)
 
-- [ ] **DATA-06**: The compiler emits machine-readable provenance for every series: source, date
+- [x] **DATA-06**: The compiler emits machine-readable provenance for every series: source, date
       range, and the exact date of every splice or interpolation seam. The UI generates its tier
       labels from this data, so labels cannot drift from the data they describe
 
@@ -287,10 +287,10 @@ measured in CI, not an aspiration.
 | PERF-11 | Phase 1 | Complete |
 | DATA-01 | Phase 2 | Pending |
 | DATA-02 | Phase 2 | Pending |
-| DATA-03 | Phase 2 | Pending |
-| DATA-04 | Phase 2 | Pending |
-| DATA-05 | Phase 2 | Pending |
-| DATA-06 | Phase 2 | Pending |
+| DATA-03 | Phase 2 | Complete |
+| DATA-04 | Phase 2 | Complete |
+| DATA-05 | Phase 2 | Complete |
+| DATA-06 | Phase 2 | Complete |
 | DATA-07 | Phase 2 | Pending |
 | DATA-08 | Phase 4 | Pending |
 | DATA-09 | Phase 2 | Pending |
