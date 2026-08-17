@@ -173,11 +173,11 @@ their thresholds remain locked at their perception anchors per D-19 regardless.
 
 ### Addendum (quick-260816-qae, 2026-08-16): this section's verdict is superseded
 
-**The verdict above was reached before the D-17 baseline existed.** The bench harness had never
-run on `ubuntu-latest` at the time §2 and this section were written (the repository's entire
-GitHub Actions history is two runs, 31963076671 and 31965951474, both later the same day), so
-every figure both cite is the informational dev-sandbox run (9 logical cores), never the
-authoritative baseline. That baseline now exists.
+**The verdict above was reached before the D-17 baseline existed.** No GitHub remote was
+configured when §2 and this section were written (01-UAT.md, written 2026-08-16T05:05Z, records
+this as the reason its only test could not be run), so the bench harness had never run on
+`ubuntu-latest` and every figure both sections cite is the informational dev-sandbox run
+(9 logical cores), never the authoritative baseline. That baseline now exists.
 
 On the D-17 baseline (GitHub Actions `ubuntu-latest`, run 31965951474, 4 logical cores,
 calibration score 1.0600, HEAD 8eb9551), PERF-03 measured 807.92ms normalized (856.40ms raw,
