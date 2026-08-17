@@ -94,7 +94,7 @@ Plans:
   4. The bundled universe covers S&P 500 daily to 1928, Nasdaq-100/QQQ, the real leveraged ETFs UPRO, TQQQ, SSO and QLD, and VTI, EFA, EEM and TLT, each with both a price-return and a total-return series, plus a daily short-rate series spanning the full range of every tier.
   5. The benchmark command reports the compiled bundle's total byte size and its decode-to-typed-array time, and the decode figure fits inside PERF-08's 1000ms data-load budget. A round-trip test asserts the decoded arrays match the compiler's in-memory series exactly, and content-hashed asset filenames make it impossible for a redeploy to serve a stale cached bundle alongside a new manifest.
 
-**Plans:** 1/5 plans executed
+**Plans:** 3/5 plans executed
 
 Plans:
 **Wave 1**
@@ -103,8 +103,8 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 02-02-PLAN.md: Calendar agreement. A price-series gap aborts naming the dates, a rate-series gap is carried and seamed, an extra bar aborts, and `raw/calendar-exceptions.json` is the only override
-- [ ] 02-03-PLAN.md: Real inputs. A fetch script pulls the locked source stack into canonical CSVs with provenance sidecars, gated by a package-legitimacy checkpoint before any spreadsheet dependency
+- [x] 02-02-PLAN.md: Calendar agreement. A price-series gap aborts naming the dates, a rate-series gap is carried and seamed, an extra bar aborts, and `raw/calendar-exceptions.json` is the only override
+- [x] 02-03-PLAN.md: Real inputs. A fetch script pulls the locked source stack into canonical CSVs with provenance sidecars, gated by a package-legitimacy checkpoint before any spreadsheet dependency
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
@@ -221,7 +221,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Performance Spike and Budget Lock | 6/6 | Complete    | 2026-08-17 |
-| 2. Compiled Data Bundle | 1/5 | In Progress|  |
+| 2. Compiled Data Bundle | 3/5 | In Progress|  |
 | 3. Simulation Kernel and the UPRO/TQQQ Gate | 0/TBD | Not started | - |
 | 4. First Defensible Backtest in the Browser | 0/TBD | Not started | - |
 | 5. Attribution and the Credibility Surface | 0/TBD | Not started | - |
