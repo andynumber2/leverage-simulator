@@ -147,11 +147,33 @@ export function encodeHeader(input: EncodeHeaderInput): Uint8Array {
 }
 
 /**
+ * Thrown by `decodeHeader` when the asset's own header bundle version disagrees with the bundle
+ * version the caller supplies (D-22, T-02-04). A stale cached asset then fails loudly at decode
+ * rather than returning numbers that quietly disagree with the manifest describing them.
+ */
+export class BundleVersionMismatchError extends Error {
+  readonly headerBundleVersion: string
+  readonly expectedBundleVersion: string
+
+  constructor(headerBundleVersion: string, expectedBundleVersion: string) {
+    super(
+      `binary-format: asset bundleVersion "${headerBundleVersion}" does not match expected bundleVersion "${expectedBundleVersion}"`,
+    )
+    this.name = 'BundleVersionMismatchError'
+    this.headerBundleVersion = headerBundleVersion
+    this.expectedBundleVersion = expectedBundleVersion
+  }
+}
+
+/**
  * Decodes the header and descriptor table from an asset buffer. Only reads the header portion
  * (up to `headerByteLength`); never touches or requires the data section. Throws when `magic` or
- * `formatVersion` disagrees with the constants in this module.
+ * `formatVersion` disagrees with the constants in this module, or when the asset's own bundle
+ * version disagrees with `expectedBundleVersion` (D-22). The parameter is required, not optional:
+ * an optional check is one a caller forgets, and the whole point of D-22's second half is that the
+ * failure cannot be skipped.
  */
-export function decodeHeader(buffer: ArrayBuffer): AssetHeader {
+export function decodeHeader(buffer: ArrayBuffer, expectedBundleVersion: string): AssetHeader {
   const view = new DataView(buffer)
 
   const magic = view.getUint32(0, true)
@@ -183,6 +205,10 @@ export function decodeHeader(buffer: ArrayBuffer): AssetHeader {
   const bundleVersionBytes = new Uint8Array(buffer, FIXED_HEADER_BYTES, bundleVersionByteLength)
   const bundleVersion = decoder.decode(bundleVersionBytes)
 
+  if (bundleVersion !== expectedBundleVersion) {
+    throw new BundleVersionMismatchError(bundleVersion, expectedBundleVersion)
+  }
+
   let offset = FIXED_HEADER_BYTES + alignTo(bundleVersionByteLength, 4)
   const descriptors: SeriesDescriptor[] = []
   for (let i = 0; i < descriptorCount; i++) {
@@ -205,22 +231,18 @@ export function decodeHeader(buffer: ArrayBuffer): AssetHeader {
 }
 
 /**
- * Returns a zero-copy Float64Array view over one series' data, decoding the header internally to
- * locate the data section. Callers that need many views over the same buffer should prefer
- * decoding once via `decodeHeader` and slicing manually if this per-call decode becomes
- * measurable; the plan for this phase accepts that cost here in exchange for a simple two-arg
- * call site.
+ * Returns a zero-copy Float64Array view over one series' data. Takes the already-decoded header
+ * so the bundle-version check in `decodeHeader` happens exactly once per asset, not once per view.
  */
-export function seriesView(buffer: ArrayBuffer, descriptor: SeriesDescriptor): Float64Array {
-  const header = decodeHeader(buffer)
+export function seriesView(buffer: ArrayBuffer, header: AssetHeader, descriptor: SeriesDescriptor): Float64Array {
   return new Float64Array(buffer, header.headerByteLength + descriptor.dataByteOffset, descriptor.length)
 }
 
 /**
- * Returns a zero-copy Int32Array view over the calendar asset's days-since-epoch array.
+ * Returns a zero-copy Int32Array view over the calendar asset's days-since-epoch array. Takes the
+ * already-decoded header for the same reason as `seriesView`.
  */
-export function calendarView(buffer: ArrayBuffer): Int32Array {
-  const header = decodeHeader(buffer)
+export function calendarView(buffer: ArrayBuffer, header: AssetHeader): Int32Array {
   const descriptor = header.descriptors.find((d) => d.kind === 'calendar')
   if (descriptor === undefined) {
     throw new Error('binary-format: calendarView called on an asset with no calendar descriptor')

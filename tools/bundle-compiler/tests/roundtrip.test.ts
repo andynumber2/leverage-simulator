@@ -53,11 +53,11 @@ describe('compileBundle round trip', () => {
       for (const entry of manifest.series) {
         const assetBuffer = readFileSync(path.join(outDir, entry.asset))
         const arrayBuffer = toArrayBuffer(assetBuffer)
-        const header = decodeHeader(arrayBuffer)
+        const header = decodeHeader(arrayBuffer, result.bundleVersion)
         const descriptor = header.descriptors.find((d) => d.id === entry.id)
         expect(descriptor).toBeDefined()
 
-        const view = seriesView(arrayBuffer, descriptor!)
+        const view = seriesView(arrayBuffer, header, descriptor!)
         const expectedValues = fixture.expected[entry.scope]!.values
         expect(view.length).toBe(expectedValues.length)
         for (let i = 0; i < expectedValues.length; i++) {
@@ -140,7 +140,7 @@ describe('binary-format encode/decode', () => {
       { kind: 'total-return', id: 'AAA/total-return', calendarStartIndex: 0, length: 10, dataByteOffset: 80 },
     ]
     const bytes = encodeHeader({ assetKind: 'series', bundleVersion: 'abc123', descriptors, dataByteLength: 160 })
-    const header = decodeHeader(toArrayBuffer(Buffer.from(bytes)))
+    const header = decodeHeader(toArrayBuffer(Buffer.from(bytes)), 'abc123')
 
     expect(header.assetKind).toBe('series')
     expect(header.bundleVersion).toBe('abc123')
@@ -153,7 +153,7 @@ describe('binary-format encode/decode', () => {
     const bytes = encodeHeader({ assetKind: 'calendar', bundleVersion: 'x', descriptors: [], dataByteLength: 0 })
     const corrupted = Uint8Array.from(bytes)
     corrupted[0] = (corrupted[0]! ^ 0xff) & 0xff
-    expect(() => decodeHeader(toArrayBuffer(Buffer.from(corrupted)))).toThrow()
+    expect(() => decodeHeader(toArrayBuffer(Buffer.from(corrupted)), 'x')).toThrow()
   })
 
   test('decodeHeader throws when formatVersion disagrees with the constant', () => {
@@ -161,13 +161,13 @@ describe('binary-format encode/decode', () => {
     const corrupted = Uint8Array.from(bytes)
     // formatVersion lives at byte offset 4 (uint16 little-endian); bump it.
     corrupted[4] = (corrupted[4]! + 1) & 0xff
-    expect(() => decodeHeader(toArrayBuffer(Buffer.from(corrupted)))).toThrow()
+    expect(() => decodeHeader(toArrayBuffer(Buffer.from(corrupted)), 'x')).toThrow()
   })
 
   test('encodeSeriesAsset produces a buffer whose headerByteLength is a multiple of DATA_SECTION_ALIGNMENT', () => {
     const descriptors = [{ kind: 'rate' as const, id: '@RATE/rate', calendarStartIndex: 0, length: 3 }]
     const bytes = encodeSeriesAsset('v1', '@RATE', descriptors, [Float64Array.from([1, 2, 3])])
-    const header = decodeHeader(toArrayBuffer(Buffer.from(bytes)))
+    const header = decodeHeader(toArrayBuffer(Buffer.from(bytes)), 'v1')
     expect(header.headerByteLength % 8).toBe(0)
   })
 })
@@ -182,9 +182,9 @@ describe('property: Float64 round trip is lossless', () => {
         const descriptors = [{ kind: 'rate' as const, id: '@RATE/rate', calendarStartIndex: 0, length: values.length }]
         const bytes = encodeSeriesAsset('property-run', '@RATE', descriptors, [Float64Array.from(values)])
         const arrayBuffer = toArrayBuffer(Buffer.from(bytes))
-        const header = decodeHeader(arrayBuffer)
+        const header = decodeHeader(arrayBuffer, 'property-run')
         const descriptor = header.descriptors[0]!
-        const view = seriesView(arrayBuffer, descriptor)
+        const view = seriesView(arrayBuffer, header, descriptor)
 
         expect(view.length).toBe(values.length)
         for (let i = 0; i < values.length; i++) {
