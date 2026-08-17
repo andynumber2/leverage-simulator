@@ -475,6 +475,11 @@ export function splitCsvFields(line: string): string[] {
   for (let i = 0; i < line.length; i++) {
     const ch = line[i]!
     if (ch === '"') {
+      if (inQuotes && line[i + 1] === '"') {
+        current += '"'
+        i++
+        continue
+      }
       inQuotes = !inQuotes
       continue
     }
