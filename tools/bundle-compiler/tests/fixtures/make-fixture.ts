@@ -15,6 +15,9 @@ export interface FixtureSeriesSpec {
   scope: string
   seriesKind: 'price' | 'total-return' | 'rate' | 'dividend-monthly'
   units: 'index-level' | 'percent-annualized' | 'ratio'
+  /** Overrides the fixture-level `dates` for this series only, e.g. to punch a hole or add an
+   * extra bar. When omitted, the series uses the shared fixture-level date list. */
+  dates?: string[]
   values?: number[]
 }
 
@@ -58,9 +61,10 @@ export function makeRawFixture(options: MakeRawFixtureOptions = {}): RawFixture 
 
   specs.forEach((spec, index) => {
     scopes.push(spec.scope)
-    const values = spec.values ?? dates.map((_, i) => 100 + index * 10 + i * 0.5)
+    const seriesDates = spec.dates ?? dates
+    const values = spec.values ?? seriesDates.map((_, i) => 100 + index * 10 + i * 0.5)
 
-    const csvLines = ['date,value', ...dates.map((date, i) => `${date},${values[i]}`)]
+    const csvLines = ['date,value', ...seriesDates.map((date, i) => `${date},${values[i]}`)]
     const csvPath = path.join(dir, `${spec.scope}-${spec.seriesKind}.csv`)
     writeFileSync(csvPath, `${csvLines.join('\n')}\n`)
 
@@ -76,7 +80,7 @@ export function makeRawFixture(options: MakeRawFixtureOptions = {}): RawFixture 
     }
     writeFileSync(csvPath.replace(/\.csv$/, '.meta.json'), JSON.stringify(sidecar, null, 2))
 
-    expected[spec.scope] = { dates, values }
+    expected[spec.scope] = { dates: seriesDates, values }
   })
 
   return { dir, scopes, expected }
