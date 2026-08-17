@@ -635,6 +635,142 @@ export function shillerRawNewestDate(csvText: string): string | null {
   return parsed[parsed.length - 1]?.isoDate ?? null
 }
 
+export interface NasdaqNormalizeResult {
+  /** Canonical rows in ascending date order, zero-valued rows already dropped. */
+  rows: CanonicalRow[]
+  /** ISO dates of every dropped zero-valued row, in the order encountered in the source file
+   *  (descending, newest first). Never sorted: the run prints these in encounter order so a
+   *  reader can see them alongside the file they came from. */
+  droppedDates: string[]
+}
+
+/**
+ * `5`. Two dropped rows are expected on every run of the committed export (today's not-yet-
+ * published placeholder plus the one historical Hurricane Sandy closure), and that count does not
+ * accumulate over time. Five is headroom for one or two further vendor closures without being
+ * loose enough to absorb a format change: a vendor that starts emitting zeros for real trading
+ * days is a data problem, not a parsing one, and this normalizer must not launder that into the
+ * committed series (see `normalizeNasdaq`'s doc comment for the full reasoning).
+ */
+export const MAX_NASDAQ_ZERO_ROWS = 5
+
+const NASDAQ_EXPECTED_HEADER = ['Trade Date', 'Index Value', 'Net Change', 'High', 'Low']
+
+/**
+ * Parses the Nasdaq index-history export (the vendor behind `raw/manual/XNDX.csv`, the Nasdaq-100
+ * Total Return index, D-04, D-14) into the canonical schema. Every quirk of this export is
+ * measured and named in plan 02-07's `<interfaces>` section; this function implements its nine
+ * rules in order.
+ *
+ * Zero-valued rows (today's not-yet-published placeholder and the one historical Sandy-closure
+ * phantom bar) are dropped here, in the normalizer, rather than admitted through the compiler's
+ * `raw/calendar-exceptions.json` override. That file exists to accept a real vendor bar on a date
+ * the reference calendar lacks; using it here would instead admit a fabricated 0.0 index level
+ * into the compiled Nasdaq-100 total-return series and then whitelist the date, which is not what
+ * the override file is for. D-03 puts per-source normalization defects in the fetch script, and a
+ * defect in one vendor's export is exactly that kind of concern, never the compiler's. The drop is
+ * never silent: every dropped date is returned and the run prints it, and exceeding
+ * `MAX_NASDAQ_ZERO_ROWS` throws naming the count and the dates, so a vendor that starts emitting
+ * zeros for real trading days surfaces as a build failure rather than being absorbed.
+ *
+ * Throws naming the header when the header line does not match the expected five column names
+ * exactly. Throws naming the count and the dates when more than `MAX_NASDAQ_ZERO_ROWS` rows are
+ * dropped. Throws naming the date when the reversed rows are not strictly ascending or carry a
+ * duplicate date.
+ */
+export function normalizeNasdaq(csvText: string): NasdaqNormalizeResult {
+  const withoutBom = csvText.charCodeAt(0) === 0xfeff ? csvText.slice(1) : csvText
+  const lines = splitLines(withoutBom)
+  if (lines.length === 0) {
+    throw new Error('normalizeNasdaq: empty response, expected a header line plus data rows')
+  }
+
+  const headerFields = splitCsvFields(lines[0]!)
+  const headerMatches =
+    headerFields.length === NASDAQ_EXPECTED_HEADER.length &&
+    NASDAQ_EXPECTED_HEADER.every((name, i) => headerFields[i] === name)
+  if (!headerMatches) {
+    throw new Error(
+      `normalizeNasdaq: expected header "${NASDAQ_EXPECTED_HEADER.join(',')}", got "${lines[0]}"`,
+    )
+  }
+  const dateIdx = headerFields.indexOf('Trade Date')
+  const valueIdx = headerFields.indexOf('Index Value')
+
+  interface ParsedRow {
+    isoDate: string
+    value: number
+  }
+  const parsedRows: ParsedRow[] = []
+  const droppedDates: string[] = []
+
+  for (let i = 1; i < lines.length; i++) {
+    const lineNumber = i + 1
+    const fields = splitCsvFields(lines[i]!)
+    if (fields.every((field) => field === '')) {
+      continue
+    }
+
+    const dateCell = fields[dateIdx]
+    if (dateCell === undefined || dateCell === '') {
+      throw new Error(`normalizeNasdaq: line ${lineNumber} has an empty date cell`)
+    }
+    const dateMatch = /^(\d{1,2})\/(\d{1,2})\/(\d{2})$/.exec(dateCell)
+    if (!dateMatch) {
+      throw new Error(`normalizeNasdaq: line ${lineNumber} date "${dateCell}" is not in "M/D/YY" form`)
+    }
+    const month = dateMatch[1]!.padStart(2, '0')
+    const day = dateMatch[2]!.padStart(2, '0')
+    const twoDigitYear = Number(dateMatch[3])
+    // Pivot at seventy: a year below seventy is in the two thousands, seventy or above is in the
+    // nineteen hundreds. This series begins in 1999 and cannot contain a year this pivot resolves
+    // wrongly (see plan 02-07's <interfaces> section).
+    const century = twoDigitYear < 70 ? 2000 : 1900
+    const isoDate = `${century + twoDigitYear}-${month}-${day}`
+
+    const valueCell = fields[valueIdx]
+    if (valueCell === undefined || valueCell === '') {
+      throw new Error(`normalizeNasdaq: line ${lineNumber} (${isoDate}) has an empty value cell`)
+    }
+    const value = Number(valueCell.replace(/,/g, ''))
+    if (!Number.isFinite(value)) {
+      throw new Error(`normalizeNasdaq: line ${lineNumber} (${isoDate}) value "${valueCell}" is not a finite number`)
+    }
+
+    if (value === 0) {
+      droppedDates.push(isoDate)
+      continue
+    }
+
+    parsedRows.push({ isoDate, value })
+  }
+
+  if (droppedDates.length > MAX_NASDAQ_ZERO_ROWS) {
+    throw new Error(
+      `normalizeNasdaq: dropped ${droppedDates.length} zero-valued row(s), exceeding MAX_NASDAQ_ZERO_ROWS (${MAX_NASDAQ_ZERO_ROWS}): ${droppedDates.join(', ')}`,
+    )
+  }
+
+  const ascending = parsedRows.slice().reverse()
+  for (let i = 1; i < ascending.length; i++) {
+    const prev = ascending[i - 1]!
+    const curr = ascending[i]!
+    if (curr.isoDate === prev.isoDate) {
+      throw new Error(`normalizeNasdaq: duplicate date "${curr.isoDate}" after reversal`)
+    }
+    if (curr.isoDate < prev.isoDate) {
+      throw new Error(
+        `normalizeNasdaq: rows out of ascending order after reversal at "${curr.isoDate}" (previous was "${prev.isoDate}")`,
+      )
+    }
+  }
+
+  return {
+    rows: ascending.map((row) => ({ date: row.isoDate, value: row.value })),
+    droppedDates,
+  }
+}
+
 /**
  * Emits the canonical CSV: header line `date,value`, LF line endings, trailing newline. Throws
  * when rows are unsorted or carry a duplicate date, or when a value is not finite. Does not sort

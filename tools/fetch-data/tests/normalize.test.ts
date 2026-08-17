@@ -4,9 +4,11 @@ import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 
 import {
+  MAX_NASDAQ_ZERO_ROWS,
   MAX_RECONSTRUCTION_DRIFT,
   measureReconstructionDrift,
   normalizeFred,
+  normalizeNasdaq,
   normalizeShillerDividendYield,
   normalizeYahoo,
   parseShillerCsv,
@@ -25,6 +27,7 @@ const REPO_ROOT = path.resolve(import.meta.dirname, '..', '..', '..')
 const QQQ_JSON_PATH = path.join(REPO_ROOT, 'raw', 'manual', 'QQQ.json')
 const QQQ_JSON_TEXT = readFileSync(QQQ_JSON_PATH, 'utf8')
 const SPX_DIV_MONTHLY_CSV_TEXT = readFileSync(path.join(REPO_ROOT, 'raw', 'manual', 'SPX-DIV-MONTHLY.csv'), 'utf8')
+const XNDX_CSV_TEXT = readFileSync(path.join(REPO_ROOT, 'raw', 'manual', 'XNDX.csv'), 'utf8')
 
 function tsFor(y: number, m: number, d: number, hourUtc = 14, minuteUtc = 30): number {
   return Math.floor(Date.UTC(y, m - 1, d, hourUtc, minuteUtc) / 1000)
@@ -447,6 +450,90 @@ describe('shillerRawNewestDate', () => {
 
   test('returns null when the table has no data rows', () => {
     expect(shillerRawNewestDate('Date,P,D,E')).toBeNull()
+  })
+})
+
+describe('normalizeNasdaq', () => {
+  const NASDAQ_HEADER = 'Trade Date,Index Value,Net Change,High,Low'
+
+  test('strips a leading byte order mark and parses a minimal fixture', () => {
+    const csv = '﻿' + [NASDAQ_HEADER, '1/2/20,"1,234.56",0,0,0'].join('\r\n')
+    const result = normalizeNasdaq(csv)
+    expect(result.rows).toEqual([{ date: '2020-01-02', value: 1234.56 }])
+    expect(result.droppedDates).toEqual([])
+  })
+
+  test('a quoted value carrying a thousands separator parses correctly, where a bare comma split would mis-map the row', () => {
+    const csv = [NASDAQ_HEADER, '3/4/99,"1,933.03000000000",0,0,0'].join('\r\n')
+    const result = normalizeNasdaq(csv)
+    expect(result.rows).toEqual([{ date: '1999-03-04', value: 1933.03 }])
+  })
+
+  test('a two-digit year of 99 resolves to 1999 and a two-digit year of 26 resolves to 2026', () => {
+    const csv = [NASDAQ_HEADER, '1/1/26,100,0,0,0', '1/1/99,50,0,0,0'].join('\r\n')
+    const result = normalizeNasdaq(csv)
+    const dates = result.rows.map((r) => r.date)
+    expect(dates).toContain('2026-01-01')
+    expect(dates).toContain('1999-01-01')
+  })
+
+  test('drops a zero-valued row, recording its date, and drops a trailing all-empty line without error', () => {
+    const csv = [NASDAQ_HEADER, '1/3/20,110,0,0,0', '1/2/20,0,0,0,0', '1/1/20,100,0,0,0', ',,,,'].join('\r\n')
+    const result = normalizeNasdaq(csv)
+    expect(result.droppedDates).toEqual(['2020-01-02'])
+    expect(result.rows).toEqual([
+      { date: '2020-01-01', value: 100 },
+      { date: '2020-01-03', value: 110 },
+    ])
+  })
+
+  test('throws naming the count and the dates when more than MAX_NASDAQ_ZERO_ROWS rows are dropped', () => {
+    const zeroDates = ['1/7/20', '1/6/20', '1/5/20', '1/4/20', '1/3/20', '1/2/20']
+    expect(zeroDates.length).toBeGreaterThan(MAX_NASDAQ_ZERO_ROWS)
+    const zeroRows = zeroDates.map((d) => `${d},0,0,0,0`)
+    const csv = [NASDAQ_HEADER, ...zeroRows, '1/1/20,100,0,0,0'].join('\r\n')
+    expect(() => normalizeNasdaq(csv)).toThrowError(/dropped 6 zero-valued/)
+  })
+
+  test('throws naming the header when the header line does not match the expected five columns', () => {
+    const csv = ['Date,Value', '1/1/20,100'].join('\r\n')
+    expect(() => normalizeNasdaq(csv)).toThrowError(/header "Trade Date,Index Value,Net Change,High,Low", got "Date,Value"/)
+  })
+
+  test('throws naming the date when the reversed rows are not strictly ascending', () => {
+    // File order is not properly descending here, so after reversal the last row is out of order.
+    const csv = [NASDAQ_HEADER, '1/1/20,100,0,0,0', '1/3/20,110,0,0,0', '1/2/20,105,0,0,0'].join('\r\n')
+    expect(() => normalizeNasdaq(csv)).toThrowError(/out of ascending order.*2020-01-01/)
+  })
+
+  test('throws naming the date on a duplicate date after reversal', () => {
+    const csv = [NASDAQ_HEADER, '1/2/20,110,0,0,0', '1/2/20,105,0,0,0', '1/1/20,100,0,0,0'].join('\r\n')
+    expect(() => normalizeNasdaq(csv)).toThrowError(/duplicate date "2020-01-02"/)
+  })
+
+  describe('against the real committed file', () => {
+    test('returns 6905 rows from 1999-03-04 to 2026-08-14, dropping exactly two zero-valued dates', () => {
+      const result = normalizeNasdaq(XNDX_CSV_TEXT)
+      expect(result.rows).toHaveLength(6905)
+      expect(result.rows[0]).toEqual({ date: '1999-03-04', value: 1933.03 })
+      expect(result.rows[result.rows.length - 1]).toEqual({
+        date: '2026-08-14',
+        value: 36683.4551509005,
+      })
+      expect(result.droppedDates.slice().sort()).toEqual(['2012-10-29', '2026-08-17'])
+    })
+
+    test('is strictly ascending with no duplicate date', () => {
+      const { rows } = normalizeNasdaq(XNDX_CSV_TEXT)
+      for (let i = 1; i < rows.length; i++) {
+        expect(rows[i]!.date > rows[i - 1]!.date).toBe(true)
+      }
+    })
+
+    test('toCanonicalCsv accepts the real result unmodified', () => {
+      const { rows } = normalizeNasdaq(XNDX_CSV_TEXT)
+      expect(() => toCanonicalCsv(rows)).not.toThrow()
+    })
   })
 })
 
