@@ -3,10 +3,11 @@
  *
  * The compile pipeline as a callable function, independent of argv.
  *
- * Order: load raw inputs and their sidecars, derive the reference calendar, align each series to
- * the calendar, group series by scope, compute each asset's bytes, compute the bundle version
- * from the asset hashes, re-encode each asset with that bundle version in its header, write the
- * calendar asset, write one asset per scope, then build and write the manifest.
+ * Order: load raw inputs and their sidecars, load calendar-exceptions.json once, derive the
+ * reference calendar, resolve every series' gap policy (D-09 through D-12) exactly once, group
+ * the resolved series by scope, compute each asset's bytes, compute the bundle version from the
+ * asset hashes, re-encode each asset with that bundle version in its header, write the calendar
+ * asset, write one asset per scope, then build and write the manifest.
  *
  * Bundle version derivation is necessarily two-pass to avoid circularity: an asset's header
  * embeds the bundle version, but the bundle version is derived from the assets' own content
@@ -14,7 +15,8 @@
  * bytes; `computeBundleVersion` combines those hashes into the real bundle version. Pass 2
  * re-encodes every asset with that real bundle version. Because the underlying data bytes never
  * change between passes, this is deterministic and reproducible: recompiling unchanged raw inputs
- * always yields the same bundle version and the same final asset bytes.
+ * always yields the same bundle version and the same final asset bytes. Gap policy resolution
+ * (which determines those data bytes) is resolved once, up front, and reused by both passes.
  */
 
 import { createHash } from 'node:crypto'
@@ -22,10 +24,12 @@ import { existsSync, mkdirSync, readdirSync, rmSync } from 'node:fs'
 import path from 'node:path'
 
 import type { ReferenceCalendar } from './calendar.ts'
-import { deriveCalendar, fromDaysSinceEpoch, indexOfDate, toDaysSinceEpoch } from './calendar.ts'
+import { deriveCalendar, fromDaysSinceEpoch } from './calendar.ts'
 import { contentHashedFilename, encodeCalendarAsset, encodeSeriesAsset, writeAsset } from './encode.ts'
+import { applyGapPolicy, loadCalendarExceptions, type CalendarException, type GapPolicyResult } from './gap-policy.ts'
 import { buildManifest, computeBundleVersion, writeManifest, type ManifestSeries } from './manifest.ts'
 import { loadRawInputs, type RawSeries, type SidecarMeta } from './raw-input.ts'
+import { SeamCollector, type SeamRecord } from './seams.ts'
 import type { SeriesDescriptor, SeriesKind } from './binary-format.ts'
 
 export interface CompileResult {
@@ -67,58 +71,72 @@ function seriesKindToBinary(sidecarKind: SidecarMeta['seriesKind']): SeriesKind 
   }
 }
 
-function alignSeriesToCalendar(calendar: ReferenceCalendar, series: RawSeries): number {
-  const firstDateStr = series.dates[0]
-  if (firstDateStr === undefined) {
-    throw new Error(`compile-data: series "${series.scope}/${series.meta.seriesKind}" has no rows`)
-  }
-
-  const startIndex = indexOfDate(calendar, toDaysSinceEpoch(firstDateStr))
-  if (startIndex === -1) {
-    throw new Error(
-      `compile-data: series "${series.scope}/${series.meta.seriesKind}" first date ${firstDateStr} is not present in the reference calendar`,
-    )
-  }
-
-  for (let i = 0; i < series.dates.length; i++) {
-    const expectedDays = calendar.days[startIndex + i]
-    const actualDays = toDaysSinceEpoch(series.dates[i]!)
-    if (expectedDays === undefined || expectedDays !== actualDays) {
-      throw new Error(
-        `compile-data: series "${series.scope}/${series.meta.seriesKind}" date ${series.dates[i]} is not a contiguous run of calendar dates starting from ${firstDateStr}`,
-      )
-    }
-  }
-
-  return startIndex
+function sha256Hex10(bytes: Uint8Array): string {
+  return createHash('sha256').update(bytes).digest('hex').slice(0, 10)
 }
 
-function sortByKind(series: ReadonlyArray<RawSeries>): RawSeries[] {
-  return [...series].sort((a, b) => (a.meta.seriesKind < b.meta.seriesKind ? -1 : a.meta.seriesKind > b.meta.seriesKind ? 1 : 0))
+function newestLastDate(inputs: ReadonlyArray<RawSeries>): string {
+  let newest: string | undefined
+  for (const series of inputs) {
+    const last = series.dates[series.dates.length - 1]
+    if (last !== undefined && (newest === undefined || last > newest)) newest = last
+  }
+  if (newest === undefined) {
+    throw new Error('compile-data: no raw series loaded, nothing to derive a newest date from')
+  }
+  return newest
 }
 
-function buildScopeAssetBytes(
-  bundleVersion: string,
-  scope: string,
-  seriesList: ReadonlyArray<RawSeries>,
+interface AlignedSeries {
+  series: RawSeries
+  kind: SeriesKind
+  result: GapPolicyResult
+  seams: SeamRecord[]
+}
+
+/**
+ * Resolves every loaded series' gap policy exactly once. `applyGapPolicy` owns every fatal
+ * decision (D-09 through D-12); this function does nothing but call it once per series with a
+ * fresh SeamCollector, so each series' seams stay independent of every other series'.
+ */
+function alignAllSeries(
+  inputs: ReadonlyArray<RawSeries>,
   calendar: ReferenceCalendar,
-): Uint8Array {
-  const sorted = sortByKind(seriesList)
+  exceptions: ReadonlyArray<CalendarException>,
+  newestDate: string,
+): AlignedSeries[] {
+  return inputs.map((series) => {
+    const kind = seriesKindToBinary(series.meta.seriesKind)
+    const seams = new SeamCollector()
+    const result = applyGapPolicy(series, calendar, exceptions, seams, newestDate)
+    return { series, kind, result, seams: seams.records() }
+  })
+}
+
+function sortAlignedByKind(items: ReadonlyArray<AlignedSeries>): AlignedSeries[] {
+  return [...items].sort((a, b) => {
+    const ka = a.series.meta.seriesKind
+    const kb = b.series.meta.seriesKind
+    return ka < kb ? -1 : ka > kb ? 1 : 0
+  })
+}
+
+function buildScopeAssetBytes(bundleVersion: string, scope: string, aligned: ReadonlyArray<AlignedSeries>): Uint8Array {
+  const sorted = sortAlignedByKind(aligned)
   const descriptors: Array<Omit<SeriesDescriptor, 'dataByteOffset'>> = []
   const values: Float64Array[] = []
 
-  for (const series of sorted) {
-    const kind = seriesKindToBinary(series.meta.seriesKind)
-    const calendarStartIndex = alignSeriesToCalendar(calendar, series)
-    descriptors.push({ kind, id: `${scope}/${kind}`, calendarStartIndex, length: series.values.length })
-    values.push(Float64Array.from(series.values))
+  for (const item of sorted) {
+    descriptors.push({
+      kind: item.kind,
+      id: `${scope}/${item.kind}`,
+      calendarStartIndex: item.result.calendarStartIndex,
+      length: item.result.values.length,
+    })
+    values.push(item.result.values)
   }
 
   return encodeSeriesAsset(bundleVersion, scope, descriptors, values)
-}
-
-function sha256Hex10(bytes: Uint8Array): string {
-  return createHash('sha256').update(bytes).digest('hex').slice(0, 10)
 }
 
 /**
@@ -127,10 +145,9 @@ function sha256Hex10(bytes: Uint8Array): string {
  * emitted set, not this function.
  */
 export function compileBundle(rawDir: string, outDir: string): CompileResult {
-  const warnings: string[] = []
-
   const inputs = loadRawInputs(rawDir)
   const calendar = deriveCalendar(inputs)
+  const exceptions = loadCalendarExceptions(rawDir)
 
   const byScope = new Map<string, RawSeries[]>()
   for (const input of inputs) {
@@ -143,12 +160,39 @@ export function compileBundle(rawDir: string, outDir: string): CompileResult {
   }
   const scopes = Array.from(byScope.keys()).sort()
 
+  // D-11: an exception naming a scope no raw input provides is a stale override left behind
+  // after a symbol was removed, and must be surfaced rather than silently ignored.
+  const scopeSet = new Set(scopes)
+  for (const exception of exceptions) {
+    if (!scopeSet.has(exception.scope)) {
+      throw new Error(
+        `compile-data: raw/calendar-exceptions.json names scope "${exception.scope}" which no raw input provides; remove the stale entry or restore the input (D-11)`,
+      )
+    }
+  }
+
+  const newestDate = newestLastDate(inputs)
+  const aligned = alignAllSeries(inputs, calendar, exceptions, newestDate)
+
+  const alignedByScope = new Map<string, AlignedSeries[]>()
+  for (const item of aligned) {
+    const existing = alignedByScope.get(item.series.scope)
+    if (existing) {
+      existing.push(item)
+    } else {
+      alignedByScope.set(item.series.scope, [item])
+    }
+  }
+
+  const warnings: string[] = []
+  for (const item of aligned) warnings.push(...item.result.warnings)
+
   // Pass 1: placeholder bundle version, used only to derive a stable bundleVersion string.
   const PLACEHOLDER_BUNDLE_VERSION = ''
   const calendarBytesPass1 = encodeCalendarAsset(PLACEHOLDER_BUNDLE_VERSION, calendar.days)
   const scopeBytesPass1 = new Map<string, Uint8Array>()
   for (const scope of scopes) {
-    scopeBytesPass1.set(scope, buildScopeAssetBytes(PLACEHOLDER_BUNDLE_VERSION, scope, byScope.get(scope)!, calendar))
+    scopeBytesPass1.set(scope, buildScopeAssetBytes(PLACEHOLDER_BUNDLE_VERSION, scope, alignedByScope.get(scope)!))
   }
 
   const hashEntries: Array<{ name: string; hash: string }> = [
@@ -162,7 +206,7 @@ export function compileBundle(rawDir: string, outDir: string): CompileResult {
   const calendarBytesFinal = encodeCalendarAsset(bundleVersion, calendar.days)
   const scopeBytesFinal = new Map<string, Uint8Array>()
   for (const scope of scopes) {
-    scopeBytesFinal.set(scope, buildScopeAssetBytes(bundleVersion, scope, byScope.get(scope)!, calendar))
+    scopeBytesFinal.set(scope, buildScopeAssetBytes(bundleVersion, scope, alignedByScope.get(scope)!))
   }
 
   pruneOutputDir(outDir)
@@ -181,35 +225,33 @@ export function compileBundle(rawDir: string, outDir: string): CompileResult {
     writeAsset(outDir, filename, bytes)
     assetFiles.push(filename)
 
-    const sorted = sortByKind(byScope.get(scope)!)
+    const sorted = sortAlignedByKind(alignedByScope.get(scope)!)
     const seriesIds: string[] = []
-    for (const series of sorted) {
-      const kind = seriesKindToBinary(series.meta.seriesKind)
-      const id = `${scope}/${kind}`
+    for (const item of sorted) {
+      const id = `${scope}/${item.kind}`
       seriesIds.push(id)
-      const calendarStartIndex = alignSeriesToCalendar(calendar, series)
-      const firstDate = series.dates[0]!
-      const lastDate = series.dates[series.dates.length - 1]!
+      const firstDate = fromDaysSinceEpoch(calendar.days[item.result.calendarStartIndex]!)
+      const lastDate = fromDaysSinceEpoch(calendar.days[item.result.calendarStartIndex + item.result.values.length - 1]!)
       manifestSeries.push({
         id,
         scope,
-        kind,
+        kind: item.kind,
         asset: filename,
-        calendarStartIndex,
-        length: series.values.length,
+        calendarStartIndex: item.result.calendarStartIndex,
+        length: item.result.values.length,
         firstDate,
         lastDate,
-        units: series.meta.units,
+        units: item.series.meta.units,
         sources: [
           {
-            source: series.meta.source,
-            url: series.meta.url,
-            retrievedAt: series.meta.retrievedAt,
-            license: series.meta.license,
-            termsUrl: series.meta.termsUrl,
+            source: item.series.meta.source,
+            url: item.series.meta.url,
+            retrievedAt: item.series.meta.retrievedAt,
+            license: item.series.meta.license,
+            termsUrl: item.series.meta.termsUrl,
           },
         ],
-        seams: [],
+        seams: item.seams,
         tiers: {
           strict: { firstDate, lastDate },
           extended: { firstDate, lastDate },
@@ -236,7 +278,7 @@ export function compileBundle(rawDir: string, outDir: string): CompileResult {
     },
     assets: manifestAssets,
     series: manifestSeries,
-    calendarExceptions: [],
+    calendarExceptions: exceptions,
   })
   const manifestFile = writeManifest(outDir, manifest)
 

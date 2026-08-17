@@ -79,3 +79,11 @@ export function indexOfDate(calendar: ReferenceCalendar, days: number): number {
   }
   return -1
 }
+
+/**
+ * Fast membership test over the reference calendar, used by the extra-bar check (D-10). O(log n)
+ * via the same binary search as `indexOfDate`, without changing `deriveCalendar`'s selection rule.
+ */
+export function hasDate(calendar: ReferenceCalendar, days: number): boolean {
+  return indexOfDate(calendar, days) !== -1
+}
