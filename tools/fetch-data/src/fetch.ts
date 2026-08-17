@@ -1,12 +1,13 @@
 /**
  * tools/fetch-data/src/fetch.ts
  *
- * The fetch CLI: for FRED sources, pulls over https and normalizes. For Stooq and Shiller
- * sources, reads a manually-placed vendor file from `raw/manual/<stem>.csv` and normalizes it
- * exactly as if it had been fetched (Route C for Stooq, Route B for Shiller — see sources.ts's
- * header comment). Writes `raw/<stem>.csv` plus `raw/<stem>.meta.json`, then runs a coverage pass
- * that halts on any series falling short of its declared expected first date, or on a
- * total-return stem whose data is byte-identical to its price-return sibling.
+ * The fetch CLI. Resolves each declared source per its `route` (D-27): `'live'` sources (FRED)
+ * are always fetched over https with no fallback; `'live-with-manual-fallback'` sources (Yahoo)
+ * attempt a live fetch and fall back to a human-supplied file under `raw/manual/` on any failure;
+ * `'manual-only'` sources (Shiller) always read the manual file. Writes `raw/<stem>.csv` plus
+ * `raw/<stem>.meta.json` for every series that normalized successfully, then runs a coverage pass
+ * that halts on a series falling short of its declared expected first date or a manually-supplied
+ * file whose newest observation has gone stale (D-27).
  *
  * Transport rules (T-02-12, T-02-14): every fetched url must be https; a redirect to a non-https
  * location is rejected before any body is read; a non-200 status throws naming the url and the
@@ -17,20 +18,26 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 
-import { RATE_SOURCES, SOURCES, type SourceSpec } from './sources.ts'
+import { MANUAL_DIR_NAME, RATE_SOURCES, SOURCES, type SourceSpec } from './sources.ts'
 import {
+  MAX_RECONSTRUCTION_DRIFT,
+  measureReconstructionDrift,
   normalizeFred,
   normalizeShillerDividendYield,
-  normalizeStooq,
   parseShillerCsv,
+  parseYahooChart,
+  reconstructYahooTotalReturn,
+  shillerRawNewestDate,
   toCanonicalCsv,
   type CanonicalRow,
+  type ReconstructionDrift,
+  type YahooChart,
 } from './normalize.ts'
 import type { SidecarMeta } from '../../bundle-compiler/src/raw-input.ts'
 
 const REPO_ROOT = path.resolve(import.meta.dirname, '..', '..', '..')
 const RAW_DIR = path.join(REPO_ROOT, 'raw')
-const MANUAL_DIR = path.join(RAW_DIR, 'manual')
+const MANUAL_DIR = path.join(RAW_DIR, MANUAL_DIR_NAME)
 
 /** Generous above the largest single expected series (~25,000 daily bars of ASCII text is well
  *  under 1MB); sized to catch a hostile or misconfigured endpoint, not to bound realistic data. */
@@ -110,9 +117,161 @@ function buildSidecar(spec: SourceSpec, retrievedAt: string): SidecarMeta {
   }
 }
 
+/** Thrown by `resolveSource` when a manual-route spec's declared file is absent, so the CLI's
+ *  dispatcher can route it through the existing missing-source report rather than the
+ *  normalization-error report. */
+export class ManualSourceMissingError extends Error {
+  readonly manualPath: string
+
+  constructor(manualPath: string) {
+    super(`fetch-data: manual source missing at ${manualPath}`)
+    this.name = 'ManualSourceMissingError'
+    this.manualPath = manualPath
+  }
+}
+
+export interface SourceResolution {
+  text: string
+  route: 'live' | 'manual'
+}
+
+/**
+ * Resolves a source's raw text per its declared `route` (D-27).
+ *   - `'live'`: fetches over https. A failure is a hard error with no fallback.
+ *   - `'live-with-manual-fallback'`: attempts the fetch; on any failure, reads
+ *     `raw/manual/<manualFile>` instead. Throws `ManualSourceMissingError` if that file is also
+ *     absent.
+ *   - `'manual-only'`: always reads `raw/manual/<manualFile>`. Throws
+ *     `ManualSourceMissingError` if it is absent.
+ */
+export async function resolveSource(spec: SourceSpec): Promise<SourceResolution> {
+  if (spec.route === 'live') {
+    return { text: await fetchText(spec.url), route: 'live' }
+  }
+
+  const manualPath = spec.manualFile ? path.join(MANUAL_DIR, spec.manualFile) : undefined
+
+  if (spec.route === 'live-with-manual-fallback') {
+    try {
+      return { text: await fetchText(spec.url), route: 'live' }
+    } catch {
+      if (!manualPath || !existsSync(manualPath)) {
+        throw new ManualSourceMissingError(manualPath ?? '(no manualFile declared)')
+      }
+      return { text: readFileSync(manualPath, 'utf8'), route: 'manual' }
+    }
+  }
+
+  // 'manual-only'
+  if (!manualPath || !existsSync(manualPath)) {
+    throw new ManualSourceMissingError(manualPath ?? '(no manualFile declared)')
+  }
+  return { text: readFileSync(manualPath, 'utf8'), route: 'manual' }
+}
+
+export interface DriftCheckResult {
+  drift: ReconstructionDrift
+  /** A halt message naming the stem, the measured drift and the date it occurred on, or null when
+   *  the measured drift is below `MAX_RECONSTRUCTION_DRIFT`. */
+  halt: string | null
+}
+
+/** Percentage string to 5 decimal places, matching the precision the D-24/D-25 derivation table
+ *  in the plan was measured and recorded at. */
+function formatDriftPercent(drift: ReconstructionDrift): string {
+  return `${(drift.maxRelDeviation * 100).toFixed(5)}%`
+}
+
+/**
+ * The D-25 reconstruction gate for one reconstructed-total-return stem: recomputes drift between
+ * `rows` (the stored reconstruction) and `chart`'s own adjusted-close growth path, and returns a
+ * halt message naming the stem, the measured drift and the date when the drift is at or above
+ * `MAX_RECONSTRUCTION_DRIFT`.
+ */
+export function checkReconstructionDrift(
+  spec: SourceSpec,
+  chart: YahooChart,
+  rows: readonly CanonicalRow[],
+): DriftCheckResult {
+  const drift = measureReconstructionDrift(chart, rows)
+  if (drift.maxRelDeviation >= MAX_RECONSTRUCTION_DRIFT) {
+    return {
+      drift,
+      halt: `${spec.stem}: reconstruction drift ${formatDriftPercent(drift)} on ${drift.maxRelDeviationDate} is at or above the ${(MAX_RECONSTRUCTION_DRIFT * 100).toFixed(3)}% tolerance`,
+    }
+  }
+  return { drift, halt: null }
+}
+
+function daysBetween(isoDate: string, today: Date): number {
+  const parts = isoDate.split('-').map(Number)
+  const dateUtc = Date.UTC(parts[0]!, parts[1]! - 1, parts[2]!)
+  const todayUtc = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate())
+  return Math.round((todayUtc - dateUtc) / (24 * 60 * 60 * 1000))
+}
+
+/**
+ * Measures the age of the newest observation in `rows` against `spec.maxStalenessDays`, using
+ * calendar days computed from the data itself, never file modification time: an mtime does not
+ * survive a git clone, so an mtime-based gate would call every fresh clone pristine and defeat the
+ * check for exactly the reader D-01 exists to serve. Returns a halt message naming the stem, the
+ * newest observation's date and its age when the age exceeds the threshold; returns null when
+ * within the threshold or when `spec.maxStalenessDays` is not declared (a `route: 'live'` spec).
+ */
+export function checkManualStaleness(spec: SourceSpec, rows: readonly CanonicalRow[], today: Date): string | null {
+  if (spec.maxStalenessDays === undefined) return null
+  const newest = rows[rows.length - 1]?.date
+  if (!newest) return null
+  const ageDays = daysBetween(newest, today)
+  if (ageDays > spec.maxStalenessDays) {
+    return `${spec.stem}: manual source is stale, newest observation ${newest} is ${ageDays} day(s) old, exceeds the declared ${spec.maxStalenessDays}-day threshold`
+  }
+  return null
+}
+
+interface NormalizedSource {
+  rows: CanonicalRow[]
+  chart?: YahooChart
+  /** The newest observation's date for D-27 purposes (staleness check, sidecar `retrievedAt`),
+   *  when it differs from `rows`' own last date. Only set for Shiller: an unpublished trailing
+   *  dividend cell means `rows` stops earlier than the raw file's newest row, and that lag is not
+   *  staleness (D-12's ragged right edge is expected), so D-27 must be measured against the raw
+   *  file's own newest row, not the series' own last committed value. */
+  newestObservationDate?: string
+}
+
+function normalizeBySpec(spec: SourceSpec, text: string): NormalizedSource {
+  switch (spec.vendor) {
+    case 'yahoo': {
+      const chart = parseYahooChart(text)
+      const rows =
+        spec.derivation === 'reconstructed-total-return'
+          ? reconstructYahooTotalReturn(chart)
+          : chart.dates.map((date, i) => ({ date, value: chart.closes[i]! }))
+      return { rows, chart }
+    }
+    case 'fred':
+      return { rows: normalizeFred(text) }
+    case 'shiller':
+      return {
+        rows: normalizeShillerDividendYield(parseShillerCsv(text)),
+        newestObservationDate: shillerRawNewestDate(text) ?? undefined,
+      }
+    default:
+      throw new Error(`fetch-data: unexpected vendor "${spec.vendor}" for "${spec.stem}"`)
+  }
+}
+
 interface FetchResult {
   spec: SourceSpec
   rows: CanonicalRow[]
+  route: 'live' | 'manual'
+  /** Present only for a reconstructed-total-return stem, carried forward for the D-25 drift gate
+   *  (added in plan 02-06 Task 2). */
+  chart?: YahooChart
+  /** See `NormalizedSource.newestObservationDate`. Falls back to `rows`' own last date when
+   *  absent (every vendor except Shiller). */
+  newestObservationDate?: string
 }
 
 interface MissingManualSource {
@@ -120,39 +279,27 @@ interface MissingManualSource {
   manualPath: string
 }
 
-async function processFredSource(spec: SourceSpec): Promise<FetchResult> {
-  const text = await fetchText(spec.url)
-  const rows = normalizeFred(text)
-  return { spec, rows }
-}
-
-function processManualSource(spec: SourceSpec): FetchResult | MissingManualSource {
-  const manualPath = path.join(MANUAL_DIR, `${spec.stem}.csv`)
-  if (!existsSync(manualPath)) {
-    return { spec, manualPath }
-  }
-  const text = readFileSync(manualPath, 'utf8')
-  if (spec.vendor === 'stooq') {
-    return { spec, rows: normalizeStooq(text) }
-  }
-  if (spec.vendor === 'shiller') {
-    const shillerRows = parseShillerCsv(text)
-    return { spec, rows: normalizeShillerDividendYield(shillerRows) }
-  }
-  throw new Error(`fetch-data: unexpected manual vendor "${spec.vendor}" for "${spec.stem}"`)
-}
-
 function isMissing(result: FetchResult | MissingManualSource): result is MissingManualSource {
   return !('rows' in result)
 }
 
-function rowsSignature(rows: CanonicalRow[]): string {
-  return rows.map((r) => `${r.date},${r.value}`).join('\n')
+async function processSource(spec: SourceSpec): Promise<FetchResult | MissingManualSource> {
+  let resolution: SourceResolution
+  try {
+    resolution = await resolveSource(spec)
+  } catch (err) {
+    if (err instanceof ManualSourceMissingError) {
+      return { spec, manualPath: err.manualPath }
+    }
+    throw err
+  }
+  const { rows, chart, newestObservationDate } = normalizeBySpec(spec, resolution.text)
+  return { spec, rows, route: resolution.route, chart, newestObservationDate }
 }
 
 /** Compares an actual first date against `expectedFirstDate`, which is either a bare "YYYY" (year
  *  match only) or a full "YYYY-MM-DD"/"YYYY-MM". Returns a halt message, or null when satisfied
- *  or when the source has no declared expectation (RESEARCH.md open question 2). */
+ *  or when the source has no declared expectation. */
 function checkExpectedFirstDate(spec: SourceSpec, actualFirstDate: string): string | null {
   if (!spec.expectedFirstDate) return null
   const expected = spec.expectedFirstDate
@@ -169,58 +316,61 @@ function checkExpectedFirstDate(spec: SourceSpec, actualFirstDate: string): stri
   return null
 }
 
-function checkTotalReturnDistinct(results: Map<string, FetchResult>): string[] {
-  const halts: string[] = []
-  for (const result of results.values()) {
-    if (result.spec.seriesKind !== 'total-return') continue
-    const prStem = result.spec.stem.replace(/-TR$/, '-PR')
-    const prResult = results.get(prStem)
-    if (!prResult) continue
-    if (rowsSignature(result.rows) === rowsSignature(prResult.rows)) {
-      halts.push(
-        `${result.spec.stem}: total-return data is byte-identical to ${prStem}'s price-return data; ` +
-          `no distinct total-return series was obtained from the locked source stack (RESEARCH.md assumption A2)`,
-      )
-    }
-  }
-  return halts
-}
-
-function printCoverageTable(results: FetchResult[]): void {
+function printCoverageTable(results: FetchResult[], driftByStem: ReadonlyMap<string, ReconstructionDrift>): void {
   process.stdout.write(
-    '\ncompile-data coverage: series | source | vendor column | first date | last date | rows\n',
+    '\nfetch-data coverage: series | source | vendor column | route | first date | last date | rows | drift\n',
   )
-  for (const { spec, rows } of results) {
+  let liveCount = 0
+  let manualCount = 0
+  for (const { spec, rows, route } of results) {
     const first = rows[0]?.date ?? '(empty)'
     const last = rows[rows.length - 1]?.date ?? '(empty)'
+    const drift = driftByStem.get(spec.stem)
+    const driftText = drift ? formatDriftPercent(drift) : '-'
     process.stdout.write(
-      `  ${spec.stem} | ${spec.vendorName} | ${spec.vendorColumn} | ${first} | ${last} | ${rows.length}\n`,
+      `  ${spec.stem} | ${spec.vendorName} | ${spec.vendorColumn} | ${route} | ${first} | ${last} | ${rows.length} | ${driftText}\n`,
     )
+    if (route === 'live') liveCount++
+    else manualCount++
   }
+  process.stdout.write(`fetch-data: ${liveCount} series live, ${manualCount} series manual\n`)
 }
 
 async function main(): Promise<void> {
-  const retrievedAt = new Date().toISOString().slice(0, 10)
+  const runDate = new Date().toISOString().slice(0, 10)
   const results: FetchResult[] = []
   const missing: MissingManualSource[] = []
   const errors: string[] = []
 
-  for (const spec of RATE_SOURCES) {
+  for (const spec of [...RATE_SOURCES, ...SOURCES]) {
     try {
-      results.push(await processFredSource(spec))
-    } catch (err) {
-      errors.push(`${spec.stem}: ${(err as Error).message}`)
-    }
-  }
-
-  for (const spec of SOURCES) {
-    try {
-      const result = processManualSource(spec)
+      const result = await processSource(spec)
       if (isMissing(result)) {
         missing.push(result)
       } else {
         results.push(result)
       }
+    } catch (err) {
+      errors.push(`${spec.stem}: ${(err as Error).message}`)
+    }
+  }
+
+  // Write every series that normalized successfully, so a partial failure elsewhere still lands
+  // the series that are available rather than withholding a partial-but-real set. A write-time
+  // failure (e.g. toCanonicalCsv's ascending-order check) is caught per series rather than left
+  // to crash the process, so one bad series still reports cleanly instead of an unhandled
+  // exception silently withholding every series after it in iteration order.
+  const written: FetchResult[] = []
+  for (const result of results) {
+    const { spec, rows, route, newestObservationDate } = result
+    try {
+      const csvPath = path.join(RAW_DIR, `${spec.stem}.csv`)
+      const sidecarPath = path.join(RAW_DIR, `${spec.stem}.meta.json`)
+      const retrievedAt =
+        route === 'live' ? runDate : (newestObservationDate ?? rows[rows.length - 1]?.date ?? runDate)
+      writeFileAtomic(csvPath, toCanonicalCsv(rows))
+      writeFileAtomic(sidecarPath, `${JSON.stringify(buildSidecar(spec, retrievedAt), null, 2)}\n`)
+      written.push(result)
     } catch (err) {
       errors.push(`${spec.stem}: ${(err as Error).message}`)
     }
@@ -235,24 +385,12 @@ async function main(): Promise<void> {
     return
   }
 
-  // Write every source that produced data, so a partial manual set still lands real,
-  // already-available series (e.g. the FRED rate inputs) even while Stooq/Shiller await a human.
-  for (const { spec, rows } of results) {
-    const csvPath = path.join(RAW_DIR, `${spec.stem}.csv`)
-    const sidecarPath = path.join(RAW_DIR, `${spec.stem}.meta.json`)
-    writeFileAtomic(csvPath, toCanonicalCsv(rows))
-    writeFileAtomic(sidecarPath, `${JSON.stringify(buildSidecar(spec, retrievedAt), null, 2)}\n`)
-  }
-
   if (missing.length > 0) {
     process.stderr.write(
       `\nfetch-data: ${missing.length} source(s) need a manually-downloaded file before this run can complete:\n\n`,
     )
     for (const { spec, manualPath } of missing) {
-      const guessNote = spec.totalReturnGuess
-        ? ' [UNVERIFIED total-return symbol — see MANUAL-DOWNLOAD.md]'
-        : ''
-      process.stderr.write(`  ${spec.stem}${guessNote}\n`)
+      process.stderr.write(`  ${spec.stem}\n`)
       process.stderr.write(`    download: ${spec.url}\n`)
       process.stderr.write(`    save to:  ${path.relative(REPO_ROOT, manualPath)}\n\n`)
     }
@@ -261,11 +399,35 @@ async function main(): Promise<void> {
     return
   }
 
-  // Coverage pass only runs once every source produced data (T-02-16: no partial, silent commit).
-  printCoverageTable(results)
+  // D-25 reconstruction gate: recompute drift for every reconstructed total-return stem against
+  // its own parsed chart, before the coverage table is judged. Computed for every such stem
+  // regardless of outcome, so a value creeping toward the tolerance is visible in the coverage
+  // output even on a run that does not halt.
+  const driftByStem = new Map<string, ReconstructionDrift>()
+  const driftHalts: string[] = []
+  for (const result of results) {
+    if (result.spec.derivation !== 'reconstructed-total-return' || !result.chart) continue
+    const { drift, halt } = checkReconstructionDrift(result.spec, result.chart, result.rows)
+    driftByStem.set(result.spec.stem, drift)
+    if (halt) driftHalts.push(halt)
+  }
 
-  const resultsByStem = new Map(results.map((r) => [r.spec.stem, r]))
-  const halts: string[] = []
+  // D-27 staleness gate: every series resolved through the manual route, checked against its
+  // declared threshold, measured from the newest observation in the data rather than file mtime.
+  // Uses `newestObservationDate` when the normalizer supplied one (Shiller), since that is the
+  // raw file's own newest row rather than the last row that survived a vendor-specific drop rule.
+  const staleHalts: string[] = []
+  for (const { spec, rows, route, newestObservationDate } of results) {
+    if (route !== 'manual') continue
+    const stalenessRows = newestObservationDate ? [{ date: newestObservationDate, value: 0 }] : rows
+    const halt = checkManualStaleness(spec, stalenessRows, new Date())
+    if (halt) staleHalts.push(halt)
+  }
+
+  // Coverage pass only runs once every source produced data (no partial, silent commit).
+  printCoverageTable(results, driftByStem)
+
+  const halts: string[] = [...driftHalts, ...staleHalts]
   for (const { spec, rows } of results) {
     const first = rows[0]?.date
     if (first) {
@@ -273,7 +435,6 @@ async function main(): Promise<void> {
       if (halt) halts.push(halt)
     }
   }
-  halts.push(...checkTotalReturnDistinct(resultsByStem))
 
   if (halts.length > 0) {
     process.stderr.write('\nfetch-data: coverage check failed:\n')

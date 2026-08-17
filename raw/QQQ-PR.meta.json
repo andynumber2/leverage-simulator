@@ -1,0 +1,10 @@
+{
+  "source": "Yahoo Finance",
+  "url": "https://query1.finance.yahoo.com/v8/finance/chart/QQQ?period1=0&period2=1787011200&interval=1d&events=div%2Csplit",
+  "retrievedAt": "2026-08-17",
+  "seriesKind": "price",
+  "license": "Personal-use terms; chart endpoint is undocumented with no published redistribution grant (accepted risk, D-05/D-06)",
+  "termsUrl": "https://legal.yahoo.com/us/en/yahoo/terms/otos/index.html",
+  "scope": "QQQ",
+  "units": "index-level"
+}

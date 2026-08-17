@@ -1,26 +1,49 @@
 /**
  * tools/fetch-data/src/sources.ts
  *
- * The locked per-series source resolution table (D-04), verified live where the vendor allows it.
+ * The locked per-series source resolution table (D-04), rewritten 2026-08-17 around the
+ * Source Stack Reversal.
  *
- * ROUTE C / ROUTE B (recorded 2026-08-17, superseding this plan's original live-Stooq-fetch
- * design): Stooq serves a JavaScript proof-of-work bot challenge to every plain-HTTPS request, so
- * no response body from Stooq is real data over a scripted fetch. Every Stooq-sourced entry below
- * therefore carries `manual: true` — a human downloads the vendor's own CSV through a real browser
- * and places it at `raw/manual/<stem>.csv`; `fetch.ts` reads that file and normalizes it through
- * `normalizeStooq` exactly as if it had been fetched. `README.md`/`MANUAL-DOWNLOAD.md` record the
- * refresh procedure. This is Route C, distinct from Route B (a one-time manual spreadsheet
- * conversion, applied here to Shiller because a live read-only probe of econ.yale.edu from this
- * environment failed to connect: `curl -L https://www.econ.yale.edu/~shiller/data/ie_data.xls`
- * returned curl exit 7 / connection failure, confirmed this session).
+ * WHAT CHANGED AND WHY (D-28): the previous table named a different vendor for daily equity and
+ * ETF prices. A real pull disproved every one of its claims: its S&P symbol no longer existed,
+ * its Nasdaq-100 file started forty-seven years before the Nasdaq-100 launched, and its "Close"
+ * column was serving a dividend-adjusted series under a price label: every "-PR" file would have
+ * been total return in disguise, and the byte-identity halt this script used to run would never
+ * have fired, because the two files were never going to be identical. Those URLs and symbol
+ * conventions came from a single MEDIUM-confidence web-search snippet and unverified recall,
+ * never from a successful fetch. The lesson: a vendor claim is not established until a real pull
+ * confirms it, and this table now carries only claims verified live against the vendor. See
+ * `.planning/phases/02-compiled-data-bundle/02-CONTEXT.md`'s "Source Stack Reversal" section for
+ * the full account, including the dropped vendor's name.
  *
- * FRED entries are fetched live by this script (`manual: false`): a direct read-only pull against
- * `fredgraph.csv` succeeded this session for every rate series below (see normalize.ts's header
- * comment for the exact confirmed CSV shape, which corrects two errors in 02-RESEARCH.md's Code
- * Examples).
+ * The replacement is four vendors, each the narrowest source that actually carries what it is
+ * asked for:
+ *   - Yahoo Finance (query1.finance.yahoo.com/v8/finance/chart/<symbol>, JSON) for daily equity
+ *     and ETF prices plus their dividend and split events. Fetched live where possible
+ *     (`route: 'live-with-manual-fallback'`); falls back to a human-supplied file under
+ *     `raw/manual/` when the live fetch fails, which it currently does from every shared-IP
+ *     sandbox this script has been run from (HTTP 429 on `query1`/`query2`, not a malformed
+ *     request, see D-27).
+ *   - Nasdaq (a distinct vendor, not covered by this plan, see plan 02-07) for the Nasdaq-100
+ *     Total Return index.
+ *   - FRED for the short-rate series (`route: 'live'`, no fallback, exactly as before).
+ *   - Shiller for the pre-1988 monthly S&P dividend input (`route: 'manual-only'`, a one-time
+ *     spreadsheet-to-CSV conversion by a human, unchanged in mechanism from before this reversal).
  */
 
-export type SeriesVendor = 'stooq' | 'fred' | 'shiller'
+export type SeriesVendor = 'yahoo' | 'nasdaq' | 'fred' | 'shiller'
+
+/**
+ * How a series' bytes reach this script.
+ *   - 'live': fetched over https on every run, no fallback. A failure is a hard error.
+ *   - 'live-with-manual-fallback': attempt a live fetch; on any failure (including a non-200
+ *     status), read the declared `manualFile` under `raw/manual/` instead.
+ *   - 'manual-only': always read `manualFile`; this script never attempts to fetch it.
+ */
+export type FetchRoute = 'live' | 'live-with-manual-fallback' | 'manual-only'
+
+/** The directory name (not path) under `raw/` that manually-supplied vendor files live in. */
+export const MANUAL_DIR_NAME = 'manual'
 
 export interface SourceSpec {
   /** Raw file stem, e.g. "SPX-PR". The compiler derives `scope` as the stem's segment up to the
@@ -32,69 +55,84 @@ export interface SourceSpec {
   units: 'index-level' | 'percent-annualized' | 'ratio'
   vendor: SeriesVendor
   vendorName: string
-  /** Always https. For a `manual: true` entry this is the URL a human visits, not a URL this
+  /** Always https. For a `manual-only` entry this is the page a human visits, not a URL this
    *  script fetches. */
   url: string
   vendorColumn: string
-  /** "YYYY" or "YYYY-MM-DD". Omitted where 02-RESEARCH.md's open question 2 left the claim
-   *  genuinely unresolved (Stooq's own depth was never confirmed by a direct pull) — the coverage
-   *  table still reports what was actually returned, but no expected-vs-actual halt applies. */
+  /** "YYYY", "YYYY-MM" or "YYYY-MM-DD". */
   expectedFirstDate?: string
   license: string
   termsUrl: string
-  /** true when this script does not fetch the series itself; a human places the vendor's own file
-   *  at `raw/manual/<stem>.csv` before a run can produce this series (Route C: Stooq; Route B:
-   *  Shiller). false only for the FRED entries in RATE_SOURCES. */
-  manual: boolean
-  /** true when the declared vendor symbol for a total-return stem is an unverified guess
-   *  (RESEARCH.md assumption A2): Stooq's column set was confirmed only as
-   *  Date,Open,High,Low,Close,Volume, with no adjusted-close/total-return column documented for
-   *  any symbol in this universe. `fetch.ts`'s coverage pass halts naming the symbol if the
-   *  downloaded "total-return" file turns out byte-identical to its price-return sibling. */
-  totalReturnGuess?: boolean
+  route: FetchRoute
+  /** Filename under `raw/manual/` this spec falls back to or reads from. Absent for
+   *  `route: 'live'`. */
+  manualFile?: string
+  /** Calendar-day age of the newest observation past which the run fails. Absent for
+   *  `route: 'live'`. */
+  maxStalenessDays?: number
+  /** 'as-sourced': the vendor's own value is stored unchanged. 'reconstructed-total-return': this
+   *  script derives the stored value from `close` plus dividend events (D-24) rather than storing
+   *  the vendor's back-adjusted column, and the D-25 reconstruction-drift gate applies to it. */
+  derivation: 'as-sourced' | 'reconstructed-total-return'
+  /** The Yahoo chart API's `period1` query value. Only meaningful for `vendor: 'yahoo'` entries. */
+  vendorPeriod1?: number
 }
 
-const STOOQ_VENDOR_NAME = 'Stooq'
-const STOOQ_LICENSE = 'Permissive for personal use; redistribution terms unclear (accepted risk, D-05/D-06)'
-const STOOQ_TERMS_URL = 'https://stooq.com/legal/'
+/** Personal-use terms; the chart endpoint this script calls is undocumented and carries no
+ *  published redistribution grant. Knowingly accepted risk (D-05/D-06), same posture as the
+ *  dropped equity vendor's risk this table previously accepted and superseded. */
+const YAHOO_LICENSE =
+  'Personal-use terms; chart endpoint is undocumented with no published redistribution grant (accepted risk, D-05/D-06)'
+/** Resolved 200 (no redirect) via a read-only header request on 2026-08-17. */
+const YAHOO_TERMS_URL = 'https://legal.yahoo.com/us/en/yahoo/terms/otos/index.html'
+const YAHOO_VENDOR_NAME = 'Yahoo Finance'
 
-function stooqUrl(vendorSymbol: string): string {
-  return `https://stooq.com/q/d/l/?s=${vendorSymbol}&i=d`
+/** period1 = -2208988800 (1900-01-01 UTC) is the wide value confirmed to work for `^GSPC`
+ *  (D-17's pre-1928 depth) and confirmed rejected by the vendor for a post-1970 symbol with an
+ *  explicit "Only 100 years worth of day granularity data are allowed" error. Every other symbol
+ *  in this table starts after 1970 and uses `YAHOO_PERIOD1_DEFAULT` instead. */
+const YAHOO_PERIOD1_WIDE = -2208988800
+const YAHOO_PERIOD1_DEFAULT = 0
+
+/** Every daily manually-supplied Yahoo source. The longest legitimate gap between consecutive US
+ *  equity trading bars is four calendar days (Friday close, Monday-holiday reopen Tuesday); ten
+ *  days is two and a half times that. */
+const MANUAL_DAILY_STALENESS_DAYS = 10
+
+/** `period2` for a fresh request: the start of tomorrow (UTC). Always covers every bar through
+ *  today's close (the latest a US market session can end is well before UTC midnight), and is
+ *  stable across every run within the same UTC calendar day, so refetching the same day twice
+ *  produces a byte-identical url instead of a spurious per-second diff in the committed sidecar.
+ *  Still satisfies "current unix time computed at request time, never a far-future sentinel": it
+ *  is built from `Date.now()` on every call and is at most 24 hours ahead of it. */
+function nextUtcMidnightSeconds(): number {
+  const now = new Date()
+  return Math.floor(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1) / 1000)
 }
 
-interface StooqSymbolEntry {
+function yahooUrl(vendorSymbol: string, vendorPeriod1: number): string {
+  return `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(vendorSymbol)}?period1=${vendorPeriod1}&period2=${nextUtcMidnightSeconds()}&interval=1d&events=div%2Csplit`
+}
+
+/**
+ * One Yahoo-sourced price-return series plus its reconstructed total-return sibling (D-24). Both
+ * series come out of the same chart payload, so they share one `manualFile`.
+ */
+function buildYahooFundPair(entry: {
   scope: string
-  vendorSymbol: string
-  expectedFirstDate?: string
-}
-
-/** One row per bundled symbol (D-07). Index symbols use Stooq's "^" convention; US-listed
- *  stocks/ETFs use the lowercase-ticker ".us" convention. Neither convention was confirmed live
- *  this session (Route C: no programmatic Stooq request was attempted, per the user's explicit
- *  decision) — these are the standard public Stooq conventions, to be confirmed by whoever
- *  performs the manual download. */
-const STOOQ_SYMBOLS: StooqSymbolEntry[] = [
-  { scope: 'SPX', vendorSymbol: '^spx', expectedFirstDate: '1928' },
-  { scope: 'NDX', vendorSymbol: '^ndx' },
-  { scope: 'QQQ', vendorSymbol: 'qqq.us', expectedFirstDate: '1999' },
-  { scope: 'UPRO', vendorSymbol: 'upro.us', expectedFirstDate: '2009' },
-  { scope: 'TQQQ', vendorSymbol: 'tqqq.us', expectedFirstDate: '2010' },
-  { scope: 'SSO', vendorSymbol: 'sso.us', expectedFirstDate: '2006' },
-  { scope: 'QLD', vendorSymbol: 'qld.us', expectedFirstDate: '2006' },
-  { scope: 'VTI', vendorSymbol: 'vti.us', expectedFirstDate: '2001' },
-  { scope: 'EFA', vendorSymbol: 'efa.us', expectedFirstDate: '2001' },
-  { scope: 'EEM', vendorSymbol: 'eem.us', expectedFirstDate: '2003' },
-  { scope: 'TLT', vendorSymbol: 'tlt.us', expectedFirstDate: '2002' },
-]
-
-function buildStooqPair(entry: StooqSymbolEntry): SourceSpec[] {
+  yahooSymbol: string
+  manualFile: string
+  expectedFirstDate: string
+}): SourceSpec[] {
   const shared = {
-    vendor: 'stooq' as const,
-    vendorName: STOOQ_VENDOR_NAME,
-    vendorColumn: 'Close',
-    license: STOOQ_LICENSE,
-    termsUrl: STOOQ_TERMS_URL,
-    manual: true as const,
+    vendor: 'yahoo' as const,
+    vendorName: YAHOO_VENDOR_NAME,
+    license: YAHOO_LICENSE,
+    termsUrl: YAHOO_TERMS_URL,
+    route: 'live-with-manual-fallback' as const,
+    manualFile: entry.manualFile,
+    maxStalenessDays: MANUAL_DAILY_STALENESS_DAYS,
+    vendorPeriod1: YAHOO_PERIOD1_DEFAULT,
   }
   return [
     {
@@ -103,8 +141,10 @@ function buildStooqPair(entry: StooqSymbolEntry): SourceSpec[] {
       scope: entry.scope,
       seriesKind: 'price',
       units: 'index-level',
-      url: stooqUrl(entry.vendorSymbol),
+      url: yahooUrl(entry.yahooSymbol, YAHOO_PERIOD1_DEFAULT),
+      vendorColumn: 'close',
       expectedFirstDate: entry.expectedFirstDate,
+      derivation: 'as-sourced',
     },
     {
       ...shared,
@@ -112,19 +152,97 @@ function buildStooqPair(entry: StooqSymbolEntry): SourceSpec[] {
       scope: entry.scope,
       seriesKind: 'total-return',
       units: 'index-level',
-      // UNVERIFIED (RESEARCH.md assumption A2): reuses the price-return vendor symbol because no
-      // distinct Stooq total-return symbol is confirmed for any bundled instrument. This is
-      // expected to trip fetch.ts's same-content halt until a real TR symbol is found (or the
-      // shortfall is accepted as a D-04 Key Decision). See MANUAL-DOWNLOAD.md.
-      url: stooqUrl(entry.vendorSymbol),
+      url: yahooUrl(entry.yahooSymbol, YAHOO_PERIOD1_DEFAULT),
+      vendorColumn: 'close + dividend events (reconstructed forward per D-24, not adjclose)',
       expectedFirstDate: entry.expectedFirstDate,
-      totalReturnGuess: true,
+      derivation: 'reconstructed-total-return',
     },
   ]
 }
 
+/** The nine exchange-traded funds that get a real Yahoo price-return series plus a reconstructed
+ *  total-return series (D-24). Each fund's own ticker doubles as its Yahoo symbol. */
+const YAHOO_FUNDS: { scope: string; yahooSymbol: string; manualFile: string; expectedFirstDate: string }[] = [
+  { scope: 'QQQ', yahooSymbol: 'QQQ', manualFile: 'QQQ.json', expectedFirstDate: '1999-03-10' },
+  { scope: 'UPRO', yahooSymbol: 'UPRO', manualFile: 'UPRO.json', expectedFirstDate: '2009-06-25' },
+  { scope: 'TQQQ', yahooSymbol: 'TQQQ', manualFile: 'TQQQ.json', expectedFirstDate: '2010-02-11' },
+  { scope: 'SSO', yahooSymbol: 'SSO', manualFile: 'SSO.json', expectedFirstDate: '2006-06-21' },
+  { scope: 'QLD', yahooSymbol: 'QLD', manualFile: 'QLD.json', expectedFirstDate: '2006-06-21' },
+  { scope: 'VTI', yahooSymbol: 'VTI', manualFile: 'VTI.json', expectedFirstDate: '2001-06-15' },
+  { scope: 'EFA', yahooSymbol: 'EFA', manualFile: 'EFA.json', expectedFirstDate: '2001-08-27' },
+  { scope: 'EEM', yahooSymbol: 'EEM', manualFile: 'EEM.json', expectedFirstDate: '2003-04-14' },
+  { scope: 'TLT', yahooSymbol: 'TLT', manualFile: 'TLT.json', expectedFirstDate: '2002-07-30' },
+]
+
+/** The S&P 500 index (`^GSPC`) reaches 1927-12-30 (D-17's pre-1928 depth), so its price-return
+ *  spec uses the wide `period1`. Its real total return comes from the S&P 500 Total Return index
+ *  (`^SP500TR`), not a reconstruction: an index pays no dividends itself, so `^GSPC`'s own
+ *  `adjclose` carries no dividend information to reconstruct from (D-15). */
+const SPX_PR: SourceSpec = {
+  stem: 'SPX-PR',
+  scope: 'SPX',
+  seriesKind: 'price',
+  units: 'index-level',
+  vendor: 'yahoo',
+  vendorName: YAHOO_VENDOR_NAME,
+  url: yahooUrl('^GSPC', YAHOO_PERIOD1_WIDE),
+  vendorColumn: 'close',
+  expectedFirstDate: '1927-12-30',
+  license: YAHOO_LICENSE,
+  termsUrl: YAHOO_TERMS_URL,
+  route: 'live-with-manual-fallback',
+  manualFile: 'GSPC.json',
+  maxStalenessDays: MANUAL_DAILY_STALENESS_DAYS,
+  derivation: 'as-sourced',
+  vendorPeriod1: YAHOO_PERIOD1_WIDE,
+}
+
+const SPX_TR: SourceSpec = {
+  stem: 'SPX-TR',
+  scope: 'SPX',
+  seriesKind: 'total-return',
+  units: 'index-level',
+  vendor: 'yahoo',
+  vendorName: YAHOO_VENDOR_NAME,
+  url: yahooUrl('^SP500TR', YAHOO_PERIOD1_DEFAULT),
+  vendorColumn: 'close',
+  expectedFirstDate: '1988-01-04',
+  license: YAHOO_LICENSE,
+  termsUrl: YAHOO_TERMS_URL,
+  route: 'live-with-manual-fallback',
+  manualFile: 'SP500TR.json',
+  maxStalenessDays: MANUAL_DAILY_STALENESS_DAYS,
+  derivation: 'as-sourced',
+  vendorPeriod1: YAHOO_PERIOD1_DEFAULT,
+}
+
+// NDX total return (the Nasdaq-100 Total Return index, XNDX) is a different vendor (Nasdaq, not
+// Yahoo: Yahoo carries the `^XNDX` ticker but stores no history for it, per 02-CONTEXT.md) and is
+// added by plan 02-07, not here. This entry's absence is sequencing, not an omission.
+const NDX_PR: SourceSpec = {
+  stem: 'NDX-PR',
+  scope: 'NDX',
+  seriesKind: 'price',
+  units: 'index-level',
+  vendor: 'yahoo',
+  vendorName: YAHOO_VENDOR_NAME,
+  url: yahooUrl('^NDX', YAHOO_PERIOD1_DEFAULT),
+  vendorColumn: 'close',
+  expectedFirstDate: '1985-10-01',
+  license: YAHOO_LICENSE,
+  termsUrl: YAHOO_TERMS_URL,
+  route: 'live-with-manual-fallback',
+  manualFile: 'NDX.json',
+  maxStalenessDays: MANUAL_DAILY_STALENESS_DAYS,
+  derivation: 'as-sourced',
+  vendorPeriod1: YAHOO_PERIOD1_DEFAULT,
+}
+
 export const SOURCES: SourceSpec[] = [
-  ...STOOQ_SYMBOLS.flatMap(buildStooqPair),
+  SPX_PR,
+  SPX_TR,
+  NDX_PR,
+  ...YAHOO_FUNDS.flatMap(buildYahooFundPair),
   {
     stem: 'SPX-DIV-MONTHLY',
     scope: 'SPX',
@@ -137,7 +255,10 @@ export const SOURCES: SourceSpec[] = [
     expectedFirstDate: '1871-01',
     license: 'Publicly available academic dataset, explicitly redistributable (D-05)',
     termsUrl: 'https://www.econ.yale.edu/~shiller/data.htm',
-    manual: true,
+    route: 'manual-only',
+    manualFile: 'SPX-DIV-MONTHLY.csv',
+    maxStalenessDays: 75,
+    derivation: 'as-sourced',
   },
 ]
 
@@ -155,13 +276,8 @@ interface FredSeriesEntry {
   expectedFirstDate: string
 }
 
-/** Confirmed live this session via a direct read-only pull of each series' fredgraph.csv
- *  endpoint (all four returned real header rows and real first/last observations; see
- *  normalize.ts's header comment for the exact confirmed shape). This resolves 02-RESEARCH.md's
- *  Assumption A3 and Open Question 1 from [CITED] to [VERIFIED]: M1329AUSM193NNBR runs
- *  1920-01-01 through 1934-03-01 monthly with zero gaps and zero missing-observation markers
- *  (171 rows for 171 months), confirming the pre-1934 short-rate gap-filler exists and is
- *  gap-free across the 1928-1933 window D-13 needs it for. */
+/** Confirmed live via a direct read-only pull of each series' fredgraph.csv endpoint (plan
+ *  02-03). Unaffected by the Source Stack Reversal: FRED was never part of it. */
 const FRED_SERIES: FredSeriesEntry[] = [
   { stem: 'RATE-DFF', seriesId: 'DFF', expectedFirstDate: '1954-07-01' },
   { stem: 'RATE-DTB3', seriesId: 'DTB3', expectedFirstDate: '1954-01-04' },
@@ -181,5 +297,6 @@ export const RATE_SOURCES: SourceSpec[] = FRED_SERIES.map((entry) => ({
   expectedFirstDate: entry.expectedFirstDate,
   license: FRED_LICENSE,
   termsUrl: FRED_TERMS_URL,
-  manual: false,
+  route: 'live',
+  derivation: 'as-sourced',
 }))
