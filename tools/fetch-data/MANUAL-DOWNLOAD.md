@@ -1,6 +1,6 @@
 # Manual download instructions (Route C / Route B)
 
-`npm run fetch-data` cannot pull these 21 series itself. Stooq serves a JavaScript
+`npm run fetch-data` cannot pull these 23 series itself. Stooq serves a JavaScript
 proof-of-work bot challenge to every plain-https request, so no scripted fetch against it
 returns real data (confirmed this session; no workaround was attempted or should be attempted
 — see `README.md`). Shiller's `ie_data.xls` is unreachable from this development sandbox
