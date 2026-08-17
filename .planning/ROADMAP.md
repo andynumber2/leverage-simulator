@@ -31,7 +31,7 @@ render path, starting with the first one.
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Performance Spike and Budget Lock** - Measure the hot loop and the 10k-cell repaint on real hardware, then commit the architecture and the budgets
+- [x] **Phase 1: Performance Spike and Budget Lock** - Measure the hot loop and the 10k-cell repaint on real hardware, then commit the architecture and the budgets (completed 2026-08-17)
 - [ ] **Phase 2: Compiled Data Bundle** - A CLI compiler turns raw CSVs into versioned binary assets with machine-readable provenance
 - [ ] **Phase 3: Simulation Kernel and the UPRO/TQQQ Gate** - The cost model, proven against real leveraged-ETF history before any UI is built on it
 - [ ] **Phase 4: First Defensible Backtest in the Browser** - A real single run, in the browser, that can be pasted as a link
@@ -56,7 +56,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   4. The budget file carries a numeric threshold for each of PERF-02 through PERF-09, each annotated with its perception anchor (16ms = one frame, 100ms = feels instant, 1s = holds attention). Any threshold set looser than its anchor carries a written reason and an accompanying Key Decision, and an unreachable target is escalated as an architecture change rather than relaxed automatically.
   5. A deliberately regressed commit fails CI on a budget breach, proving the gate is live rather than declared.
 
-**Plans:** 6/6 plans executed (4 executed, 2 gap closure pending)
+**Plans:** 6/6 plans complete
 
 Plans:
 **Wave 1**
@@ -202,7 +202,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Performance Spike and Budget Lock | 6/6 | In Progress|  |
+| 1. Performance Spike and Budget Lock | 6/6 | Complete    | 2026-08-17 |
 | 2. Compiled Data Bundle | 0/TBD | Not started | - |
 | 3. Simulation Kernel and the UPRO/TQQQ Gate | 0/TBD | Not started | - |
 | 4. First Defensible Backtest in the Browser | 0/TBD | Not started | - |
