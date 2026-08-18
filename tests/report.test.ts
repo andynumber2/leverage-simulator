@@ -7,7 +7,7 @@
 
 import { afterEach, beforeEach, describe, expect, test } from 'vitest'
 
-import { BENCH_TOTAL_RUNTIME_CAP_MS, PERF_BUDGETS } from '../perf-budgets.ts'
+import { BENCH_TOTAL_RUNTIME_CAP_MS, PERF_BUDGETS, PERF_03_BASELINE_HARDWARE_CONCURRENCY } from '../perf-budgets.ts'
 import {
   assertRunInvariants,
   assertWithinBudget,
@@ -15,6 +15,7 @@ import {
   checkBudget,
   escalationTriggered,
   formatMeasured,
+  hostMatchesPerf03Baseline,
   renderTable,
 } from '../bench/report.ts'
 import { resolveBenchResultsDir } from '../bench/accumulator-store.ts'
@@ -341,6 +342,81 @@ describe('D-23: unit-denominated rows (DATA-BUNDLE-BYTES, DATA-BUNDLE-DECODE)', 
     const full = buildFullRowSet([byteRow, divergentMsRow])
     const environmentScoreOne: EnvironmentBlock = { ...environment, calibrationScore: 1 }
     expect(() => assertRunInvariants(full, 500, environmentScoreOne)).toThrow(/PERF-02/)
+  })
+})
+
+describe('hostMatchesPerf03Baseline', () => {
+  test('true when the environment records the declared PERF-03 baseline width', () => {
+    expect(
+      hostMatchesPerf03Baseline({ ...environment, hardwareConcurrency: PERF_03_BASELINE_HARDWARE_CONCURRENCY }),
+    ).toBe(true)
+  })
+
+  test('false when the environment records any other width', () => {
+    expect(
+      hostMatchesPerf03Baseline({ ...environment, hardwareConcurrency: PERF_03_BASELINE_HARDWARE_CONCURRENCY + 1 }),
+    ).toBe(false)
+    expect(hostMatchesPerf03Baseline({ ...environment, hardwareConcurrency: 2 })).toBe(false)
+  })
+})
+
+describe('assertRunInvariants: PERF-03 host-width guard (quick-260818-v2d)', () => {
+  function withPerf03(rows: MeasurementRow[], overrides: Partial<MeasurementRow>): MeasurementRow[] {
+    return rows.map((r) => (r.budgetId === 'PERF-03' ? { ...r, ...overrides } : r))
+  }
+
+  test('does not throw for the baseline environment fixture with a passing PERF-03 verdict: the guard is silent on the baseline', () => {
+    const rows = withPerf03(fullRowSet, { measuredMs: 700, normalizedMs: 700, verdict: 'pass' })
+    expect(() => assertRunInvariants(rows, 500, environment)).not.toThrow()
+  })
+
+  test('throws when hardwareConcurrency is 2 and ci is true, naming both the recorded and declared widths', () => {
+    const rows = withPerf03(fullRowSet, { measuredMs: 700, normalizedMs: 700, verdict: 'pass' })
+    const offBaseline: EnvironmentBlock = { ...environment, hardwareConcurrency: 2 }
+    expect(() => assertRunInvariants(rows, 500, offBaseline)).toThrow(/2/)
+    expect(() => assertRunInvariants(rows, 500, offBaseline)).toThrow(/4/)
+  })
+
+  test('throws when hardwareConcurrency is 8 and ci is true, naming both the recorded and declared widths', () => {
+    const rows = withPerf03(fullRowSet, { measuredMs: 700, normalizedMs: 700, verdict: 'pass' })
+    const offBaseline: EnvironmentBlock = { ...environment, hardwareConcurrency: 8 }
+    expect(() => assertRunInvariants(rows, 500, offBaseline)).toThrow(/8/)
+    expect(() => assertRunInvariants(rows, 500, offBaseline)).toThrow(/4/)
+  })
+
+  test('throws when ci is false, hardwareConcurrency is 9, and the PERF-03 row carries verdict pass: a bench file cannot restore a verdict the host does not support', () => {
+    const rows = withPerf03(fullRowSet, { measuredMs: 700, normalizedMs: 700, verdict: 'pass' })
+    const offBaselineLocal: EnvironmentBlock = { ...environment, hardwareConcurrency: 9, ci: false }
+    expect(() => assertRunInvariants(rows, 500, offBaselineLocal)).toThrow(/pass/)
+  })
+
+  test('does not throw when ci is false, hardwareConcurrency is 9, and the PERF-03 row is unmeasured', () => {
+    const offBaselineLocal: EnvironmentBlock = { ...environment, hardwareConcurrency: 9, ci: false }
+    expect(() => assertRunInvariants(fullRowSet, 500, offBaselineLocal)).not.toThrow()
+  })
+
+  test('still throws /failed budget/ naming PERF-05 when a row fails AND the host is off-baseline with ci true: the verdict gate keeps precedence over the host guard', () => {
+    const withFailure = fullRowSet.map((r) =>
+      r.budgetId === 'PERF-05' ? { ...r, normalizedMs: 100, verdict: 'fail' as const } : r,
+    )
+    const offBaseline: EnvironmentBlock = { ...environment, hardwareConcurrency: 1 }
+    expect(() => assertRunInvariants(withFailure, 500, offBaseline)).toThrow(/failed budget/i)
+    expect(() => assertRunInvariants(withFailure, 500, offBaseline)).toThrow(/PERF-05/)
+  })
+})
+
+describe('renderTable: PERF-03 verdict withheld banner (quick-260818-v2d)', () => {
+  test('emits a line containing PERF-03 VERDICT WITHHELD and both widths when the environment is off-baseline', () => {
+    const offBaseline: EnvironmentBlock = { ...environment, hardwareConcurrency: 9, ci: false }
+    const output = renderTable(fullRowSet, offBaseline, 500)
+    expect(output).toContain('PERF-03 VERDICT WITHHELD')
+    expect(output).toContain('9')
+    expect(output).toContain('4')
+  })
+
+  test('emits no PERF-03 VERDICT WITHHELD line for the baseline fixture', () => {
+    const output = renderTable(fullRowSet, environment, 500)
+    expect(output).not.toContain('PERF-03 VERDICT WITHHELD')
   })
 })
 
