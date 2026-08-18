@@ -176,6 +176,15 @@ Plans:
 
 **Plans**: TBD
 **UI hint**: yes
+**Prerequisite (added 2026-08-18, from the Phase 3 ship gate):** resolve WINDOWS.md entry #2
+(calibration under-corrects for CI runner speed variance) BEFORE planning this phase. It was
+waived to unblock Phase 3's ship, explicitly deferred to here rather than indefinitely. Criterion
+5 above measures PERF-07 and PERF-08 for the first time, and those run through the same
+`normalize()` path that currently carries roughly 10 percentage points of runner noise, so
+planning this phase against it would bank four new budget decisions on a yardstick known to be
+unreliable. The entry's own claim that it bites from Phase 6/7 is understated: `normalize()` is
+used by `kernel.bench.test.ts`, `sweep.bench.test.ts`, `canvas-repaint.bench.test.ts` and
+`decode-time.bench.test.ts`. Do NOT resolve by retuning `NOMINAL_REFERENCE_MS` (PERF-01a).
 
 ### Phase 5: Attribution and the Credibility Surface
 

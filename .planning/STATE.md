@@ -101,7 +101,12 @@ Recent decisions affecting current work:
 
 ### Pending Todos
 
-None yet.
+- **BEFORE PHASE 4 PLANNING: resolve WINDOWS.md entry #2 (calibration runner-variance).** Waived
+  on 2026-08-18 to unblock Phase 3's ship, with the deferral explicitly scoped to expire here, not
+  left open-ended. Phase 4 criterion 5 measures PERF-07 and PERF-08 for the first time through the
+  same `normalize()` path that carries roughly 10 percentage points of runner noise. Resolve by
+  investigating whether the scalar reference loop is representative of a Worker-pool workload's
+  runner sensitivity. Do NOT retune `NOMINAL_REFERENCE_MS` (PERF-01a).
 
 ### Blockers/Concerns
 
