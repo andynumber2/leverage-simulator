@@ -12,6 +12,7 @@ import {
 } from './bench/accumulator-store.ts'
 import { measureBundleBytes } from './bench/bundle-bytes.ts'
 import type { BrowserCapturedEnvironment } from './bench/environment-block.ts'
+import { readProductionKernelSeries } from './bench/kernel-series-bridge.ts'
 import type { MeasurementRow } from './bench/report.ts'
 
 /** Convention this repo's compiler and CLI both follow (tools/bundle-compiler/src/cli.ts): the
@@ -80,6 +81,10 @@ export default defineConfig({
               // pattern readCalibration uses -- a browser-context test asks the Node process for
               // something only Node can measure (here, the compiled bundle's real on-disk bytes).
               readBundleBytes: async (_context) => measureBundleBytes(COMPILED_BUNDLE_DIR),
+              // Task 1 (03-05): the same "browser-context test asks the Node host for something
+              // only Node can do" pattern readBundleBytes uses, here decoding the committed
+              // bundle into the real SPX series PERF-02 measures runBacktest against.
+              readKernelSeries: async (_context) => readProductionKernelSeries(COMPILED_BUNDLE_DIR),
             },
           },
         },

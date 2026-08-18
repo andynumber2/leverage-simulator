@@ -1,8 +1,14 @@
 /**
- * bench/kernel.ts: Task 1, the allocation-free per-bar leveraged recurrence, including the
- * branchy parts (PITFALLS A1, A2, A4, A7, A8; CONTEXT D-12). This is throwaway spike code, the
- * real kernel is Phase 3's, but it must carry the same branches Phase 3's kernel will, so the
- * measured PERF-02/PERF-03 figures are not flattered by a stripped arithmetic loop.
+ * bench/kernel.ts: the Phase 1 throwaway spike's allocation-free per-bar leveraged recurrence,
+ * including the branchy parts (PITFALLS A1, A2, A4, A7, A8; CONTEXT D-12).
+ *
+ * This file is no longer the PERF-02 subject and carries no correctness claim: `src/kernel/
+ * backtest.ts` is the production kernel (03-01), and `bench/kernel.bench.test.ts` (03-05) measures
+ * `runBacktest` from that module against the real committed bundle, not `runSpikeBacktest` here
+ * against a seeded synthetic series. This file's sole remaining consumer is PERF-03's sweep
+ * workload (`bench/sweep.worker.ts`, `bench/sweep-pool.ts`, `bench/sweep.bench.test.ts`), which
+ * still needs a same-shape branchy recurrence to avoid flattering the measured sweep cost with a
+ * stripped arithmetic loop. Phase 7 replaces this file when it builds the real sweep worker.
  *
  * Day-count convention (PITFALLS A4/A8, deliberately two different bases, not conflated):
  * - Financing accrues on a 365-calendar-day basis: `(leverage-1) * (shortRate+spread) *
