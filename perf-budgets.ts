@@ -84,6 +84,21 @@ export const ESCALATION_TRIGGER_RATIO = 0.7
  * decision (mirrors D-19/D-20's discipline for the perf budgets themselves). */
 export const BENCH_TOTAL_RUNTIME_CAP_MS = 30_000
 
+/**
+ * PERF-03's declared baseline pool width (quick-260818-v2d, closing WINDOWS.md entry 2). D-17
+ * makes GitHub Actions `ubuntu-latest` the baseline machine, and every recorded baseline run
+ * reported four logical cores; PERF-03's own description below already claims "on a 4-core
+ * baseline", so this width belongs beside the budget it conditions rather than following
+ * whatever width the host that happens to run the bench offers.
+ *
+ * This is a workload parameter and a reporting gate (`bench/sweep-pool.ts` measures PERF-03's
+ * pool at this width on every host; `bench/report.ts` withholds PERF-03's verdict when the
+ * recorded host width differs), never a divisor: nothing is ever divided by this constant, so
+ * it is not budget-denominating in the sense `NOMINAL_REFERENCE_MS` (bench/calibration.ts) is,
+ * and moving it carries none of that constant's PERF-01a weight.
+ */
+export const PERF_03_BASELINE_HARDWARE_CONCURRENCY = 4
+
 export const PERF_BUDGETS: Record<BudgetId, PerfBudget> = {
   'PERF-02': {
     id: 'PERF-02',

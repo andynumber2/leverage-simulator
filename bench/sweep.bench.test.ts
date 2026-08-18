@@ -9,12 +9,12 @@ import { commands } from 'vitest/browser'
 import { expect, test } from 'vitest'
 
 import { paramsForCell, runSpikeBacktest, SWEEP_COLS, SWEEP_ROWS } from './kernel.ts'
-import { PERF_BUDGETS } from '../perf-budgets.ts'
+import { PERF_03_BASELINE_HARDWARE_CONCURRENCY, PERF_BUDGETS } from '../perf-budgets.ts'
 import { measureMinOfN, normalize, REPEAT_COUNT } from './calibration.ts'
 import { resolveRunCalibration } from './canonical-calibration.ts'
 import { captureEnvironment } from './environment-block.ts'
-import { assertWithinBudget, checkBudget, type MeasurementRow } from './report.ts'
-import { resolveWorkerCount, runSpikeSweep } from './sweep-pool.ts'
+import { assertWithinBudget, checkBudget, formatMeasured, type MeasurementRow } from './report.ts'
+import { BASELINE_WORKER_COUNT, resolveWorkerCount, runSpikeSweep } from './sweep-pool.ts'
 import { BAR_COUNT, DEFAULT_SEED, makeSeededGbmSeries } from './synthetic-data.ts'
 
 const CELL_COUNT = SWEEP_COLS * SWEEP_ROWS
@@ -128,8 +128,12 @@ test('PERF-03: a full 10,000-cell sweep on a real Worker pool stays under budget
   const score = await resolveRunCalibration()
   let workerCount = 0
   let chunkCount = 0
+  // quick-260818-v2d: pinned to the declared 4-core baseline width, not resolveWorkerCount()'s
+  // host-following default. See bench/sweep-pool.ts's BASELINE_WORKER_COUNT doc comment for why:
+  // the scalar anchor cannot see parallel width, so a measured width that follows the host makes
+  // that variance term invisible to the calibration correction that is supposed to absorb it.
   const rawMs = await measureMinOfN(REPEAT_COUNT, async () => {
-    const result = await runSpikeSweep(DEFAULT_SEED)
+    const result = await runSpikeSweep(DEFAULT_SEED, { workerCount: BASELINE_WORKER_COUNT })
     workerCount = result.workerCount
     chunkCount = result.chunkCount
   })
@@ -138,30 +142,57 @@ test('PERF-03: a full 10,000-cell sweep on a real Worker pool stays under budget
   await commands.recordEnvironment(captureEnvironment(score))
 
   const budget = PERF_BUDGETS['PERF-03']
-  const row: MeasurementRow = {
-    budgetId: budget.id,
-    requirementId: budget.requirementId,
-    measuredMs: rawMs,
-    normalizedMs,
-    budgetMs: budget.thresholdMs,
-    anchorMs: budget.anchorMs,
-    anchorLabel: budget.anchorLabel,
-    source: 'spike-synthetic',
-    verdict: checkBudget({ normalizedMs, budgetMs: budget.thresholdMs }),
+  const hostHardwareConcurrency = navigator.hardwareConcurrency
+  let row: MeasurementRow
+  if (hostHardwareConcurrency === PERF_03_BASELINE_HARDWARE_CONCURRENCY) {
+    row = {
+      budgetId: budget.id,
+      requirementId: budget.requirementId,
+      measuredMs: rawMs,
+      normalizedMs,
+      budgetMs: budget.thresholdMs,
+      anchorMs: budget.anchorMs,
+      anchorLabel: budget.anchorLabel,
+      source: 'spike-synthetic',
+      verdict: checkBudget({ normalizedMs, budgetMs: budget.thresholdMs }),
+    }
+  } else {
+    // Off the declared baseline width: a figure produced at a pinned width on a host that
+    // cannot supply that width is not a PERF-03 measurement and must never be compared against
+    // the budget. bench/report.ts's assertRunInvariants withholds the verdict at the run level
+    // regardless of what this row carries; this branch keeps the row itself honest too.
+    row = {
+      budgetId: budget.id,
+      requirementId: budget.requirementId,
+      measuredMs: null,
+      normalizedMs: null,
+      budgetMs: budget.thresholdMs,
+      anchorMs: budget.anchorMs,
+      anchorLabel: budget.anchorLabel,
+      source: 'spike-synthetic',
+      verdict: 'unmeasured',
+    }
   }
   await commands.recordMeasurement(row)
 
-  // Reproducibility (acceptance criteria): print the resolved worker count and chosen chunk
-  // count that produced this figure. Routed through the recordInfoLine bridge, not a plain
+  // Reproducibility (acceptance criteria) and disclosure (quick-260818-v2d): the figure is
+  // disclosed here even when the verdict above is withheld, so an off-baseline run still hands
+  // a developer real numbers, not silence. Routed through the recordInfoLine bridge, not a plain
   // console.log, because a browser-context console.log does not reach `npm run bench`'s stdout
   // under the default (non-verbose) Vitest reporter, see bench/accumulator-store.ts.
+  const verdictDisclosure = row.verdict === 'unmeasured' ? 'withheld' : 'rendered'
   await commands.recordInfoLine(
     'PERF-03-sweep',
-    `PERF-03 sweep: workerCount=${workerCount} chunkCount=${chunkCount}`,
+    `PERF-03 sweep: workerCount=${workerCount} chunkCount=${chunkCount} ` +
+      `hardwareConcurrency=${hostHardwareConcurrency} ` +
+      `declaredBaselineHardwareConcurrency=${PERF_03_BASELINE_HARDWARE_CONCURRENCY} ` +
+      `measuredMs=${formatMeasured(rawMs)} normalizedMs=${formatMeasured(normalizedMs)} ` +
+      `verdict=${verdictDisclosure}`,
   )
 
   // The precise per-metric signal: fails this test next to the code that measured the value.
   // The authoritative gate is the verdict check inside assertRunInvariants, which fails the run
-  // even if this line is removed.
+  // even if this line is removed. On a withheld row this is a no-op by assertWithinBudget's own
+  // contract for an unmeasured value.
   expect(() => assertWithinBudget(row)).not.toThrow()
 })

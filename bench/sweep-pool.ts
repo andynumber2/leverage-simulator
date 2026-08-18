@@ -9,6 +9,7 @@
 import * as Comlink from 'comlink'
 
 import { SWEEP_COLS, SWEEP_ROWS } from './kernel.ts'
+import { PERF_03_BASELINE_HARDWARE_CONCURRENCY } from '../perf-budgets.ts'
 import type { ChunkRequest, SweepWorkerApi } from './sweep.worker.ts'
 
 const CELL_COUNT = SWEEP_COLS * SWEEP_ROWS
@@ -26,13 +27,36 @@ const CHUNKS_PER_WORKER = 4
 const DEFAULT_CHUNK_TIMEOUT_MS = 10_000
 
 /**
- * `navigator.hardwareConcurrency - 1`, floored at a minimum of 1 (T-01-05: never spawn zero
- * workers, and reserve one core for the calling thread so the pool cannot saturate every core).
+ * `cores - 1`, floored at a minimum of 1 (T-01-05: never spawn zero workers, and reserve one
+ * core for the calling thread so the pool cannot saturate every core). The pure flooring rule,
+ * extracted so both `resolveWorkerCount` (follows the host) and `BASELINE_WORKER_COUNT` (fixed
+ * to the declared baseline) share one implementation rather than two copies that could drift.
  */
-export function resolveWorkerCount(): number {
-  const cores = navigator.hardwareConcurrency || 1
+export function workerCountForCores(cores: number): number {
   return Math.max(1, cores - 1)
 }
+
+/**
+ * `workerCountForCores(navigator.hardwareConcurrency || 1)`: the production default, which
+ * follows whatever width the host actually offers.
+ */
+export function resolveWorkerCount(): number {
+  return workerCountForCores(navigator.hardwareConcurrency || 1)
+}
+
+/**
+ * quick-260818-v2d: the pool width PERF-03 measures at on every host, regardless of
+ * `resolveWorkerCount()`'s host-following result. The scalar calibration anchor in
+ * bench/calibration.ts is single-threaded and cannot see available parallelism at all, so a
+ * measured width that follows the host makes the metric's dominant variance term invisible to
+ * the correction that is supposed to absorb it (measured in 260818-v2d-RESEARCH.md: the anchor
+ * moves 0.4% across a 4.5x width change while normalized PERF-03 moves 6.1x). Pinning the
+ * measured arm to the declared baseline, and withholding the verdict off it (bench/report.ts),
+ * makes the figure denominated against the baseline PERF-03's own description already claims.
+ * `runSpikeSweep`'s own default stays `resolveWorkerCount()`: the correctness and failure-path
+ * tests exercise the production resolution, only the measured arm is pinned.
+ */
+export const BASELINE_WORKER_COUNT = workerCountForCores(PERF_03_BASELINE_HARDWARE_CONCURRENCY)
 
 export interface SweepOptions {
   workerCount?: number
