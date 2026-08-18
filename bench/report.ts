@@ -13,7 +13,12 @@
  */
 
 import type { BudgetId, PerfBudget, RequirementId } from '../perf-budgets.ts'
-import { ESCALATION_TRIGGER_RATIO, BENCH_TOTAL_RUNTIME_CAP_MS, PERF_BUDGETS } from '../perf-budgets.ts'
+import {
+  ESCALATION_TRIGGER_RATIO,
+  BENCH_TOTAL_RUNTIME_CAP_MS,
+  PERF_03_BASELINE_HARDWARE_CONCURRENCY,
+  PERF_BUDGETS,
+} from '../perf-budgets.ts'
 import type { EnvironmentBlock } from './environment-block.ts'
 
 export type Verdict = 'pass' | 'fail' | 'unmeasured'
@@ -85,6 +90,18 @@ export function escalationTriggered(normalizedMs: number | null, budgetMs: numbe
     return false
   }
   return normalizedMs >= budgetMs * ESCALATION_TRIGGER_RATIO
+}
+
+/**
+ * quick-260818-v2d: true when the recorded environment's `hardwareConcurrency` equals the
+ * declared PERF-03 baseline width (`PERF_03_BASELINE_HARDWARE_CONCURRENCY`,
+ * perf-budgets.ts). PERF-03's pool is measured at that pinned width on every host (bench/
+ * sweep-pool.ts's `BASELINE_WORKER_COUNT`), so a host reporting any other width did not supply
+ * the parallel width the pinned measurement assumes, and its PERF-03 figure is not a PERF-03
+ * measurement in the sense the budget is denominated against.
+ */
+export function hostMatchesPerf03Baseline(environment: EnvironmentBlock): boolean {
+  return environment.hardwareConcurrency === PERF_03_BASELINE_HARDWARE_CONCURRENCY
 }
 
 /**
@@ -218,6 +235,16 @@ export function renderTable(
       : '>>> informational dev-machine run (not the D-17 baseline) <<<',
   )
   lines.push('')
+  if (!hostMatchesPerf03Baseline(environment)) {
+    lines.push(
+      `>>> PERF-03 VERDICT WITHHELD: this host recorded hardwareConcurrency ` +
+        `${environment.hardwareConcurrency}, not the declared PERF-03 baseline of ` +
+        `${PERF_03_BASELINE_HARDWARE_CONCURRENCY}; three workers timesharing fewer cores is an ` +
+        'irreducible cost no anchor can or should erase, and a wider host is simply not the ' +
+        'machine the budget is denominated against <<<',
+    )
+    lines.push('')
+  }
 
   for (const requirementId of allRequirementIds()) {
     lines.push(`=== ${requirementId} ===`)
@@ -309,6 +336,30 @@ export function assertRunInvariants(
   // zero denominator. Collected and thrown once, sorted ascending by budget id, for the same
   // stable-message reason the verdict check above documents.
   if (environment) {
+    // PERF-03 host-width guard (quick-260818-v2d): deliberately placed after the verdict-fail
+    // gate above, not before it. `bench/selftest/over-budget.selftest.ts` records
+    // hardwareConcurrency 1 (off-baseline) and must keep failing on its own deliberate PERF-05
+    // breach, not on this guard: if this guard ran first, an off-baseline self-test host would
+    // report the wrong failure reason and mask the gate-liveness proof the self-test exists for.
+    if (!hostMatchesPerf03Baseline(environment)) {
+      const perf03Row = rows.find((r) => r.budgetId === 'PERF-03')
+      if (environment.ci) {
+        throw new Error(
+          `assertRunInvariants: this run recorded hardwareConcurrency ${environment.hardwareConcurrency}, ` +
+            `not the declared PERF-03 baseline of ${PERF_03_BASELINE_HARDWARE_CONCURRENCY}: a CI run on a ` +
+            'host that is not the declared baseline cannot be presented as an authoritative D-17 baseline run',
+        )
+      }
+      if (perf03Row && perf03Row.verdict !== 'unmeasured') {
+        throw new Error(
+          `assertRunInvariants: this run recorded hardwareConcurrency ${environment.hardwareConcurrency}, ` +
+            `not the declared PERF-03 baseline of ${PERF_03_BASELINE_HARDWARE_CONCURRENCY}, but PERF-03 ` +
+            `carries verdict "${perf03Row.verdict}" instead of "unmeasured": a bench file cannot restore a ` +
+            'verdict the host does not support',
+        )
+      }
+    }
+
     const divergent = rows
       .filter((r) => r.measuredMs !== null && r.normalizedMs !== null)
       // D-23: a byte-denominated row's normalizedMs equals its measuredMs by design (a byte
