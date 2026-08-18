@@ -33,7 +33,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Performance Spike and Budget Lock** - Measure the hot loop and the 10k-cell repaint on real hardware, then commit the architecture and the budgets (completed 2026-08-17)
 - [x] **Phase 2: Compiled Data Bundle** - A CLI compiler turns raw CSVs into versioned binary assets with machine-readable provenance (completed 2026-08-17)
-- [ ] **Phase 3: Simulation Kernel and the UPRO/TQQQ Gate** - The cost model, proven against real leveraged-ETF history before any UI is built on it
+- [x] **Phase 3: Simulation Kernel and the UPRO/TQQQ Gate** - The cost model, proven against real leveraged-ETF history before any UI is built on it (completed 2026-08-18)
 - [ ] **Phase 4: First Defensible Backtest in the Browser** - A real single run, in the browser, that can be pasted as a link
 - [ ] **Phase 5: Attribution and the Credibility Surface** - Name which mechanism consumed the money, and let a skeptic check every assumption
 - [ ] **Phase 6: Heatmap Design Pass** - Argue the entry-date x leverage treatment from throwaway mockups, since there is no prior art to copy
@@ -139,7 +139,26 @@ Plans:
   4. A script runs one real backtest end to end and prints the equity curve, exercising the full parameter surface: arbitrary positive leverage from 1x through 20x including fractional values, an initial investment plus recurring contributions at daily, monthly, quarterly or yearly frequency, a dividend-reinvest toggle that switches between the bundled total-return and price-return series rather than modelling dividends, an entry date with either a fixed holding period or hold-to-today, and user-supplied expense ratio and financing spread defaulting to the independently sourced values.
   5. A single backtest over the full ~25,000-bar history completes in under 16ms measured on real hardware, and 10,000 back-to-back invocations produce no measurable GC pressure because the hot loop allocates nothing and writes into preallocated buffers. The kernel is one module with no imports from the data, sweep or chart layers, so there is no second implementation that can drift.
 
-**Plans**: TBD
+**Plans:** 6/6 plans complete
+
+Plans:
+**Wave 1**
+
+- [x] 03-01-PLAN.md — Tracer. One real SPX backtest end to end, from the committed Phase 2 bundle through the data-layer seam and the allocation-free kernel to a printed equity curve, plus the SIM-10 module-boundary assertion
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [x] 03-02-PLAN.md — PITFALLS section A as the executable correctness checklist: the 1x exactness invariant at 1e-9, calendar-day accrual on two different bases, ruin as an absorbing state, and an asserted disposition for every remaining A-row
+- [x] 03-03-PLAN.md — The sourced, citation-pinned cost parameters and the mechanism-derived tracking-error tolerances, committed atomically before any validation code exists
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [x] 03-04-PLAN.md — The full parameter surface: calendar-anchored contributions with month-end clamp and business-day roll, the dividend-reinvest toggle, both holding modes, and sourced cost defaults
+- [x] 03-05-PLAN.md — PERF-02 measured against the production kernel over the real ~25,000-bar history, and SIM-11's no-GC-pressure claim proven by a forced-collection heap delta
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
+- [x] 03-06-PLAN.md — The build-failing UPRO and TQQQ tracking-error gate, with rate-regime sub-windows reported and the residual printed as a number
 
 ### Phase 4: First Defensible Backtest in the Browser
 
@@ -157,6 +176,15 @@ Plans:
 
 **Plans**: TBD
 **UI hint**: yes
+**Prerequisite (added 2026-08-18, from the Phase 3 ship gate):** resolve WINDOWS.md entry #2
+(calibration under-corrects for CI runner speed variance) BEFORE planning this phase. It was
+waived to unblock Phase 3's ship, explicitly deferred to here rather than indefinitely. Criterion
+5 above measures PERF-07 and PERF-08 for the first time, and those run through the same
+`normalize()` path that currently carries roughly 10 percentage points of runner noise, so
+planning this phase against it would bank four new budget decisions on a yardstick known to be
+unreliable. The entry's own claim that it bites from Phase 6/7 is understated: `normalize()` is
+used by `kernel.bench.test.ts`, `sweep.bench.test.ts`, `canvas-repaint.bench.test.ts` and
+`decode-time.bench.test.ts`. Do NOT resolve by retuning `NOMINAL_REFERENCE_MS` (PERF-01a).
 
 ### Phase 5: Attribution and the Credibility Surface
 
@@ -233,7 +261,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 |-------|----------------|--------|-----------|
 | 1. Performance Spike and Budget Lock | 6/6 | Complete    | 2026-08-17 |
 | 2. Compiled Data Bundle | 8/8 | Complete    | 2026-08-17 |
-| 3. Simulation Kernel and the UPRO/TQQQ Gate | 0/TBD | Not started | - |
+| 3. Simulation Kernel and the UPRO/TQQQ Gate | 6/6 | In Progress|  |
 | 4. First Defensible Backtest in the Browser | 0/TBD | Not started | - |
 | 5. Attribution and the Credibility Surface | 0/TBD | Not started | - |
 | 6. Heatmap Design Pass | 0/TBD | Not started | - |

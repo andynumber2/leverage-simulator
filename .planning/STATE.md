@@ -2,18 +2,18 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_phase: 3
-current_phase_name: Simulation Kernel and the UPRO/TQQQ Gate
-status: planning
-stopped_at: "Phase 02 replanned: 02-06/07/08 added, 02-04/05 corrected"
-last_updated: "2026-08-17T22:04:47.426Z"
-last_activity: 2026-08-17
-last_activity_desc: Phase 1 complete, transitioned to Phase 2
+current_phase: 03
+current_phase_name: simulation-kernel-and-the-upro-tqqq-gate
+status: phase-complete
+stopped_at: Phase 03 verified and complete
+last_updated: "2026-08-18T22:03:34.734Z"
+last_activity: 2026-08-18
 progress:
-  total_phases: 2
-  completed_phases: 2
-  total_plans: 14
-  completed_plans: 14
+  total_phases: 3
+  completed_phases: 3
+  total_plans: 20
+  completed_plans: 20
+last_activity_desc: Phase 03 shipped as PR #3; Nyquist validation completed for phases 01 and 02
 ---
 
 # Project State
@@ -23,14 +23,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-08-16)
 
 **Core value:** Given a symbol, a leverage level, an entry point, and a contribution schedule, produce a defensible outcome and show which mechanism consumed the money, in a form that can be pasted into an argument.
-**Current focus:** Phase 02 — compiled-data-bundle
+**Current focus:** Phase 03 — simulation-kernel-and-the-upro-tqqq-gate
 
 ## Current Position
 
-Phase: 3 — Simulation Kernel and the UPRO/TQQQ Gate
-Plan: Not started
-Status: Ready to plan
-Last activity: 2026-08-17 — Phase 02 complete, transitioned to Phase 3
+Phase: 03 (simulation-kernel-and-the-upro-tqqq-gate) - COMPLETE
+Plan: 6 of 6
+Status: Phase 03 shipped as PR #3, awaiting CI and merge. Next: Phase 4.
+Last activity: 2026-08-18
 
 Progress: [██████████] 100%
 
@@ -38,7 +38,7 @@ Progress: [██████████] 100%
 
 **Velocity:**
 
-- Total plans completed: 14
+- Total plans completed: 20
 - Average duration: —
 - Total execution time: —
 
@@ -93,10 +93,20 @@ Recent decisions affecting current work:
 - [Phase ?]: 01-06: measureBatchedMinOfN added alongside measureMinOfN (not promoted) so the floor is enforced against the batch total exactly once; PERF-03's sweep keeps calling measureMinOfN directly since its raw cost already clears the floor
 - [Phase ?]: 01-06: batch sizes (PERF_02=500, putImageData=500, fillRect=8) all cleared the 10ms floor on the first empirical run; DEFAULT_CHUNK_TIMEOUT_MS set to 10s for sweep-pool worker failure detection
 - [Phase ?]: 01-06: closed both 01-VERIFICATION.md Gap 2 items (unenforced floor, unbounded worker hang) in one phase-closing plan; removed all em dash occurrences from tracked *.ts/*.yml/*.json source
+- [Phase 3]: 03-01: LONG_GAP_FLAG_MIN_DAYS set to 6 inclusive under D-04, so only the 1933 bank holiday (12 days) and the 2001 closure (7 days) trip the outsized-closure flag while ordinary 3- and 4-day holiday weekends do not
+- [Phase 3]: 03-03: SEC EDGAR was reachable this run, contradicting 03-RESEARCH.md's record of blanket HTTP 403s, so UPRO's and TQQQ's inception-era expense ratios were upgraded ASSUMED to CITED against real 485BPOS filings rather than committed as estimates. The financing-spread range stayed ASSUMED after five genuine attempts including two full N-CSR reads, which is itself primary-source corroboration of PITFALLS A9 that no fund itemizes swap financing spread
+- [Phase 3]: 03-06 halted rather than force the red gate into one of D-20's five signature rows. That was correct: the residual was two residuals. Recording the halt as a legitimate outcome, not a failure, is what made the correct diagnosis reachable
+- [PROJECT.md Key Decisions]: 03-06: D-10 AMENDED. The gate's synthetic is built from the TOTAL-return index, not the price-return index. Pairing a financing charge with a dividend-stripped return leg charged for exposure the model never credited, and that asymmetry was the entire Gate 2 residual (UPRO -6.968% to +0.254%, TQQQ -3.860% to +0.399%). A leveraged ETF's swap counterparty delivers the index total return against financing, so the total-return leg is what the financing term already prices. Phase 5's VALID-04 in-app view must render this same amended pairing or it will show users a ~7%/yr phantom gap as if it were real cost
+- [PROJECT.md Key Decisions]: 03-06: TOLERANCE_SAFETY_FACTOR now applies to reasoned mechanism rows only; rows flagged measured:true are added at face value. The factor exists to cover a reasoned estimate being off by half, so scaling a measurement by 1.5x would have set the tolerance at 5.715% instead of 3.955% and let a real regression hide inside the margin
 
 ### Pending Todos
 
-None yet.
+- **BEFORE PHASE 4 PLANNING: resolve WINDOWS.md entry #2 (calibration runner-variance).** Waived
+  on 2026-08-18 to unblock Phase 3's ship, with the deferral explicitly scoped to expire here, not
+  left open-ended. Phase 4 criterion 5 measures PERF-07 and PERF-08 for the first time through the
+  same `normalize()` path that carries roughly 10 percentage points of runner noise. Resolve by
+  investigating whether the scalar reference loop is representative of a Worker-pool workload's
+  runner sensitivity. Do NOT retune `NOMINAL_REFERENCE_MS` (PERF-01a).
 
 ### Blockers/Concerns
 
@@ -114,8 +124,26 @@ None yet.
   first-available rows were verified via web search, not a direct API pull. Re-confirm against
   live sources at implementation time
 
-- [Phase 3]: Cost parameters must be sourced and documented before validation is first run.
-  Adjusting them afterward to tighten the fit invalidates the gate
+- [Phase 3]: RESOLVED. Cost parameters were sourced and committed before any validation code
+  existed (D-19 ordering verified from git history), and no cost parameter was adjusted at any
+  point, including when the gate first ran RED. UPRO and TQQQ inception-era expense ratios are
+  CITED to SEC 485BPOS accessions 0001193125-09-135520 and 0001193125-10-023274, both confirmed
+  against EDGAR. The financing-spread range stays ASSUMED after five retrieval attempts including
+  two full N-CSR reads, which corroborates PITFALLS A9
+
+- [Phase 3]: CARRIED FORWARD. The tracking-error gate is a weaker instrument than its original
+  0.66% tolerance implied. 89% of the widened 3.955% tolerance comes from one measured mechanism
+  row, and TQQQ's margin against it is a thin ~11%. The cause is the reference data, not the
+  model: UPRO/TQQQ are Yahoo market closes, so premium/discount noise puts a ~3.2-3.5% floor under
+  Gate 1 before any model is applied. Sourcing true daily NAV history for both funds would remove
+  that component and let the tolerance come back down. Gate 2 (return drift) is unaffected and
+  tight at +0.25%/+0.40% against 0.525%
+
+- [Phase 3]: OBSERVATION, deliberately not acted on. The high-rate sub-window return drift is
+  +0.94% (UPRO) and +1.12% (TQQQ), larger and more positive than the full-window figure, hinting
+  the financing spread may be slightly under-priced from 2022 on. D-13 says sub-windows do not
+  gate and VALID-03 prohibits adjusting the spread to close a measured gap, so this is recorded
+  for Phase 5 rather than fixed
 
 ### Quick Tasks Completed
 
@@ -134,6 +162,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-08-17T19:36:10.187Z
-Stopped at: Phase 02 replanned: 02-06/07/08 added, 02-04/05 corrected
-Resume file: .planning/phases/02-compiled-data-bundle/02-06-PLAN.md
+Last session: 2026-08-18T02:06:27.735Z
+Stopped at: Phase 03 verified and complete
+Resume file: .planning/phases/03-simulation-kernel-and-the-upro-tqqq-gate/03-VERIFICATION.md

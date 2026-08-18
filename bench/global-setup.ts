@@ -20,6 +20,7 @@ import {
   resetAccumulatorStore,
   resolveBenchResultsDir,
 } from './accumulator-store.ts'
+import { assertEnvironmentBlockComplete } from './environment-block.ts'
 import { assertRunInvariants, buildFullRowSet, renderTable } from './report.ts'
 
 function resultsDir(): string {
@@ -45,6 +46,10 @@ export default async function setup(): Promise<() => Promise<void>> {
           'has not measured anything real',
       )
     }
+
+    // Validate that individual environment block fields are complete and coherent,
+    // so a malformed block fails immediately rather than producing an unlabelled figure.
+    assertEnvironmentBlockComplete(environment)
 
     const measured = await loadAccumulatedRows()
     const rows = buildFullRowSet(measured)

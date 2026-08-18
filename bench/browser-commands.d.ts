@@ -8,6 +8,7 @@
 
 import type { BundleBytes } from './bundle-bytes.ts'
 import type { BrowserCapturedEnvironment } from './environment-block.ts'
+import type { ProductionKernelSeriesPayload } from './kernel-series-bridge.ts'
 import type { MeasurementRow } from './report.ts'
 
 declare module 'vitest/internal/browser' {
@@ -30,5 +31,9 @@ declare module 'vitest/internal/browser' {
      * totals, measured Node-side by bench/bundle-bytes.ts's `measureBundleBytes` since the
      * browser context has no filesystem access to public/data/'s source directory. */
     readBundleBytes: () => Promise<BundleBytes>
+    /** Task 1 (03-05, PERF-02): the real bundled SPX series and kernel params PERF-02 measures
+     * `runBacktest` against, decoded Node-side from the committed bundle since the browser
+     * context has no filesystem access to public/data/'s source directory. */
+    readKernelSeries: () => Promise<ProductionKernelSeriesPayload>
   }
 }

@@ -18,3 +18,5 @@ dist/
 
 # Editor / OS noise
 .DS_Store
+
+.claude/settings.local.json
