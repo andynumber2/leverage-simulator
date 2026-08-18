@@ -149,3 +149,13 @@ None - no external service configuration required.
 ---
 *Phase: 03-simulation-kernel-and-the-upro-tqqq-gate*
 *Completed: 2026-08-18*
+
+## Self-Check: PASSED
+
+- FOUND: `src/validation/cost-parameters.ts`
+- FOUND: `tests/validation/cost-parameters.test.ts`
+- FOUND: `.planning/phases/03-simulation-kernel-and-the-upro-tqqq-gate/03-03-SUMMARY.md`
+- FOUND commit `da257a5` (Task 2: constants + pinning test, exactly two files)
+- FOUND commit `bcecbcb` (Task 3: tolerance derivation, extends the same two files)
+- `npm run typecheck` exits 0
+- `npm run test` passes (321/321, including the 40 new assertions in `tests/validation/cost-parameters.test.ts`)
