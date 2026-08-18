@@ -119,8 +119,20 @@ test('runBacktest performs 10,000 real invocations into reused buffers with no n
   // Fails if any per-call state leaked into module scope: the buffers are genuinely reused, not
   // reallocated, so an identical run into the same buffers must reproduce an identical result.
   expect(lastResult?.finalValue).toBe(firstFinalValue)
-})
+  // Same reasoning as the timeout on the test below: ITERATIONS backtests plus forced collections
+  // is duration-dependent on runner speed, while the assertion is about heap delta. Measured 1321ms
+  // locally against 2907ms on ubuntu-latest, so the 5000ms default leaves no margin on a slower
+  // 2-core runner.
+}, 60_000)
 
+// REPEAT_COUNT x (500 + 5000) backtests over BAR_COUNT bars is roughly 690M bar-iterations, which
+// runs in a few seconds on a dev machine and comfortably past Vitest's 5000ms default on a shared
+// CI runner (observed: 5431ms on ubuntu-latest, GitHub Actions run 32190604539). The assertion here
+// is about the RATIO of per-call cost between the two batch sizes, so wall-clock duration is an
+// incidental consequence of the workload rather than anything under test, and inheriting a default
+// timeout that scales with runner speed made this red on slow hardware and green on fast. Shrinking
+// the batches would narrow the very spread that makes a super-linear GC signature visible, so the
+// timeout is raised to fit the workload instead. Kept finite so a genuine hang still fails.
 test('per-call cost stays flat from batch size 500 to batch size 5000 (no per-call allocation signature)', async () => {
   const series = buildDeterministicSeries(BAR_COUNT)
   const params = baseKernelParams({ financingSpread: 0.005, expenseRatio: 0.0095 })
@@ -143,4 +155,4 @@ test('per-call cost stays flat from batch size 500 to batch size 5000 (no per-ca
     `batch=500 perCallMs=${smallBatchPerCallMs.toFixed(4)} batch=5000 ` +
       `perCallMs=${largeBatchPerCallMs.toFixed(4)} ratio=${ratio.toFixed(4)}`,
   ).toBeLessThanOrEqual(1.5)
-})
+}, 60_000)
