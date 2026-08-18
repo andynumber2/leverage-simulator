@@ -107,3 +107,32 @@ describe('CI workflow security (PERF-01, threat T-01)', () => {
     expect(WORKFLOW).toMatch(/^\s*-\s*run:\s*npm run bench\s*$/m)
   })
 })
+
+describe('DATA-09 recompile-determinism gate', () => {
+  test('the npm run compile-data invocation is present with raw and public/data arguments', () => {
+    expect(WORKFLOW).toMatch(/npm run compile-data\s+raw\s+public\/data/)
+  })
+
+  test('the git diff --exit-code invocation is present, checking both public/data and src/data-bundle.generated.ts', () => {
+    expect(WORKFLOW).toMatch(/git diff\s+--exit-code\s+--\s+public\/data\s+src\/data-bundle\.generated\.ts/)
+  })
+
+  test('both the compile-data and git diff commands appear as sequential run steps in the workflow', () => {
+    // Look for the pattern of a run step containing compile-data followed by a run step containing git diff
+    // within the same job (no other job markers in between).
+    const compileMentioned = WORKFLOW.indexOf('npm run compile-data') >= 0
+    const gitDiffMentioned = WORKFLOW.indexOf('git diff --exit-code') >= 0
+
+    expect(compileMentioned, 'npm run compile-data not found in workflow').toBe(true)
+    expect(gitDiffMentioned, 'git diff --exit-code not found in workflow').toBe(true)
+
+    // Verify the compile step comes before the git diff step (they should be sequential in the same job)
+    const compilePos = WORKFLOW.indexOf('npm run compile-data')
+    const gitDiffPos = WORKFLOW.indexOf('git diff --exit-code')
+    expect(compilePos < gitDiffPos, 'compile-data should appear before git diff in the workflow').toBe(true)
+  })
+
+  test('the Recompile-determinism gate step name is present (for documentation and observability)', () => {
+    expect(WORKFLOW).toMatch(/Recompile-determinism gate/)
+  })
+})
