@@ -1,0 +1,10 @@
+{
+  "source": "Nasdaq, Inc.",
+  "url": "https://indexes.nasdaqomx.com/Index/History/XNDX",
+  "retrievedAt": "2026-08-14",
+  "seriesKind": "total-return",
+  "license": "Index site terms of use; redistribution of the index history is not explicitly granted (accepted risk, D-05/D-06)",
+  "termsUrl": "https://indexes.nasdaqomx.com/Home/Disclaimer",
+  "scope": "NDX",
+  "units": "index-level"
+}

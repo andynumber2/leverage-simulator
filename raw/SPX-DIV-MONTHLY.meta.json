@@ -1,0 +1,10 @@
+{
+  "source": "Robert Shiller (Yale)",
+  "url": "https://www.econ.yale.edu/~shiller/data/ie_data.xls",
+  "retrievedAt": "2026-08-01",
+  "seriesKind": "dividend-monthly",
+  "license": "Publicly available academic dataset, explicitly redistributable (D-05)",
+  "termsUrl": "https://www.econ.yale.edu/~shiller/data.htm",
+  "scope": "SPX",
+  "units": "ratio"
+}

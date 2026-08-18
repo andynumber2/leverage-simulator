@@ -297,3 +297,154 @@
 - Restating Phase 5's extended-tier bias claim (belongs to Phase 5)
 - Bundle-size trend tracking over time
 - Keyed data sources (Tiingo, Nasdaq Data Link)
+
+---
+---
+
+# Session 2 — Source-Stack Reversal
+
+**Date:** 2026-08-17 (later same day, after the manual-download session)
+**Areas discussed:** S&P total-return source, adjclose stability on refresh, D-04/D-05/D-06 rewrite, Manual vs automated fetch
+
+**Why this session happened:** the manual download of the 23 Stooq/Shiller files in
+`MANUAL-DOWNLOAD.md` failed. Stooq had renamed `^spx` to `^USLC` (a different index, 2013+),
+its `^ndx` carried 47 years of data predating the Nasdaq-100's 1985 launch, and its `Close`
+column turned out to be dividend-adjusted. D-04's locked source stack did not hold.
+
+---
+
+## S&P total-return source
+
+| Option | Description | Selected |
+|--------|-------------|----------|
+| ^SP500TR from Yahoo | S&P 500 Total Return index; guessed that its inception explains D-14's 1988 boundary | ✓ |
+| SPY adjclose, splice at 1993 | Certain to exist, but loses 5 years and is an ETF not the index | |
+| Shiller construction throughout | No splice, no ticker dependency, but nothing real to validate against | |
+
+**User's choice:** ^SP500TR from Yahoo
+**Notes:** Verified in-session: first bar 1988-01-04, exactly the declared boundary. 9,728 bars,
+zero nulls. Cross-checked against ^GSPC (256.02 vs 255.94 on day one, 6609.29 vs 3257.85 by 2020).
+
+---
+
+## NDX total-return source
+
+| Option | Description | Selected |
+|--------|-------------|----------|
+| ^XNDX from Yahoo | Nasdaq-100 Total Return, same pattern as ^SP500TR | ✓ (ticker), source changed |
+| QQQ adjclose as proxy | Certain to work, but folds QQQ's expense ratio into an index series | |
+| No NDX total return | Honest, but amends 02-05's universe test and DATA-07 | |
+
+**User's choice:** ^XNDX — but Yahoo stores no history for it (`firstTradeDate: null`,
+`validRanges: ["1d","5d"]`). The user then found `indexes.nasdaqomx.com/Index/History/XNDX`.
+**Notes:** A follow-up question about what to do if a total-return ticker turned out missing was
+**withdrawn** — the user redirected to verifying the tickers live rather than designing for a
+hypothetical. Both were then resolved empirically. Nasdaq's export goes back only to 1999-03-04,
+which is acceptable under D-14 (tier is a property of the pair). Exports as Excel, needs manual
+CSV conversion. The user chose EOD over start-of-day prices.
+
+---
+
+## adjclose stability on refresh
+
+| Option | Description | Selected |
+|--------|-------------|----------|
+| Reconstruct from close + dividends | Past values immutable; refresh appends instead of rewriting | ✓ |
+| Store adjclose as sourced | Simplest, matches D-20, but every refresh rewrites all rows | |
+| Store both | Strongest verification, but doubles the raw tree against an unmeasured decode budget | |
+
+**User's choice:** Reconstruct from close + dividends
+**Notes:** Verified before committing to it — reconstruction reproduces adjclose to 0.0033% (QQQ)
+through 0.0828% (TQQQ, worst case across 372x growth).
+
+| Option | Description | Selected |
+|--------|-------------|----------|
+| Hard gate in the fetch script | Exits non-zero past a declared tolerance | ✓ |
+| Gate in the test suite instead | Runs in CI, but a bad refresh commits first | |
+| Record the delta, do not gate | Visible in the manifest, but nothing blocks a broken series | |
+
+**User's choice:** Hard gate in the fetch script
+
+| Option | Description | Selected |
+|--------|-------------|----------|
+| Derived CSV + vendor JSON, both committed | D-03 and D-20 hold; derivation stays auditable | ✓ |
+| Derived CSV only | Smallest repo, but the dividend events exist nowhere | |
+| Derived CSV + separate dividends CSV | Auditable and smaller, but misses split events | |
+
+**User's choice:** Derived CSV + vendor JSON, both committed (~9 MB accepted)
+
+---
+
+## D-04/D-05/D-06 rewrite
+
+| Option | Description | Selected |
+|--------|-------------|----------|
+| Yahoo + Nasdaq + FRED + Shiller | Four vendors, each the narrowest source carrying what it is asked for | ✓ |
+| Same, plus Stooq as a cross-check | Keeps a bot challenge for a vendor we no longer trust | |
+| Yahoo only, drop XNDX | One format, but discards a verified real TR series | |
+
+**User's choice:** Yahoo + Nasdaq + FRED + Shiller
+
+| Option | Description | Selected |
+|--------|-------------|----------|
+| Same mechanism, restated per vendor | D-05/D-06 machinery was never Stooq-specific; only text changes | ✓ |
+| Same, plus record endpoint's unofficial status | One more authored field per source | |
+| Escalate licensing before proceeding | Blocks on a question D-05 already answered | |
+
+**User's choice:** Same mechanism, restated per vendor
+
+| Option | Description | Selected |
+|--------|-------------|----------|
+| Supersede, do not rewrite | 02-03-SUMMARY.md stays as history; live docs get rewritten | ✓ |
+| Rewrite everything in place | One consistent story, but erases why Stooq failed | |
+| Add a single errata document | Least churn, but readers of the summary get no signal | |
+
+**User's choice:** Supersede, do not rewrite
+
+---
+
+## Manual vs automated fetch
+
+| Option | Description | Selected |
+|--------|-------------|----------|
+| Yahoo + FRED automated, Nasdaq + Shiller manual | Originally recommended | |
+| Everything manual except FRED | Predictable, but refreshes stop happening | |
+| Yahoo automated with manual fallback | Robust to the rate limiting already hit | ✓ |
+
+**User's choice:** Yahoo automated with manual fallback
+**Notes:** The user pushed back on the original recommendation: "I'm curious why you would
+recommend that when we're getting rate limited... you get rate limited on the first request.
+There's something missing in the request to Yahoo." Testing followed: default curl UA 429,
+browser UA 429, query2 429, `finance.yahoo.com` homepage 200, stooq.com 200. Conclusion: an
+IP-level block on the API hosts against this sandbox's shared egress address, not a malformed
+request, and no known workaround. That is the argument for the fallback: it will likely work on a
+developer machine and likely fail on a shared-IP CI runner.
+
+| Option | Description | Selected |
+|--------|-------------|----------|
+| Report provenance per symbol, fail on stale | Reuses D-12's staleness reasoning | ✓ |
+| Report provenance, warn only | Warnings get skimmed | |
+| Fallback requires an explicit flag | D-11 already rejected a flag on CI grounds | |
+
+**User's choice:** Report provenance per symbol, fail on stale
+
+| Option | Description | Selected |
+|--------|-------------|----------|
+| Rewrite MANUAL-DOWNLOAD.md around the two real manual sources | Keeps one "the fetch failed, now what" doc | ✓ |
+| Split into two documents | Cleaner separation, two docs to sync | |
+| Fold into README.md | README already long | |
+
+**User's choice:** Rewrite it around the two real manual sources
+
+---
+
+## Claude's Discretion (session 2)
+
+- Whether XNDX's phantom 2012-10-29 zero bar is a drop-zero rule or a calendar exception
+- The tolerance for D-25's gate and the staleness threshold for D-27's fallback
+- Whether the four vendor formats share a normalizer interface
+- Whether the two `parseShillerCsv` bugs are fixed in the source-swap plan or their own
+
+## Deferred Ideas (session 2)
+
+None — discussion stayed within phase scope.

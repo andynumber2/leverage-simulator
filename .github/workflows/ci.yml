@@ -31,6 +31,15 @@ jobs:
 
       - run: npm ci
 
+      # DATA-09/D-22: proves the committed public/data/ bundle (and its src/data-bundle.generated.ts
+      # pointer) is provably the output of the committed raw/ inputs beside it. Both raw/ and
+      # public/data/ are committed as of plan 02-05, so the interim `if [ -d raw ]` guard plan
+      # 02-01 added is no longer needed.
+      - name: Recompile-determinism gate (DATA-09)
+        run: |
+          npm run compile-data raw public/data
+          git diff --exit-code -- public/data src/data-bundle.generated.ts
+
       - uses: actions/cache@v4
         id: playwright-cache
         with:
