@@ -11,12 +11,19 @@
  * without replacing anything plan 03-01 already established above.
  */
 
+import { execFileSync } from 'node:child_process'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
+
 import { describe, expect, test } from 'vitest'
 
 import { seriesView } from '../../tools/bundle-compiler/src/binary-format.ts'
 import { runBacktest } from '../../src/kernel/backtest.ts'
 import type { KernelOutputs, KernelParams, KernelSeries } from '../../src/kernel/backtest.types.ts'
 import { buildKernelInputs, loadBundleFromDisk, type BacktestRequest, type LoadedBundle } from '../../src/data/kernel-inputs.ts'
+
+const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
+const RUN_BACKTEST_SCRIPT = path.join(REPO_ROOT, 'scripts/run-backtest.ts')
 
 function baseRequest(overrides: Partial<BacktestRequest> = {}): BacktestRequest {
   return {
@@ -283,5 +290,99 @@ describe('buildKernelInputs: contribution schedule integration (SIM-06)', () => 
 
     expect(inputs.meta.contributionCount).toBe(0)
     expect(Array.from(inputs.series.contributionFlags)).toEqual(new Array(100).fill(0))
+  })
+})
+
+describe('scripts/run-backtest.ts end-to-end (--json, spawned as a real process)', () => {
+  test('exercises the full parameter surface at fractional leverage and asserts on the parsed JSON object, not formatted text', () => {
+    const stdout = execFileSync(
+      process.execPath,
+      [
+        '--experimental-strip-types',
+        RUN_BACKTEST_SCRIPT,
+        '--symbol',
+        'SPX',
+        '--leverage',
+        '2.5',
+        '--entry',
+        '2015-01-30',
+        '--holding-bars',
+        '2520',
+        '--initial',
+        '10000',
+        '--contribution',
+        '500',
+        '--frequency',
+        'monthly',
+        '--dividends',
+        'reinvest',
+        '--json',
+      ],
+      { cwd: REPO_ROOT, encoding: 'utf-8' },
+    )
+
+    const parsed = JSON.parse(stdout) as {
+      header: {
+        seriesId: string
+        costDefaults: {
+          expenseRatio: { confidence: string }
+          financingSpread: { confidenceLower: string; confidenceUpper: string }
+        }
+        contribution: { count: number }
+      }
+      summary: { finalValue: number; totalContributed: number }
+    }
+
+    expect(Number.isFinite(parsed.summary.finalValue)).toBe(true)
+    expect(parsed.header.contribution.count).toBe(120)
+    expect(parsed.summary.totalContributed).toBe(10_000 + 500 * parsed.header.contribution.count)
+    expect(parsed.header.seriesId).toBe('SPX/total-return')
+    expect(parsed.header.costDefaults.expenseRatio.confidence).toBe('CITED')
+    expect(['ASSUMED', 'CITED', 'VERIFIED']).toContain(parsed.header.costDefaults.financingSpread.confidenceLower)
+    expect(['ASSUMED', 'CITED', 'VERIFIED']).toContain(parsed.header.costDefaults.financingSpread.confidenceUpper)
+  })
+
+  test('exits non-zero and names the supported leverage range for an out-of-range leverage', () => {
+    expect(() =>
+      execFileSync(
+        process.execPath,
+        ['--experimental-strip-types', RUN_BACKTEST_SCRIPT, '--symbol', 'SPX', '--leverage', '25', '--entry', '2015-01-30'],
+        { cwd: REPO_ROOT, encoding: 'utf-8', stdio: ['ignore', 'ignore', 'pipe'] },
+      ),
+    ).toThrowError()
+
+    try {
+      execFileSync(
+        process.execPath,
+        ['--experimental-strip-types', RUN_BACKTEST_SCRIPT, '--symbol', 'SPX', '--leverage', '25', '--entry', '2015-01-30'],
+        { cwd: REPO_ROOT, encoding: 'utf-8', stdio: ['ignore', 'ignore', 'pipe'] },
+      )
+    } catch (err) {
+      const stderr = (err as { stderr: string }).stderr
+      expect(stderr).toMatch(/leverage/i)
+      expect(stderr).toContain('20')
+    }
+  })
+
+  test('accepts sub-1x leverage as the deliberate credit case (D-08) rather than rejecting it', () => {
+    const stdout = execFileSync(
+      process.execPath,
+      [
+        '--experimental-strip-types',
+        RUN_BACKTEST_SCRIPT,
+        '--symbol',
+        'SPX',
+        '--leverage',
+        '0.5',
+        '--entry',
+        '2015-01-30',
+        '--holding-bars',
+        '252',
+        '--json',
+      ],
+      { cwd: REPO_ROOT, encoding: 'utf-8' },
+    )
+    const parsed = JSON.parse(stdout) as { header: { leverage: number } }
+    expect(parsed.header.leverage).toBe(0.5)
   })
 })
