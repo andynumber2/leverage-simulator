@@ -168,14 +168,36 @@ export function calibrationScore(): number {
  * non-finite (WR-02): a broken calibration score must never propagate through every downstream
  * figure as an unreadable number. Also throws when `rawMs` itself is non-finite.
  *
- * KNOWN LIMITATION (Broken Window 2, quick-260816-qae): this correction is partial, not
- * complete. Across three D-17 baseline runs the raw PERF-03 sweep spanned 653.1ms to 856.4ms
- * (a 31% spread) and the normalized figures still read 70.0%, 80.8% and 70.3% of budget, where
- * a fully working anchor would collapse them toward one number. Treat a normalized figure as
- * carrying roughly 10 percentage points of runner noise, and do not read a small change in one
- * as a real regression or improvement. The remedy is not retuning NOMINAL_REFERENCE_MS, which
- * is budget-denominating; it is establishing whether this scalar reference loop tracks a
- * Worker-pool workload's sensitivity to runner speed at all.
+ * MEASURED NOISE BAND (Broken Window 2, quick-260818-v2d, superseding quick-260816-qae): this
+ * correction is real but partial, conditioned on a 4-core runner. Over the n=13 recorded D-17
+ * baseline runs, normalize() cuts PERF-03's CV from 11.03% raw to 6.36% normalized, and PERF-02's
+ * from 11.10% to 7.12%; within the largest same-HEAD cohort with the one anomalous run excluded,
+ * normalized PERF-02 sits at 0.31% CV and PERF-03 at 3.07%. The correction works; it is partial,
+ * not absent.
+ *
+ * This band holds only on a 4-core runner, because all 13 recorded runs drew 4 cores and the
+ * parallel-width term was therefore constant across the whole dataset. That term is now handled
+ * separately: bench/sweep-pool.ts pins PERF-03's pool to BASELINE_WORKER_COUNT and bench/
+ * report.ts withholds its verdict when the recorded host width differs from the declared
+ * baseline, so this band never has to speak for a non-4-core host.
+ *
+ * The residual is a shared per-run factor the anchor's single sample did not capture, not each
+ * metric's own sampling tail: cross-metric residual correlation is 0.874 within cohort, while the
+ * residuals' correlation with the anchor's own level is 0.057 and -0.007. One scalar cannot fully
+ * correct it because each workload has its own elasticity to host interference: measured under
+ * memory contention, anchor +7.8%, PERF-02 raw +12.1%, PERF-05 raw +24.5%, PERF-03 raw +60.2%,
+ * leaving post-normalize residuals of +4.0%, +15.5% and 48.6%. This is why PERF-05 normalizes
+ * worst of the three.
+ *
+ * Read a normalized figure accordingly: a single run supports a headroom claim only to roughly
+ * +/-13% (2 sd), and a two-run comparison only to roughly +/-20%. Detecting a true 5% change at
+ * 80% power needs roughly 26 runs per arm, 10% needs roughly 7. The remedy for the residual is
+ * more runs, not a cleverer anchor: a regression-calibrated coefficient was measured and rejected
+ * (log-log OLS slope 1.051, 95% CI 0.626 to 1.476, worth 0.02pp over plain division). Retuning
+ * NOMINAL_REFERENCE_MS is still not the remedy either, for the reason already recorded above:
+ * it is budget-denominating.
+ *
+ * See 260818-v2d-RESEARCH.md for every figure in this comment.
  */
 export function normalize(rawMs: number, score: number): number {
   if (!Number.isFinite(score) || score <= 0) {
