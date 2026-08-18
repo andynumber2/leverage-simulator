@@ -10,7 +10,8 @@
     "bench": "vitest run --project bench",
     "bench:selftest": "vitest run --project bench-selftest",
     "compile-data": "node --experimental-strip-types tools/bundle-compiler/src/cli.ts",
-    "fetch-data": "node --experimental-strip-types tools/fetch-data/src/fetch.ts"
+    "fetch-data": "node --experimental-strip-types tools/fetch-data/src/fetch.ts",
+    "run-backtest": "node --experimental-strip-types scripts/run-backtest.ts"
   },
   "license": "UNLICENSED",
   "devDependencies": {
