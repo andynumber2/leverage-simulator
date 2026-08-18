@@ -332,7 +332,16 @@ npm run bench          # resolved PERF-02/PERF-05 figures, this section's §6 ta
 npm run bench:selftest  # gate-liveness proof; exits non-zero against the deliberate fixture
 ```
 
-Still unproven: no run has executed on GitHub Actions, because no remote is configured in this
-repository (`git remote -v` returns nothing). Whether the CI job renders a non-zero exit as a red
-check, and whether these dev-machine figures hold on the D-17 `ubuntu-latest` baseline, both
-remain open until a real remote and a real CI run exist.
+**Superseded 2026-08-18.** This section originally read "still unproven: no run has executed on
+GitHub Actions, because no remote is configured." That was true when written and is not true now.
+`origin` points at github.com/andynumber2/leverage-simulator, and the CI job has executed on the
+D-17 `ubuntu-latest` baseline repeatedly. Whether a non-zero exit renders as a red check is proved:
+run 31963076671 attempt 1 concluded `failure` with `assertWithinBudget: budget "PERF-03" failed:
+measured 1032.430555555439ms exceeds budget 1000ms`. Runs 31965951474, 31980066804 and 31980323928
+were green.
+
+Still open: the figures in sections 2 and 6 above remain dev-machine measurements, not the
+ubuntu-latest baseline. The real baseline runs establish a separate finding, that PERF-03's raw
+sweep spans 653.1ms to 856.4ms across runners and fails outright at 1032ms on a 2-logical-core
+runner. That variance is tracked as WINDOWS entry 2 (waived, expiring before Phase 4 planning), not
+here.
