@@ -139,7 +139,7 @@ Plans:
   4. A script runs one real backtest end to end and prints the equity curve, exercising the full parameter surface: arbitrary positive leverage from 1x through 20x including fractional values, an initial investment plus recurring contributions at daily, monthly, quarterly or yearly frequency, a dividend-reinvest toggle that switches between the bundled total-return and price-return series rather than modelling dividends, an entry date with either a fixed holding period or hold-to-today, and user-supplied expense ratio and financing spread defaulting to the independently sourced values.
   5. A single backtest over the full ~25,000-bar history completes in under 16ms measured on real hardware, and 10,000 back-to-back invocations produce no measurable GC pressure because the hot loop allocates nothing and writes into preallocated buffers. The kernel is one module with no imports from the data, sweep or chart layers, so there is no second implementation that can drift.
 
-**Plans:** 5/6 plans executed
+**Plans:** 6/6 plans executed
 
 Plans:
 **Wave 1**
@@ -158,7 +158,7 @@ Plans:
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
-- [ ] 03-06-PLAN.md — The build-failing UPRO and TQQQ tracking-error gate, with rate-regime sub-windows reported and the residual printed as a number
+- [x] 03-06-PLAN.md — The build-failing UPRO and TQQQ tracking-error gate, with rate-regime sub-windows reported and the residual printed as a number
 
 ### Phase 4: First Defensible Backtest in the Browser
 
@@ -252,7 +252,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 |-------|----------------|--------|-----------|
 | 1. Performance Spike and Budget Lock | 6/6 | Complete    | 2026-08-17 |
 | 2. Compiled Data Bundle | 8/8 | Complete    | 2026-08-17 |
-| 3. Simulation Kernel and the UPRO/TQQQ Gate | 5/6 | In Progress|  |
+| 3. Simulation Kernel and the UPRO/TQQQ Gate | 6/6 | In Progress|  |
 | 4. First Defensible Backtest in the Browser | 0/TBD | Not started | - |
 | 5. Attribution and the Credibility Surface | 0/TBD | Not started | - |
 | 6. Heatmap Design Pass | 0/TBD | Not started | - |
