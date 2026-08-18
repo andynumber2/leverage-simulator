@@ -45,27 +45,28 @@ to the per-task sampling command.
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| TBD | TBD | 1 | SIM-01 | — | N/A | unit (fast-check property) | `npm run test` | ❌ W0 | ⬜ pending |
-| TBD | TBD | 1 | SIM-02 | — | N/A | unit (fixed-case + fast-check) | `npm run test` | ❌ W0 | ⬜ pending |
-| TBD | TBD | 1 | SIM-03 | — | N/A | unit (calendar-day accrual, 3-day weekend) | `npm run test` | ❌ W0 | ⬜ pending |
-| TBD | TBD | 1 | SIM-04 | — | N/A | unit (1x exactness, 1e-9 relative) | `npm run test` | ❌ W0 | ⬜ pending |
-| TBD | TBD | 1 | SIM-05 | — | N/A | unit (ruin clamp / flag / absorbing) | `npm run test` | ❌ W0 | ⬜ pending |
-| TBD | TBD | 1 | SIM-07 | — | N/A | unit (dividend-reinvest series toggle) | `npm run test` | ❌ W0 | ⬜ pending |
-| TBD | TBD | 1 | SIM-08 | — | N/A | unit (entry date, fixed period vs hold-to-today) | `npm run test` | ❌ W0 | ⬜ pending |
-| TBD | TBD | 1 | SIM-10 | — | N/A | unit (kernel module boundary — import assertion) | `npm run test` | ❌ W0 | ⬜ pending |
-| TBD | TBD | 1 | SIM-12 | — | N/A | unit (PITFALLS §A checklist) | `npm run test` | ❌ W0 | ⬜ pending |
-| TBD | TBD | 2 | SIM-06 | — | N/A | unit (contribution date resolution) | `npm run test` | ❌ W0 | ⬜ pending |
-| TBD | TBD | 2 | SIM-09 | — | N/A | unit (constant-pinning against citation, D-19) | `npm run test` | ❌ W0 | ⬜ pending |
-| TBD | TBD | 2 | SIM-11 | — | N/A | unit (Node `--expose-gc` heap-delta) | `npm run test` (needs `--expose-gc` wiring) | ❌ W0 | ⬜ pending |
-| TBD | TBD | 2 | VALID-01 | — | N/A | unit (real-data tracking error vs UPRO/TQQQ) | `npm run test` | ❌ W0 | ⬜ pending |
-| TBD | TBD | 2 | VALID-02 | — | N/A | unit (build-failing tolerance gate) | `npm run test` | ❌ W0 | ⬜ pending |
-| TBD | TBD | 2 | VALID-03 | — | N/A | manual checkpoint + unit (see Manual-Only below) | `npm run test` | ❌ W0 | ⬜ pending |
-| TBD | TBD | 2 | PERF-02 | — | N/A | bench (<16ms over ~25,000 bars) | `npm run bench` | ✓ exists | ⬜ pending |
+| 03-01 T1 | 03-01 | 1 | SIM-01, SIM-02, SIM-03, SIM-05 | T-03-01, T-03-04 | length asserts before the loop; non-finite scalars rejected at the boundary | unit (end-to-end, real bundle) | `npm run test -- tests/data/kernel-inputs.test.ts` | ❌ W0 | ⬜ pending |
+| 03-01 T1 | 03-01 | 1 | SIM-11 | T-03-02 | `decodeHeader` called with the required expected-version argument | script (end-to-end) | `npm run run-backtest -- --symbol SPX --leverage 3 --entry 1990-01-02 --holding-bars 2520` | ❌ W0 | ⬜ pending |
+| 03-01 T2 | 03-01 | 1 | SIM-08, SIM-10 | T-03-01, T-03-03 | out-of-range parameters throw naming the value; kernel import set asserted | unit (source + behavior assertions) | `npm run test -- tests/kernel/module-boundary.test.ts` | ❌ W0 | ⬜ pending |
+| 03-02 T1 | 03-02 | 2 | SIM-01, SIM-02, SIM-03, SIM-04, SIM-12 | — | N/A | unit (table-driven + fast-check property) | `npm run test -- tests/kernel/pitfalls-a.test.ts` | ❌ W0 | ⬜ pending |
+| 03-02 T2 | 03-02 | 2 | SIM-05, SIM-12 | T-03-06, T-03-07, T-03-08 | ruin asserted categorically, never by epsilon; no negative value reachable | unit (table-driven + real-bundle case) | `npm run test -- tests/kernel/ruin.test.ts` | ❌ W0 | ⬜ pending |
+| 03-03 T1 | 03-03 | 2 | SIM-09, VALID-03 | T-03-09 | the one-way commit's content is confirmed before the door is walked through | checkpoint:decision (blocking) | manual — see Manual-Only below | n/a | ⬜ pending |
+| 03-03 T2 | 03-03 | 2 | SIM-09, VALID-03 | T-03-09, T-03-10, T-03-11 | confidence tag required per entry; `ASSUMED` must record its failed retrieval routes | unit (constant pinning, D-19) | `npm run test -- tests/validation/cost-parameters.test.ts` | ❌ W0 | ⬜ pending |
+| 03-03 T3 | 03-03 | 2 | VALID-02, VALID-03 | T-03-12 | tolerances computed from a priced mechanism list, never written as literals | unit (recomputed derivation) | `npm run test -- tests/validation/cost-parameters.test.ts` | ❌ W0 | ⬜ pending |
+| 03-04 T1 | 03-04 | 3 | SIM-06 | T-03-13, T-03-14 | duplicate resolved bar throws; search bounded by the validated window | unit (real calendar + hand-built fixtures) | `npm run test -- tests/data/contribution-schedule.test.ts` | ❌ W0 | ⬜ pending |
+| 03-04 T2 | 03-04 | 3 | SIM-06, SIM-07, SIM-08 | T-03-15 | unknown symbol and out-of-range window both throw naming the value | unit (real bundle) | `npm run test -- tests/data/kernel-inputs.test.ts` | ❌ W0 | ⬜ pending |
+| 03-04 T3 | 03-04 | 3 | SIM-09 | T-03-15, T-03-16 | leverage validated at the CLI boundary; defaults printed with their confidence tag | script (end-to-end, `--json`) | `npm run run-backtest -- --symbol SPX --leverage 2.5 --entry 2015-01-30 --holding-bars 2520 --initial 10000 --contribution 500 --frequency monthly --dividends reinvest --json` | ❌ W0 | ⬜ pending |
+| 03-05 T1 | 03-05 | 3 | PERF-02, SIM-10 | T-03-17, T-03-20 | measured subject is the production kernel; no budget row changed | bench (<16ms over ~25,000 real bars) | `npm run bench` | ✓ exists | ⬜ pending |
+| 03-05 T2 | 03-05 | 3 | SIM-11 | T-03-18, T-03-19 | collection forced inside the loop; missing flag asserts rather than skips | unit (Node `--expose-gc` heap delta + batch flatness) | `npm run test -- tests/kernel/allocation.test.ts` | ❌ W0 | ⬜ pending |
+| 03-06 T1 | 03-06 | 4 | VALID-01 | T-03-23 | degenerate windows, unequal lengths and non-finite values each throw | unit (hand-computed references) | `npm run test -- tests/validation/tracking-error.test.ts` | ❌ W0 | ⬜ pending |
+| 03-06 T2 | 03-06 | 4 | VALID-01, VALID-02, VALID-03 | T-03-21, T-03-22, T-03-24, T-03-25 | windows derived at run time and asserted at least 15 years; residual always printed | unit (build-failing gate over the real bundle) | `npm run test -- tests/validation/upro-tqqq-gate.test.ts` | ❌ W0 | ⬜ pending |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
-Wave numbers above are the validation-strategy expectation, not a binding plan wave assignment.
-The planner owns wave assignment; if it differs, this table follows the plan.
+Wave numbers above are the plan's binding wave assignment as written by `03-0N-PLAN.md`. The
+seeded draft expected two waves; the plan set uses four, and this table follows the plan.
+
+Threat refs point at the `<threat_model>` STRIDE register in the plan named in the Plan column.
 
 ---
 
@@ -74,8 +75,9 @@ The planner owns wave assignment; if it differs, this table follows the plan.
 - [ ] `src/kernel/` — the real kernel module plus its test file, carrying the PITFALLS §A
       checklist. `tests/kernel.test.ts` exists today against the throwaway Phase 1 spike kernel
       and is the direct structural template; the ruin and 3-day-gap cases port over.
-- [ ] `src/kernel/cost-parameters.ts` — the sourced, citation-pinned constants module. Must be
-      committed atomically and BEFORE the tracking-error gate test, per D-19.
+- [ ] `src/validation/cost-parameters.ts` — the sourced, citation-pinned constants module. Must be
+      committed atomically and BEFORE the tracking-error gate test, per D-19. Plan `03-03` is wave 2
+      and plan `03-06` is wave 4, which is how the ordering is enforced.
 - [ ] `tests/validation/upro-tqqq-gate.test.ts` — the build-failing tracking-error gate. Entirely
       new; loads the Phase 2 bundle through `tools/bundle-compiler/src/binary-format.ts`.
 - [ ] `--expose-gc` wiring for the SIM-11 GC-pressure test — a new npm script or a Vitest
@@ -105,3 +107,14 @@ The planner owns wave assignment; if it differs, this table follows the plan.
 - [ ] `nyquist_compliant: true` set in frontmatter
 
 **Approval:** pending
+
+## Deviations from the seeded draft
+
+- `human_verify_mode` is `end-of-phase` in `.planning/config.json`, so the `checkpoint:human-verify`
+  that `03-RESEARCH.md` recommended before the D-19 cost-parameter commit is NOT emitted. Its intent
+  is preserved two ways: a blocking `checkpoint:decision` in `03-03` puts the
+  commit-at-`ASSUMED`-confidence fork in front of the developer before the one-way commit, and a
+  `<verify><human-check>` on the same task carries the EDGAR retrieval instructions into the
+  end-of-phase manual batch. Both Manual-Only rows below remain owed.
+- `SIM-11`'s `--expose-gc` wiring lands as a `poolOptions` entry on the `unit` project in
+  `vitest.config.ts` rather than as a new npm script, so `npm run test` stays the single command.
