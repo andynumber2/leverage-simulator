@@ -33,7 +33,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Performance Spike and Budget Lock** - Measure the hot loop and the 10k-cell repaint on real hardware, then commit the architecture and the budgets (completed 2026-08-17)
 - [x] **Phase 2: Compiled Data Bundle** - A CLI compiler turns raw CSVs into versioned binary assets with machine-readable provenance (completed 2026-08-17)
-- [ ] **Phase 3: Simulation Kernel and the UPRO/TQQQ Gate** - The cost model, proven against real leveraged-ETF history before any UI is built on it
+- [x] **Phase 3: Simulation Kernel and the UPRO/TQQQ Gate** - The cost model, proven against real leveraged-ETF history before any UI is built on it (completed 2026-08-18)
 - [ ] **Phase 4: First Defensible Backtest in the Browser** - A real single run, in the browser, that can be pasted as a link
 - [ ] **Phase 5: Attribution and the Credibility Surface** - Name which mechanism consumed the money, and let a skeptic check every assumption
 - [ ] **Phase 6: Heatmap Design Pass** - Argue the entry-date x leverage treatment from throwaway mockups, since there is no prior art to copy
@@ -139,7 +139,7 @@ Plans:
   4. A script runs one real backtest end to end and prints the equity curve, exercising the full parameter surface: arbitrary positive leverage from 1x through 20x including fractional values, an initial investment plus recurring contributions at daily, monthly, quarterly or yearly frequency, a dividend-reinvest toggle that switches between the bundled total-return and price-return series rather than modelling dividends, an entry date with either a fixed holding period or hold-to-today, and user-supplied expense ratio and financing spread defaulting to the independently sourced values.
   5. A single backtest over the full ~25,000-bar history completes in under 16ms measured on real hardware, and 10,000 back-to-back invocations produce no measurable GC pressure because the hot loop allocates nothing and writes into preallocated buffers. The kernel is one module with no imports from the data, sweep or chart layers, so there is no second implementation that can drift.
 
-**Plans:** 6/6 plans executed
+**Plans:** 6/6 plans complete
 
 Plans:
 **Wave 1**
