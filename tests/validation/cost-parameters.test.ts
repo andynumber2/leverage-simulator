@@ -15,7 +15,11 @@ import {
   FINANCING_SPREAD_DEFAULT,
   FINANCING_SPREAD_RANGE,
   GENERIC_3X_EXPENSE_RATIO,
+  RETURN_DRIFT_TOLERANCE,
+  TOLERANCE_MECHANISMS,
+  TOLERANCE_SAFETY_FACTOR,
   TQQQ_INCEPTION_ERA_EXPENSE_RATIO,
+  TRACKING_ERROR_TOLERANCE,
   UPRO_INCEPTION_ERA_EXPENSE_RATIO,
   type CostParameterConfidence,
 } from '../../src/validation/cost-parameters.ts'
@@ -97,5 +101,67 @@ describe('FINANCING_SPREAD_RANGE and FINANCING_SPREAD_DEFAULT', () => {
   test('FINANCING_SPREAD_RANGE reads off COST_PARAMETERS rather than duplicating a literal', () => {
     expect(FINANCING_SPREAD_RANGE.lower).toBe(COST_PARAMETERS['financing-spread-lower'].value)
     expect(FINANCING_SPREAD_RANGE.upper).toBe(COST_PARAMETERS['financing-spread-upper'].value)
+  })
+})
+
+/** Recomputes the D-14 sum independently of src/validation/cost-parameters.ts's own
+ * `sumMechanismsForScope` helper (which is not exported), so this test does not merely call the
+ * same code twice -- it re-derives the expected tolerance from TOLERANCE_MECHANISMS's public
+ * shape and TOLERANCE_SAFETY_FACTOR, the same inputs a future reviewer would use by hand. */
+function recomputeToleranceForScope(scope: 'tracking-error' | 'drift'): number {
+  const totalBasisPoints = TOLERANCE_MECHANISMS.filter((m) => m.appliesTo === scope || m.appliesTo === 'both').reduce(
+    (sum, m) => sum + m.basisPointsPerYear,
+    0,
+  )
+  return (totalBasisPoints / 10_000) * TOLERANCE_SAFETY_FACTOR
+}
+
+describe('TOLERANCE_MECHANISMS: D-14\'s enumerated, priced, cited derivation', () => {
+  test('every mechanism has a non-empty basis', () => {
+    for (const mechanism of TOLERANCE_MECHANISMS) {
+      expect(mechanism.basis.length).toBeGreaterThan(0)
+    }
+  })
+
+  test('every mechanism has a basisPointsPerYear strictly greater than zero', () => {
+    for (const mechanism of TOLERANCE_MECHANISMS) {
+      expect(mechanism.basisPointsPerYear).toBeGreaterThan(0)
+    }
+  })
+
+  test('at least five mechanisms are scoped to drift (directly or via "both")', () => {
+    const driftMechanisms = TOLERANCE_MECHANISMS.filter((m) => m.appliesTo === 'drift' || m.appliesTo === 'both')
+    expect(driftMechanisms.length).toBeGreaterThanOrEqual(5)
+  })
+
+  test('at least four mechanisms are scoped to precision/tracking-error (directly or via "both")', () => {
+    const precisionMechanisms = TOLERANCE_MECHANISMS.filter(
+      (m) => m.appliesTo === 'tracking-error' || m.appliesTo === 'both',
+    )
+    expect(precisionMechanisms.length).toBeGreaterThanOrEqual(4)
+  })
+})
+
+describe('RETURN_DRIFT_TOLERANCE and TRACKING_ERROR_TOLERANCE: computed, not literal', () => {
+  test('RETURN_DRIFT_TOLERANCE equals the independently recomputed sum of drift mechanisms times the safety factor', () => {
+    expect(RETURN_DRIFT_TOLERANCE).toBeCloseTo(recomputeToleranceForScope('drift'), 12)
+  })
+
+  test('TRACKING_ERROR_TOLERANCE equals the independently recomputed sum of precision mechanisms times the safety factor', () => {
+    expect(TRACKING_ERROR_TOLERANCE).toBeCloseTo(recomputeToleranceForScope('tracking-error'), 12)
+  })
+
+  test('TOLERANCE_SAFETY_FACTOR is 1.5', () => {
+    expect(TOLERANCE_SAFETY_FACTOR).toBe(1.5)
+  })
+
+  test('both tolerances are expressed as annualized fractions, not basis points or percentages', () => {
+    // A genuine tracking-error/drift tolerance in fraction form for this domain is well under 1
+    // (100%); basis-points or percent-point figures mistakenly left unconverted would be orders
+    // of magnitude larger or smaller than this band.
+    expect(RETURN_DRIFT_TOLERANCE).toBeGreaterThan(0)
+    expect(RETURN_DRIFT_TOLERANCE).toBeLessThan(0.05)
+    expect(TRACKING_ERROR_TOLERANCE).toBeGreaterThan(0)
+    expect(TRACKING_ERROR_TOLERANCE).toBeLessThan(0.05)
   })
 })

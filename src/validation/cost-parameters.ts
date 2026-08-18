@@ -276,3 +276,211 @@ const _costParameterExhaustivenessCheck: [_AssertAllCostParameterIdsPresent, _As
   true,
 ]
 void _costParameterExhaustivenessCheck
+
+// --- D-14: tracking-error tolerance derivation, from enumerated un-modelled mechanisms ---------
+
+/** Which of the two D-11 gates a mechanism's magnitude contributes to. `'both'` contributes to
+ * both sums. Precision (`'tracking-error'`, Gate 1, the annualized stdev of daily return
+ * differences) and drift (`'drift'`, Gate 2, the annualized return difference) are priced from
+ * separate mechanism lists, because a bias mechanism does not necessarily produce daily
+ * dispersion and vice versa. */
+export type ToleranceMechanismScope = 'tracking-error' | 'drift' | 'both'
+
+/** `'one-directional'`: always pushes the synthetic the same way relative to the real fund (e.g.
+ * a cost the model omits that the fund pays, or a benefit the fund earns that the model doesn't
+ * credit). `'bidirectional'`: sign varies by period or is not knowable in advance. */
+export type ToleranceMechanismDirection = 'one-directional' | 'bidirectional'
+
+/** One enumerated un-modelled mechanism (D-14): something the two-parameter cost model does not
+ * capture, with a reasoned or cited annualized magnitude. `basisPointsPerYear` must be strictly
+ * positive -- a mechanism priced at exactly zero contributes nothing and does not belong in the
+ * list; if a mechanism is judged negligible, its magnitude should still be a small positive
+ * number reflecting genuine, if slight, uncertainty, not a bare zero standing in for "ignore
+ * this." */
+export interface ToleranceMechanism {
+  id: string
+  appliesTo: ToleranceMechanismScope
+  direction: ToleranceMechanismDirection
+  basisPointsPerYear: number
+  /** The reasoning or citation that produced `basisPointsPerYear`. Never a number alone: D-15's
+   * revision rule requires every mechanism to be named, not just quantified. */
+  basis: string
+  confidence: CostParameterConfidence
+}
+
+/**
+ * D-14's enumerated mechanisms. No trial tracking error was computed before this list was
+ * written or priced -- see this module's header comment. Every magnitude below is a reasoned
+ * order-of-magnitude estimate, not a measurement; TOLERANCE_SAFETY_FACTOR below exists
+ * specifically because these are reasoning, not measurements.
+ *
+ * Five mechanisms are scoped to drift (Gate 2, the D-11 bias measure) and four to precision
+ * (Gate 1, the D-11 dispersion measure), per 03-RESEARCH.md's "Tracking-Error Tolerance
+ * Derivation" section and PITFALLS §A, with 03-RESEARCH.md's own directional placeholders
+ * replaced by this task's reasoned bp/yr figures (03-RESEARCH.md's table is explicit that its
+ * numbers are "for the plan to refine, not adopt verbatim").
+ */
+export const TOLERANCE_MECHANISMS: readonly ToleranceMechanism[] = [
+  {
+    id: 'er-365-day-internal-accrual-approximation',
+    appliesTo: 'drift',
+    direction: 'bidirectional',
+    basisPointsPerYear: 2,
+    basis:
+      "The model applies D-02's actual/365 calendar-day accrual, matching PITFALLS A4's " +
+      'recorded fund-prospectus convention; this residual covers the small gap between that ' +
+      "daily approximation and each fund's own internal NAV-accrual mechanics, which are not " +
+      'independently disclosed at daily granularity. Small because D-02 already uses the ' +
+      'recommended convention; not zero because "already uses the recommended convention" is ' +
+      'not the same claim as "reproduces the fund\'s internal accrual bit-for-bit."',
+    confidence: 'ASSUMED',
+  },
+  {
+    id: 'swap-dealer-spread-variation-over-time',
+    appliesTo: 'drift',
+    direction: 'bidirectional',
+    basisPointsPerYear: 25,
+    basis:
+      "D-18's FINANCING_SPREAD_DEFAULT is a single constant over the full 17-year gate window; " +
+      "real swap dealer spreads move with counterparty balance-sheet cost (Direxion's own FAQ: " +
+      '"varies by both Fund and counterparty and is a function of market demand, hedging costs, ' +
+      'access to balance sheet, borrow volatility, current counterparty exposure and ' +
+      'administrative costs"), plausibly by tens of bp/yr concentrated in stressed or high-rate ' +
+      "periods (PITFALLS A6). D-13's rate-regime sub-window reporting exists specifically to " +
+      'surface this mechanism if it dominates the residual.',
+    confidence: 'ASSUMED',
+  },
+  {
+    id: 'fund-trading-and-rebalance-costs',
+    appliesTo: 'drift',
+    direction: 'one-directional',
+    basisPointsPerYear: 3,
+    basis:
+      'Every real leveraged fund crosses a bid-ask spread rebalancing its swap/futures notional ' +
+      'daily to maintain constant leverage; this model charges no transaction cost at all. ' +
+      'One-directional (only ever costs the fund, never the synthetic) and scales with ' +
+      'underlying volatility, so it is larger in volatile sub-periods than the flat annualized ' +
+      'figure implies (PITFALLS A2/A12).',
+    confidence: 'ASSUMED',
+  },
+  {
+    id: 'securities-lending-revenue-not-credited',
+    appliesTo: 'drift',
+    direction: 'one-directional',
+    basisPointsPerYear: 2,
+    basis:
+      'Real funds may earn securities-lending revenue on assets held as swap/futures collateral, ' +
+      'offsetting some of their expense ratio; this model credits none. One-directional (only ' +
+      'ever helps the fund, never the synthetic). Not independently quantified for UPRO/TQQQ ' +
+      'specifically this session -- priced small and flagged as the weakest-evidence mechanism ' +
+      'in this list, pending a fund-specific citation.',
+    confidence: 'ASSUMED',
+  },
+  {
+    id: 'inception-era-expense-ratio-residual-uncertainty',
+    appliesTo: 'drift',
+    direction: 'bidirectional',
+    basisPointsPerYear: 3,
+    basis:
+      "03-RESEARCH.md flagged this as potentially the single largest term, because its 0.95% " +
+      'inception-era figure for both funds came from an unconfirmed WebSearch synthesis. This ' +
+      "plan's Task 2 resolved that: both UPRO_INCEPTION_ERA_EXPENSE_RATIO and " +
+      'TQQQ_INCEPTION_ERA_EXPENSE_RATIO are now CITED to the actual launch-prospectus fee ' +
+      'tables (SEC EDGAR accessions 0001193125-09-135520 and 0001193125-10-023274), which ' +
+      'confirmed the 0.95% figure exactly. This row is priced small, per that resolved outcome ' +
+      '(not per the larger, unresolved risk 03-RESEARCH.md was hedging against): the residual ' +
+      'here reflects only the judgment call of holding the post-waiver net line constant rather ' +
+      'than the pre-waiver gross line (see both entries\' citations in COST_PARAMETERS), plus ' +
+      'ordinary transcription risk against the source HTML.',
+    confidence: 'CITED',
+  },
+  {
+    id: 'intraday-rebalance-timing-vs-close-to-close-bars',
+    appliesTo: 'tracking-error',
+    direction: 'bidirectional',
+    basisPointsPerYear: 20,
+    basis:
+      "Real funds rebalance notional exposure continuously or at multiple points intraday to " +
+      'manage tracking within the trading day; this model rebalances exactly once per bar at the ' +
+      'close. On volatile days the two paths diverge before reconverging at the close, ' +
+      'contributing to daily return-difference dispersion (Gate 1) without necessarily biasing ' +
+      'the annualized total (Gate 2).',
+    confidence: 'ASSUMED',
+  },
+  {
+    id: 'fund-nav-vs-market-close-pricing-basis',
+    appliesTo: 'tracking-error',
+    direction: 'bidirectional',
+    basisPointsPerYear: 15,
+    basis:
+      "The comparison target is UPRO/TQQQ's reconstructed total-return series, itself built " +
+      "from the fund's own NAV and distribution history (02-CONTEXT D-24); this model's " +
+      "synthetic is built from the index's own close. NAV strikes and the index's official " +
+      'close are not always identical timestamps or sourced from identical constituent prices, ' +
+      'contributing day-to-day dispersion.',
+    confidence: 'ASSUMED',
+  },
+  {
+    id: 'discrete-swap-reset-dates-vs-continuous-daily-accrual',
+    appliesTo: 'tracking-error',
+    direction: 'bidirectional',
+    basisPointsPerYear: 8,
+    basis:
+      'This model accrues financing continuously, once per calendar day elapsed (D-01). Real ' +
+      'swap contracts reset and settle financing on their own discrete schedule, which need not ' +
+      'align with every trading day, producing small day-to-day dispersion around the same ' +
+      'annualized total.',
+    confidence: 'ASSUMED',
+  },
+  {
+    id: 'ragged-right-edge-truncation',
+    appliesTo: 'tracking-error',
+    direction: 'one-directional',
+    basisPointsPerYear: 1,
+    basis:
+      "D-29: the rate series currently ends one trading day before the price series, so the " +
+      "gate's run is truncated at the last fully-supported bar rather than the very last priced " +
+      'bar. This affects at most one bar out of the full multi-thousand-bar overlap window, so ' +
+      'its contribution to the annualized dispersion figure is small but not exactly zero -- ' +
+      'the offset changes with every data refresh, so it cannot be assumed away structurally.',
+    confidence: 'CITED',
+  },
+]
+
+/** D-14: the enumerated-mechanism magnitudes above are reasoning, not measurements -- each is an
+ * order-of-magnitude estimate of a real but unquantified effect, not a number read off a
+ * dataset. This factor exists so the derived tolerance carries margin for that reasoning being
+ * off by half, exactly mirroring perf-budgets.ts's ESCALATION_TRIGGER_RATIO in spirit (a
+ * declared, named safety margin rather than an unstated fudge baked into the mechanism figures
+ * themselves). */
+export const TOLERANCE_SAFETY_FACTOR = 1.5
+
+/** Sums every mechanism whose `appliesTo` matches the given scope (`'both'` mechanisms count
+ * toward every scope), then applies TOLERANCE_SAFETY_FACTOR. Used to compute both
+ * RETURN_DRIFT_TOLERANCE and TRACKING_ERROR_TOLERANCE below from TOLERANCE_MECHANISMS, and
+ * reused by the pinning test to recompute both independently -- so neither tolerance can ever be
+ * written as a literal that silently drifts from its own inputs. */
+function sumMechanismsForScope(scope: 'tracking-error' | 'drift'): number {
+  const totalBasisPoints = TOLERANCE_MECHANISMS.filter((m) => m.appliesTo === scope || m.appliesTo === 'both').reduce(
+    (sum, m) => sum + m.basisPointsPerYear,
+    0,
+  )
+  return (totalBasisPoints / 10_000) * TOLERANCE_SAFETY_FACTOR
+}
+
+/** D-11 Gate 2's build-failing tolerance: the annualized return-difference (drift/bias) bound,
+ * as an annualized fraction (never basis points or a percentage). Computed from
+ * TOLERANCE_MECHANISMS and TOLERANCE_SAFETY_FACTOR, never written as a literal, so a mechanism
+ * added later mechanically widens this bound in the same diff that names it -- D-15's revision
+ * rule made structural. */
+export const RETURN_DRIFT_TOLERANCE = sumMechanismsForScope('drift')
+
+/** D-11 Gate 1's build-failing tolerance: the annualized tracking-error (precision/dispersion)
+ * bound, as an annualized fraction. Same computation discipline as RETURN_DRIFT_TOLERANCE. */
+export const TRACKING_ERROR_TOLERANCE = sumMechanismsForScope('tracking-error')
+
+// No trial tracking error was computed before RETURN_DRIFT_TOLERANCE or TRACKING_ERROR_TOLERANCE
+// were derived above. Both are revisable after the first gate measurement (plan 03-06), but only
+// by adding or repricing a named row in TOLERANCE_MECHANISMS -- never by editing either exported
+// constant directly, and never in response to tuning a cost parameter in COST_PARAMETERS, which
+// VALID-03 prohibits in every one of D-20's three permitted outcomes.
