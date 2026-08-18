@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-08-16)
 Phase: 03 (simulation-kernel-and-the-upro-tqqq-gate) - COMPLETE
 Plan: 6 of 6
 Status: Phase 03 shipped as PR #3, awaiting CI and merge. Next: Phase 4.
-Last activity: 2026-08-18
+Last activity: 2026-08-18 - Completed quick task 260818-v2d: resolve WINDOWS #2 calibration runner-variance in bench/calibration.ts
 
 Progress: [██████████] 100%
 
@@ -98,15 +98,11 @@ Recent decisions affecting current work:
 - [Phase 3]: 03-06 halted rather than force the red gate into one of D-20's five signature rows. That was correct: the residual was two residuals. Recording the halt as a legitimate outcome, not a failure, is what made the correct diagnosis reachable
 - [PROJECT.md Key Decisions]: 03-06: D-10 AMENDED. The gate's synthetic is built from the TOTAL-return index, not the price-return index. Pairing a financing charge with a dividend-stripped return leg charged for exposure the model never credited, and that asymmetry was the entire Gate 2 residual (UPRO -6.968% to +0.254%, TQQQ -3.860% to +0.399%). A leveraged ETF's swap counterparty delivers the index total return against financing, so the total-return leg is what the financing term already prices. Phase 5's VALID-04 in-app view must render this same amended pairing or it will show users a ~7%/yr phantom gap as if it were real cost
 - [PROJECT.md Key Decisions]: 03-06: TOLERANCE_SAFETY_FACTOR now applies to reasoned mechanism rows only; rows flagged measured:true are added at face value. The factor exists to cover a reasoned estimate being off by half, so scaling a measurement by 1.5x would have set the tolerance at 5.715% instead of 3.955% and let a real regression hide inside the margin
+- [quick-260818-v2d]: WINDOWS.md entry #2 named one problem and there were two. The anchor cannot see parallel width, which is latent and worth up to 6.1x, and was dormant in all 13 recorded CI runs because every one of them drew a 4-core runner. Separately, each workload has its own elasticity to host interference, which is chronic and worth 6.36% residual CV. The first is fixed by measuring PERF-03 at the declared 4-core baseline width on every host and withholding its verdict when the recorded `hardwareConcurrency` differs, provably a no-op on the D-17 baseline, where every recorded run already resolved workerCount 3. The second is documented as a measured band rather than fixed, because more runs is its only remedy: a single run supports a headroom claim only to roughly +/-13%. The ledger's own numeric claim did not survive the larger sample: the three runs it cited included the single most anomalous run of the 13, and that run inflated the single-threaded PERF-02 by the same amount it inflated PERF-03, which a pool-specific mechanism cannot explain. `NOMINAL_REFERENCE_MS` stayed 40 and no budget value moved
 
 ### Pending Todos
 
-- **BEFORE PHASE 4 PLANNING: resolve WINDOWS.md entry #2 (calibration runner-variance).** Waived
-  on 2026-08-18 to unblock Phase 3's ship, with the deferral explicitly scoped to expire here, not
-  left open-ended. Phase 4 criterion 5 measures PERF-07 and PERF-08 for the first time through the
-  same `normalize()` path that carries roughly 10 percentage points of runner noise. Resolve by
-  investigating whether the scalar reference loop is representative of a Worker-pool workload's
-  runner sensitivity. Do NOT retune `NOMINAL_REFERENCE_MS` (PERF-01a).
+- None
 
 ### Blockers/Concerns
 
@@ -147,10 +143,11 @@ Recent decisions affecting current work:
 
 ### Quick Tasks Completed
 
-| # | Description | Date | Commit | Directory |
-|---|-------------|------|--------|-----------|
-| 260816-p8z | Make the bench calibration score canonical per run | 2026-08-16 | e345a88 | [260816-p8z-make-the-bench-calibration-score-canonic](./quick/260816-p8z-make-the-bench-calibration-score-canonic/) |
-| 260816-qae | Record the D-20 escalation for PERF-03 against the real CI baseline and correct docs citing sandbox figures | 2026-08-16 | 8c5a250 | [260816-qae-record-the-d-20-escalation-for-perf-03-a](./quick/260816-qae-record-the-d-20-escalation-for-perf-03-a/) |
+| # | Description | Date | Commit | Status | Directory |
+|---|-------------|------|--------|--------|-----------|
+| 260816-p8z | Make the bench calibration score canonical per run | 2026-08-16 | e345a88 |  | [260816-p8z-make-the-bench-calibration-score-canonic](./quick/260816-p8z-make-the-bench-calibration-score-canonic/) |
+| 260816-qae | Record the D-20 escalation for PERF-03 against the real CI baseline and correct docs citing sandbox figures | 2026-08-16 | 8c5a250 |  | [260816-qae-record-the-d-20-escalation-for-perf-03-a](./quick/260816-qae-record-the-d-20-escalation-for-perf-03-a/) |
+| 260818-v2d | resolve WINDOWS #2 calibration runner-variance in bench/calibration.ts | 2026-08-18 | cc3d715 | Verified | [260818-v2d-resolve-windows-2-calibration-runner-var](./quick/260818-v2d-resolve-windows-2-calibration-runner-var/) |
 
 ## Deferred Items
 
