@@ -119,11 +119,11 @@ measured in CI, not an aspiration.
 
 ### Validation
 
-- [ ] **VALID-01**: Synthetic 3x S&P 500 is compared against real UPRO price history from 2009,
+- [x] **VALID-01**: Synthetic 3x S&P 500 is compared against real UPRO price history from 2009,
       and synthetic 3x Nasdaq-100 against real TQQQ, with tracking error computed by a single
       shared function
 
-- [ ] **VALID-02**: A documented tracking-error tolerance is defined and enforced as a test that
+- [x] **VALID-02**: A documented tracking-error tolerance is defined and enforced as a test that
       fails the build when exceeded
 
 - [x] **VALID-03**: Cost parameters are sourced independently and are never tuned to reduce
@@ -306,8 +306,8 @@ measured in CI, not an aspiration.
 | SIM-10 | Phase 3 | Pending |
 | SIM-11 | Phase 3 | Pending |
 | SIM-12 | Phase 3 | Pending |
-| VALID-01 | Phase 3 | Pending |
-| VALID-02 | Phase 3 | Pending |
+| VALID-01 | Phase 3 | Complete |
+| VALID-02 | Phase 3 | Complete |
 | VALID-03 | Phase 3 | Complete |
 | VALID-04 | Phase 5 | Pending |
 | METR-01 | Phase 4 | Pending |
