@@ -1,10 +1,13 @@
 ---
 phase: 03-simulation-kernel-and-the-upro-tqqq-gate
 verified: 2026-08-18T04:55:10Z
-status: human_needed
-score: 16/16 must-haves verified (requirement IDs); 1 backstop truth unverifiable by evidence
+status: passed
+prior_status: human_needed
+resolved_at: 2026-08-18T05:01:00Z
+score: 16/16 must-haves verified (requirement IDs); 5/5 ROADMAP success criteria verified; both human_verification items closed by evidence post-verification (see Addendum)
 behavior_unverified: 0
 overrides_applied: 0
+human_verification_resolved: true
 human_verification:
   - test: "Confirm src/data/kernel-inputs.ts's series selector performs no I/O and holds no mutable state after loadBundleFromDisk() returns, so two concurrent callers sharing one LoadedBundle observe the same immutable views without interference (SIM-07 concurrency edge, 03-04-PLAN.md must_haves, verification: backstop)."
     expected: "No shared mutable field is written by buildKernelInputs after load time; two parallel callers over the same LoadedBundle produce independent, non-interfering results."
@@ -19,7 +22,7 @@ human_verification:
 **Phase Goal:** The simulation is demonstrably right against real leveraged-ETF history, before a
 single pixel of UI is built on top of it
 **Verified:** 2026-08-18T04:55:10Z
-**Status:** human_needed
+**Status:** passed (initially human_needed; both items closed by evidence, see Addendum)
 **Re-verification:** No — initial verification
 
 ## Summary
@@ -201,3 +204,65 @@ finding that the phase goal was missed.
 
 *Verified: 2026-08-18T04:55:10Z*
 *Verifier: Claude (gsd-verifier)*
+
+---
+
+## Addendum: both human_verification items closed by evidence (2026-08-18, post-verification)
+
+Written by the execute-phase orchestrator after this report was filed. The verifier's two routed
+items were both closable with evidence rather than with a human judgment call, so they were closed
+that way. The verifier's findings above stand unamended; nothing in its analysis was revised.
+
+### Item 1 — SIM-07 concurrency edge: CLOSED with a test
+
+The verifier was right that no test existed. Rather than ask a human to inspect the source and
+attest, the invariant is now held by `tests/data/selector-concurrency.test.ts` (commit `a05fbe2`),
+which asserts it four ways:
+
+1. `src/data/kernel-inputs.ts` declares no module-level mutable binding, comments stripped first so
+   prose cannot satisfy or fail the scan.
+2. The module contains no synchronous filesystem call anywhere, and `buildKernelInputs` is not
+   `async`. Together those close I/O off entirely: a synchronous function's only route to the disk
+   is a `*Sync` API, and there is none.
+3. Behavioural. Ten deliberately varied requests (both symbols, both dividend settings, leverage
+   0.5 through 20, both holding modes, three contribution frequencies) are interleaved through the
+   microtask queue in a shuffled order over ONE shared `LoadedBundle`, and every result is compared
+   element-for-element against the same requests run sequentially: `returns`, `shortRate`,
+   `calendarDaysElapsed`, `contributionFlags`, plus the resolved window and params.
+4. Two calls with an identical request receive distinct output buffers, and a write through one is
+   not visible in the other.
+
+Both source scans were verified non-vacuous: temporarily adding a module-level `let` turned scan 1
+red, temporarily importing `readFileSync` turned scan 2 red, and the file was restored to a clean
+`git diff` with all four tests green afterwards.
+
+Why this was worth a test rather than an attestation: Phase 7's sweep runs ~10,000 backtests across
+a Worker pool over one decoded bundle. A single value cached between selector calls would make that
+sweep order-dependent, and the resulting heatmap would be wrong in a way no single-backtest test
+could surface. A human attestation today would not survive the edit that introduces it; this test
+will.
+
+### Item 2 — WINDOWS.md entry 3: CLOSED
+
+Entry 3 is marked `fixed` via `gsd-tools windows fixed 3`, dropping `open_count` from 2 to 1. The
+one remaining open entry is #2, the Phase 1 calibration-variance item, which is unrelated to this
+phase and correctly stays open. The tool exposes no `--reason` flag, so entry 3's `description` was
+edited directly to carry the D-20 resolution and its measured figures instead of the stale
+pre-resolution RED text; the JSON block was re-parsed after editing to confirm it is still valid.
+
+### Post-addendum state
+
+`npm run typecheck` exits 0. `npm run test` passes **385/385** across 27 files (up from 381/385 at
+verification time; the four new tests are item 1's). The UPRO/TQQQ gate remains GREEN on both
+funds. No source file outside `tests/` was modified to close either item.
+
+### Standing caveat, carried forward unchanged
+
+The verifier's judgment note on the tolerance widening is NOT closed by this addendum and should
+stay visible: 89% of the widened `TRACKING_ERROR_TOLERANCE` comes from a single measured row
+derived from the same two funds under test, and TQQQ's margin against that tolerance is real but
+thin at roughly 11%. That is legitimate under D-15 and the basis is reproducible, but it means the
+gate's Gate 1 arm is now a much weaker instrument than its 0.66% original implied. The way to
+strengthen it is named in the mechanism's own basis text: source true daily NAV history for both
+funds in place of Yahoo market closes, which would remove the premium/discount component outright
+and let the tolerance come back down.
