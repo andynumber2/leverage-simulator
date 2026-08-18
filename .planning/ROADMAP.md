@@ -139,17 +139,17 @@ Plans:
   4. A script runs one real backtest end to end and prints the equity curve, exercising the full parameter surface: arbitrary positive leverage from 1x through 20x including fractional values, an initial investment plus recurring contributions at daily, monthly, quarterly or yearly frequency, a dividend-reinvest toggle that switches between the bundled total-return and price-return series rather than modelling dividends, an entry date with either a fixed holding period or hold-to-today, and user-supplied expense ratio and financing spread defaulting to the independently sourced values.
   5. A single backtest over the full ~25,000-bar history completes in under 16ms measured on real hardware, and 10,000 back-to-back invocations produce no measurable GC pressure because the hot loop allocates nothing and writes into preallocated buffers. The kernel is one module with no imports from the data, sweep or chart layers, so there is no second implementation that can drift.
 
-**Plans:** 6 plans
+**Plans:** 3/6 plans executed
 
 Plans:
 **Wave 1**
 
-- [ ] 03-01-PLAN.md — Tracer. One real SPX backtest end to end, from the committed Phase 2 bundle through the data-layer seam and the allocation-free kernel to a printed equity curve, plus the SIM-10 module-boundary assertion
+- [x] 03-01-PLAN.md — Tracer. One real SPX backtest end to end, from the committed Phase 2 bundle through the data-layer seam and the allocation-free kernel to a printed equity curve, plus the SIM-10 module-boundary assertion
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 03-02-PLAN.md — PITFALLS section A as the executable correctness checklist: the 1x exactness invariant at 1e-9, calendar-day accrual on two different bases, ruin as an absorbing state, and an asserted disposition for every remaining A-row
-- [ ] 03-03-PLAN.md — The sourced, citation-pinned cost parameters and the mechanism-derived tracking-error tolerances, committed atomically before any validation code exists
+- [x] 03-02-PLAN.md — PITFALLS section A as the executable correctness checklist: the 1x exactness invariant at 1e-9, calendar-day accrual on two different bases, ruin as an absorbing state, and an asserted disposition for every remaining A-row
+- [x] 03-03-PLAN.md — The sourced, citation-pinned cost parameters and the mechanism-derived tracking-error tolerances, committed atomically before any validation code exists
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
@@ -252,7 +252,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 |-------|----------------|--------|-----------|
 | 1. Performance Spike and Budget Lock | 6/6 | Complete    | 2026-08-17 |
 | 2. Compiled Data Bundle | 8/8 | Complete    | 2026-08-17 |
-| 3. Simulation Kernel and the UPRO/TQQQ Gate | 0/6 | Planned | - |
+| 3. Simulation Kernel and the UPRO/TQQQ Gate | 3/6 | In Progress|  |
 | 4. First Defensible Backtest in the Browser | 0/TBD | Not started | - |
 | 5. Attribution and the Credibility Surface | 0/TBD | Not started | - |
 | 6. Heatmap Design Pass | 0/TBD | Not started | - |
