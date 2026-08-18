@@ -104,7 +104,7 @@ measured in CI, not an aspiration.
       total-return and price-return series rather than modelling dividends
 
 - [ ] **SIM-08**: User can set the entry date and either a fixed holding period or hold-to-today
-- [ ] **SIM-09**: Expense ratio and financing spread are user-editable, defaulting to values
+- [x] **SIM-09**: Expense ratio and financing spread are user-editable, defaulting to values
       sourced independently from real products and documented as estimates
 
 - [ ] **SIM-10**: The kernel is one module, imported unchanged by both the single-run path and the
@@ -126,7 +126,7 @@ measured in CI, not an aspiration.
 - [ ] **VALID-02**: A documented tracking-error tolerance is defined and enforced as a test that
       fails the build when exceeded
 
-- [ ] **VALID-03**: Cost parameters are sourced independently and are never tuned to reduce
+- [x] **VALID-03**: Cost parameters are sourced independently and are never tuned to reduce
       validation tracking error. Residual error is reported, not fitted away. This constraint is
       written into the validation phase spec
 
@@ -302,13 +302,13 @@ measured in CI, not an aspiration.
 | SIM-06 | Phase 3 | Pending |
 | SIM-07 | Phase 3 | Pending |
 | SIM-08 | Phase 3 | Pending |
-| SIM-09 | Phase 3 | Pending |
+| SIM-09 | Phase 3 | Complete |
 | SIM-10 | Phase 3 | Pending |
 | SIM-11 | Phase 3 | Pending |
 | SIM-12 | Phase 3 | Pending |
 | VALID-01 | Phase 3 | Pending |
 | VALID-02 | Phase 3 | Pending |
-| VALID-03 | Phase 3 | Pending |
+| VALID-03 | Phase 3 | Complete |
 | VALID-04 | Phase 5 | Pending |
 | METR-01 | Phase 4 | Pending |
 | METR-02 | Phase 4 | Pending |
