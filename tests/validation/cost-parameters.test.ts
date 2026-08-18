@@ -109,11 +109,17 @@ describe('FINANCING_SPREAD_RANGE and FINANCING_SPREAD_DEFAULT', () => {
  * same code twice -- it re-derives the expected tolerance from TOLERANCE_MECHANISMS's public
  * shape and TOLERANCE_SAFETY_FACTOR, the same inputs a future reviewer would use by hand. */
 function recomputeToleranceForScope(scope: 'tracking-error' | 'drift'): number {
-  const totalBasisPoints = TOLERANCE_MECHANISMS.filter((m) => m.appliesTo === scope || m.appliesTo === 'both').reduce(
-    (sum, m) => sum + m.basisPointsPerYear,
-    0,
-  )
-  return (totalBasisPoints / 10_000) * TOLERANCE_SAFETY_FACTOR
+  const inScope = TOLERANCE_MECHANISMS.filter((m) => m.appliesTo === scope || m.appliesTo === 'both')
+  // TOLERANCE_SAFETY_FACTOR covers a REASONED estimate being off by half, so it applies only to
+  // reasoned rows; a row marked `measured: true` was read off a dataset and is added at face
+  // value. Inflating a measurement by 1.5x would slacken the gate by 50% for no epistemic gain.
+  const reasonedBasisPoints = inScope
+    .filter((m) => m.measured !== true)
+    .reduce((sum, m) => sum + m.basisPointsPerYear, 0)
+  const measuredBasisPoints = inScope
+    .filter((m) => m.measured === true)
+    .reduce((sum, m) => sum + m.basisPointsPerYear, 0)
+  return (reasonedBasisPoints * TOLERANCE_SAFETY_FACTOR + measuredBasisPoints) / 10_000
 }
 
 describe('TOLERANCE_MECHANISMS: D-14\'s enumerated, priced, cited derivation', () => {
@@ -153,6 +159,38 @@ describe('RETURN_DRIFT_TOLERANCE and TRACKING_ERROR_TOLERANCE: computed, not lit
 
   test('TOLERANCE_SAFETY_FACTOR is 1.5', () => {
     expect(TOLERANCE_SAFETY_FACTOR).toBe(1.5)
+  })
+
+  test('a measured mechanism is excluded from the safety factor, a reasoned one is not', () => {
+    // Pins the D-15 repricing rule introduced when the NAV/market-close row was measured: the
+    // safety factor exists to cover a REASONED estimate being off by half, so applying it to a
+    // measurement would slacken the gate by 50% for no epistemic gain. If a future edit reverts
+    // to multiplying every row, this goes red rather than quietly widening both tolerances.
+    const measured = TOLERANCE_MECHANISMS.filter((m) => m.measured === true)
+    expect(measured.length, 'at least one mechanism should be measured').toBeGreaterThan(0)
+
+    for (const scope of ['tracking-error', 'drift'] as const) {
+      const inScope = TOLERANCE_MECHANISMS.filter((m) => m.appliesTo === scope || m.appliesTo === 'both')
+      const measuredBp = inScope.filter((m) => m.measured === true).reduce((s, m) => s + m.basisPointsPerYear, 0)
+      if (measuredBp === 0) continue
+      const naiveEverythingScaled =
+        (inScope.reduce((s, m) => s + m.basisPointsPerYear, 0) / 10_000) * TOLERANCE_SAFETY_FACTOR
+      const actual = scope === 'drift' ? RETURN_DRIFT_TOLERANCE : TRACKING_ERROR_TOLERANCE
+      expect(
+        actual,
+        `${scope}: the tolerance must be strictly tighter than scaling every row, including the ` +
+          'measured one, by the safety factor',
+      ).toBeLessThan(naiveEverythingScaled)
+    }
+  })
+
+  test('every measured mechanism states how it was measured, so the figure is reproducible', () => {
+    for (const mechanism of TOLERANCE_MECHANISMS.filter((m) => m.measured === true)) {
+      expect(
+        /measur|sample standard deviation|annualiz|n=/i.test(mechanism.basis),
+        `measured mechanism "${mechanism.id}" must describe its measurement in its basis`,
+      ).toBe(true)
+    }
   })
 
   test('both tolerances are expressed as annualized fractions, not basis points or percentages', () => {

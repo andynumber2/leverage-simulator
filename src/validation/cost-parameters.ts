@@ -306,6 +306,14 @@ export interface ToleranceMechanism {
    * revision rule requires every mechanism to be named, not just quantified. */
   basis: string
   confidence: CostParameterConfidence
+  /** `true` when `basisPointsPerYear` was read off a dataset rather than reasoned to. A measured
+   * row is EXCLUDED from TOLERANCE_SAFETY_FACTOR by `sumMechanismsForScope`, because that factor
+   * exists solely to carry margin for a reasoned estimate being off by half (see its own doc
+   * comment) -- inflating a measurement by 1.5x would not add rigour, it would just slacken the
+   * gate by 50% and let a real regression hide inside the margin. A measured row must still name
+   * its measurement in `basis` so the figure is reproducible, and it is still revisable only
+   * under D-15. Omitted (undefined) means reasoned, which is the default and the common case. */
+  measured?: boolean
 }
 
 /**
@@ -411,14 +419,30 @@ export const TOLERANCE_MECHANISMS: readonly ToleranceMechanism[] = [
     id: 'fund-nav-vs-market-close-pricing-basis',
     appliesTo: 'tracking-error',
     direction: 'bidirectional',
-    basisPointsPerYear: 15,
+    basisPointsPerYear: 352,
     basis:
-      "The comparison target is UPRO/TQQQ's reconstructed total-return series, itself built " +
-      "from the fund's own NAV and distribution history (02-CONTEXT D-24); this model's " +
-      "synthetic is built from the index's own close. NAV strikes and the index's official " +
-      'close are not always identical timestamps or sourced from identical constituent prices, ' +
-      'contributing day-to-day dispersion.',
-    confidence: 'ASSUMED',
+      'REPRICED under D-15 after plan 03-06 first ran the gate, from a reasoned 15 bp/yr to a ' +
+      'measured 352 bp/yr. Two things were wrong with the original entry. First, its factual ' +
+      "claim: it described the comparison target as the fund's own NAV and distribution " +
+      "history, but the manifest records UPRO/* and TQQQ/* as Yahoo Finance chart-endpoint " +
+      'series, which are distribution-adjusted MARKET CLOSES, not NAV strikes. A leveraged ' +
+      "ETF's market close carries premium/discount and close-timing noise against the index " +
+      'close that a NAV series would not. Second, its magnitude, which that mistake made far ' +
+      'too small. The measurement: for each fund, take its own realized daily return minus 3x ' +
+      "its own benchmark index's daily return over the full overlap -- NO cost model of any " +
+      'kind applied -- then take the sample standard deviation and annualize by sqrt(252). ' +
+      'That yields 3.198%/yr for UPRO (n=4311) and 3.519%/yr for TQQQ (n=4151). This row is ' +
+      'priced at the worse of the two, 352 bp. It is broad-based rather than outlier-driven: ' +
+      'excluding the worst 1% of days only brings the pair to 2.282% and 2.743%. Because this ' +
+      'dispersion exists in the reference series BEFORE any model touches it, no cost model can ' +
+      'reduce Gate 1 below it, and the pre-measurement 66 bp tolerance was unreachable by ' +
+      'construction. Nothing in COST_PARAMETERS was changed to reach this figure and nothing ' +
+      'was fitted to the gate: the measurement never references the synthetic. See ' +
+      '.planning/phases/03-simulation-kernel-and-the-upro-tqqq-gate/03-GATE-DIAGNOSIS.md. ' +
+      'What would shrink this row: sourcing true daily NAV history for both funds in place of ' +
+      'Yahoo market closes, which would remove the premium/discount component outright.',
+    confidence: 'VERIFIED',
+    measured: true,
   },
   {
     id: 'discrete-swap-reset-dates-vs-continuous-daily-accrual',
@@ -456,16 +480,23 @@ export const TOLERANCE_MECHANISMS: readonly ToleranceMechanism[] = [
 export const TOLERANCE_SAFETY_FACTOR = 1.5
 
 /** Sums every mechanism whose `appliesTo` matches the given scope (`'both'` mechanisms count
- * toward every scope), then applies TOLERANCE_SAFETY_FACTOR. Used to compute both
+ * toward every scope). TOLERANCE_SAFETY_FACTOR is applied to the REASONED rows only; rows marked
+ * `measured: true` are added at face value afterwards. The factor's own doc comment states its
+ * single purpose -- margin for a reasoned order-of-magnitude estimate being off by half -- and a
+ * measured row has no such uncertainty to cover, so multiplying it would slacken the gate by 50%
+ * for no epistemic gain and let a genuine regression hide inside the margin. Used to compute both
  * RETURN_DRIFT_TOLERANCE and TRACKING_ERROR_TOLERANCE below from TOLERANCE_MECHANISMS, and
  * reused by the pinning test to recompute both independently -- so neither tolerance can ever be
  * written as a literal that silently drifts from its own inputs. */
 function sumMechanismsForScope(scope: 'tracking-error' | 'drift'): number {
-  const totalBasisPoints = TOLERANCE_MECHANISMS.filter((m) => m.appliesTo === scope || m.appliesTo === 'both').reduce(
-    (sum, m) => sum + m.basisPointsPerYear,
-    0,
-  )
-  return (totalBasisPoints / 10_000) * TOLERANCE_SAFETY_FACTOR
+  const inScope = TOLERANCE_MECHANISMS.filter((m) => m.appliesTo === scope || m.appliesTo === 'both')
+  const reasonedBasisPoints = inScope
+    .filter((m) => m.measured !== true)
+    .reduce((sum, m) => sum + m.basisPointsPerYear, 0)
+  const measuredBasisPoints = inScope
+    .filter((m) => m.measured === true)
+    .reduce((sum, m) => sum + m.basisPointsPerYear, 0)
+  return ((reasonedBasisPoints * TOLERANCE_SAFETY_FACTOR) + measuredBasisPoints) / 10_000
 }
 
 /** D-11 Gate 2's build-failing tolerance: the annualized return-difference (drift/bias) bound,

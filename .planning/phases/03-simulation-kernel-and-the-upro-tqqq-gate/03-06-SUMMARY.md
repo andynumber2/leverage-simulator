@@ -37,7 +37,7 @@ key-files:
   modified: []
 
 key-decisions:
-  - "The gate is left RED. Per the plan's own <no_fitting_protocol> ('If you cannot honestly place the residual in one of D-20's three permitted outcomes, HALT and report rather than improvising. Reporting a failed gate accurately is a SUCCESSFUL execution of this plan.'), this plan does not force the measured residual into one of D-20's five signature rows. See 'Gate Result' below for the full diagnostic reasoning."
+  - "RESOLVED after the halt (see the Gate Result section at the top of this file): the gate is GREEN on both funds. The residual turned out to be two residuals -- a dividend-convention structural defect (D-20 outcome 1) and a reference-data tracking-error floor (D-20 outcome 2, mechanism repriced from reasoned 15bp to measured 352bp). No cost parameter changed. Original halt note follows. The gate was left RED by this plan. Per the plan's own <no_fitting_protocol> ('If you cannot honestly place the residual in one of D-20's three permitted outcomes, HALT and report rather than improvising. Reporting a failed gate accurately is a SUCCESSFUL execution of this plan.'), this plan does not force the measured residual into one of D-20's five signature rows. See 'Gate Result' below for the full diagnostic reasoning."
   - "No cost parameter in src/validation/cost-parameters.ts was read, modified, or even considered as a candidate to change at any point during this plan's execution."
   - "No line of src/kernel/backtest.ts or src/data/kernel-inputs.ts was modified. The extensive diagnostic work (below) was run through throwaway scripts (created and deleted within this session, never committed) that called the existing, unmodified kernel and data-layer functions with different parameter combinations -- it did not alter any production code."
   - "Synthetic and reference bar-0 returns are both defined as 0 (matching the kernel's own D-03 cost-free-anchor convention), so a single shared TrackingErrorWindow (firstBar=0) can index both the level arrays (Gate 2) and the derived-return arrays (Gate 1) without a second window shape."
@@ -84,7 +84,7 @@ status: complete
 
 # Phase 3 Plan 6: The UPRO/TQQQ Tracking-Error Gate Summary
 
-**Built D-12's shared tracking-error function and the build-failing UPRO/TQQQ gate exactly as specified; the gate is RED on first run for both funds, by a margin far too large to explain with any of D-20's five residual signatures, so this plan halts and reports rather than forcing a classification -- no cost parameter, tolerance, or kernel line was touched.**
+**Built D-12's shared tracking-error function and the build-failing UPRO/TQQQ gate exactly as specified; the gate was RED on first run for both funds (GREEN after the post-halt resolution recorded at the top of this file), by a margin far too large to explain with any of D-20's five residual signatures, so this plan halts and reports rather than forcing a classification -- no cost parameter, tolerance, or kernel line was touched.**
 
 ## Performance
 
@@ -94,7 +94,56 @@ status: complete
 - **Tasks:** 2 (both auto)
 - **Files modified:** 3 created (src/validation/tracking-error.ts, tests/validation/tracking-error.test.ts, tests/validation/upro-tqqq-gate.test.ts)
 
-## Gate Result (read this first)
+## Gate Result: RESOLVED after this plan halted (read this first)
+
+**The gate is now GREEN for both funds.** This section supersedes "Gate Result (as of this plan's
+halt)" below, which is kept verbatim as the record of what this plan measured and why it correctly
+refused to classify it.
+
+This plan halted because it could not place its residual in one of D-20's five signature rows.
+The reason it could not: **the residual was two residuals with two different causes**, and the
+table asks for one row. The orchestrator diagnosed both after the halt (full evidence in
+`03-GATE-DIAGNOSIS.md`), the developer chose an outcome for each, and both were applied.
+
+| Fund | Tracking error | Tolerance | Return drift | Tolerance |
+|---|---|---|---|---|
+| UPRO | 3.2149% | 3.9550% | +0.2538% | 0.5250% |
+| TQQQ | 3.5331% | 3.9550% | +0.3986% | 0.5250% |
+
+**Residual 1, return drift, D-20 outcome 1 (fix structure).** This test built the synthetic from
+the index's *price-return* series (per D-10 as written) but compared it against the fund's
+*total-return* series, putting the two sides on different dividend conventions. That asymmetry was
+the whole drift: UPRO -6.968% and TQQQ -3.860% became +0.254% and +0.399% once matched, with no
+cost parameter touched. D-10 has been amended in `03-CONTEXT.md` with the reasoning, since this
+contradicts it as originally written. `indexSeriesId` is now `SPX/total-return` / `NDX/total-return`
+and `dividendReinvest` is `true`.
+
+**Residual 2, tracking error, D-20 outcome 2 (reprice a named mechanism).** The tracking error is
+not attributable to the cost model at all. Each fund's own realized daily return against 3x its own
+benchmark, with no model applied, already measures 3.198% (UPRO, n=4311) and 3.519% (TQQQ, n=4151)
+annualized. The `fund-nav-vs-market-close-pricing-basis` row in `TOLERANCE_MECHANISMS` already named
+this mechanism but priced it at a reasoned 15 bp and mis-described the reference as NAV data; the
+manifest records Yahoo chart-endpoint series, which are distribution-adjusted market closes. The row
+was repriced to the measured 352 bp and its basis corrected. `TRACKING_ERROR_TOLERANCE` recomputes
+from the mechanism list, so it moved 0.66% -> 3.955% without any tolerance constant being edited
+directly, which is exactly D-15's intended path.
+
+A supporting change: `TOLERANCE_SAFETY_FACTOR` now applies to *reasoned* rows only. Rows flagged
+`measured: true` are added at face value, because that factor's stated purpose is margin for a
+reasoned estimate being off by half, and inflating a measurement by 1.5x would have slackened the
+gate to 5.715% and let a real regression hide in the margin. Two new pinning tests hold this rule.
+
+**Integrity:** no expense ratio and no financing spread was changed at any point. The only numeric
+edit in `cost-parameters.ts` is the one tolerance mechanism's `basisPointsPerYear`. Both diagnostics
+were read-only and neither references the synthetic, so nothing was fitted to the gate.
+
+**Observation recorded, deliberately not acted on:** the high-rate sub-window drift is +0.94% (UPRO)
+and +1.12% (TQQQ), larger than the full-window figure and positive, hinting the financing spread may
+be slightly under-priced from 2022 on. Per D-13 sub-windows do not gate, and per VALID-03 adjusting
+the spread to close a measured gap is prohibited. Left as a Phase 5 observation.
+
+## Gate Result (as of this plan's halt)
+
 
 **The gate is RED for both funds.** `npm run test -- tests/validation/upro-tqqq-gate.test.ts` fails two assertions. Measured figures, full overlap window, both funds, printed by every run (VALID-03):
 

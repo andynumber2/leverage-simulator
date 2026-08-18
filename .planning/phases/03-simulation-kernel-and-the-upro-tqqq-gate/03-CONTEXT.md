@@ -119,6 +119,36 @@ money-market convention and how funds actually accrue.
   applying 3x to a total-return index, since neither fund tracks one.
   — **Reversibility:** costly — the tolerance in D-14 is derived against this exact pairing, and
   Phase 5's in-app synthetic-vs-real view (VALID-04) renders the same comparison.
+
+  > **D-10 AMENDED, 2026-08-18, after plan 03-06 first ran the gate.** The synthetic now applies
+  > 3x to **`SPX/total-return` and `NDX/total-return`**, not the price-return series. Evidence and
+  > full derivation: `03-GATE-DIAGNOSIS.md`.
+  >
+  > What was wrong: D-10 correctly identified that comparing against the funds' *price* return
+  > would show their distribution yield as phantom underperformance, and correctly chose
+  > `UPRO/total-return` / `TQQQ/total-return` as the target. It then left the *synthetic* on the
+  > price-return index, which put the two sides of the comparison on **different dividend
+  > conventions** and reintroduced the same phantom underperformance on the other side of the
+  > subtraction. That asymmetry, not any cost, was the entire Gate 2 residual: UPRO measured
+  > -6.968% and TQQQ -3.860% annualized drift against a 0.525% tolerance. Matching the conventions
+  > moves them to **+0.254%** and **+0.399%**, both inside tolerance, with no cost parameter
+  > touched. This was D-20 outcome 1, a structural fix.
+  >
+  > The original rejection reason ("neither fund tracks a total-return index") conflates the
+  > fund's stated *benchmark* with the correct *model input*. A leveraged ETF gains its exposure
+  > through a total-return swap: the counterparty delivers the index's total return and is paid
+  > financing on the notional. The kernel's financing term already prices that leg, so the return
+  > leg it is paired with must be the total return. Pairing a financing charge with a
+  > dividend-stripped return leg charges for exposure the model never credits.
+  >
+  > Note this does not change what the funds track, and it does not change Gate 1: the tracking
+  > error is unmoved (UPRO 3.164% -> 3.215%, TQQQ 3.565% -> 3.533%) because it has a separate
+  > cause, priced separately in `TOLERANCE_MECHANISMS`'s
+  > `fund-nav-vs-market-close-pricing-basis` row.
+  >
+  > **Carried forward for Phase 5:** VALID-04's in-app synthetic-vs-real view must render this
+  > same amended pairing. A view built against the original D-10 wording would display the
+  > ~7%/yr phantom gap to users as if it were real cost.
 - **D-11:** **Two gates, not one.** Gate 1 is **annualized tracking error**, the standard
   deviation of daily return differences times `sqrt(252)`, which catches mechanism errors such as
   leverage applied to the wrong quantity. Gate 2 is the **annualized return difference (drift)**,

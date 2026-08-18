@@ -92,7 +92,7 @@ const FUND_GATE_CONFIGS: readonly FundGateConfig[] = [
   {
     fundName: 'UPRO',
     indexSymbol: 'SPX',
-    indexSeriesId: 'SPX/price-return',
+    indexSeriesId: 'SPX/total-return',
     fundSeriesId: 'UPRO/total-return',
     expenseRatio: UPRO_INCEPTION_ERA_EXPENSE_RATIO,
     expenseRatioConfidence: COST_PARAMETERS['upro-inception-era-expense-ratio'].confidence,
@@ -100,7 +100,7 @@ const FUND_GATE_CONFIGS: readonly FundGateConfig[] = [
   {
     fundName: 'TQQQ',
     indexSymbol: 'NDX',
-    indexSeriesId: 'NDX/price-return',
+    indexSeriesId: 'NDX/total-return',
     fundSeriesId: 'TQQQ/total-return',
     expenseRatio: TQQQ_INCEPTION_ERA_EXPENSE_RATIO,
     expenseRatioConfidence: COST_PARAMETERS['tqqq-inception-era-expense-ratio'].confidence,
@@ -242,7 +242,15 @@ describe('VALID-01/VALID-02: UPRO and TQQQ tracking-error gate', () => {
 
       const request: BacktestRequest = {
         symbol: config.indexSymbol,
-        dividendReinvest: false, // D-10: the synthetic applies leverage to the price-return index.
+        // D-10 AMENDED (03-GATE-DIAGNOSIS.md): the synthetic applies leverage to the
+        // TOTAL-return index. D-10 as originally written said price-return, which put the two
+        // sides of this comparison on different dividend conventions -- the synthetic excluded
+        // dividends while the reference fund series includes its distributions -- and that
+        // asymmetry, not any cost, was the entire Gate 2 residual (UPRO -6.968%, TQQQ -3.860%).
+        // Matching the conventions moves them to +0.254% and +0.399%. It is also the more
+        // defensible model: a total-return swap counterparty delivers the index's total return
+        // in exchange for financing, which is what the financing term already prices.
+        dividendReinvest: true,
         leverage: LEVERAGE,
         entryDate: overlapFirstDate,
         holdingPeriodBars: null, // hold-to-today: buildKernelInputs applies D-29's rate-coverage truncation.
