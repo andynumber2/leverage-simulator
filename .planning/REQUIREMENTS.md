@@ -24,7 +24,7 @@ measured in CI, not an aspiration.
       decided deliberately, not an automatic budget relaxation. Any budget ultimately set looser
       than its perception anchor is recorded as a Key Decision with the reason
 
-- [ ] **PERF-02**: A single backtest over the full daily history (~25,000 bars) completes in
+- [x] **PERF-02**: A single backtest over the full daily history (~25,000 bars) completes in
       under 16ms, so single-run parameter changes update within one frame
 
 - [ ] **PERF-03**: A full sweep (10,000 cells) completes in under 1000ms on a 4-core baseline
@@ -84,36 +84,36 @@ measured in CI, not an aspiration.
 
 ### Simulation Kernel
 
-- [ ] **SIM-01**: User can simulate daily-rebalanced leverage at an arbitrary positive multiple,
+- [x] **SIM-01**: User can simulate daily-rebalanced leverage at an arbitrary positive multiple,
       including fractional values, across at least 1x to 20x
 
-- [ ] **SIM-02**: Leverage is applied to daily returns and compounded, never to cumulative returns
-- [ ] **SIM-03**: Financing cost on the borrowed `(L-1)` portion and the expense ratio both accrue
+- [x] **SIM-02**: Leverage is applied to daily returns and compounded, never to cumulative returns
+- [x] **SIM-03**: Financing cost on the borrowed `(L-1)` portion and the expense ratio both accrue
       on **calendar days elapsed since the prior trading day**, so weekends and holidays are
       charged. Day-count conventions are documented in the code and surfaced in the methodology
 
-- [ ] **SIM-04**: 1x reproduces the unlevered series exactly, enforced as a test invariant
-- [ ] **SIM-05**: A position that reaches zero is clamped at zero and flagged as ruined. It never
+- [x] **SIM-04**: 1x reproduces the unlevered series exactly, enforced as a test invariant
+- [x] **SIM-05**: A position that reaches zero is clamped at zero and flagged as ruined. It never
       goes negative and never recovers, and downstream metrics treat ruin as an absorbing state
       rather than an extreme value
 
-- [ ] **SIM-06**: User can set an initial investment amount and a recurring contribution amount at
+- [x] **SIM-06**: User can set an initial investment amount and a recurring contribution amount at
       daily, monthly, quarterly, or yearly frequency
 
-- [ ] **SIM-07**: User can toggle dividend reinvestment, which switches between the bundled
+- [x] **SIM-07**: User can toggle dividend reinvestment, which switches between the bundled
       total-return and price-return series rather than modelling dividends
 
-- [ ] **SIM-08**: User can set the entry date and either a fixed holding period or hold-to-today
+- [x] **SIM-08**: User can set the entry date and either a fixed holding period or hold-to-today
 - [x] **SIM-09**: Expense ratio and financing spread are user-editable, defaulting to values
       sourced independently from real products and documented as estimates
 
-- [ ] **SIM-10**: The kernel is one module, imported unchanged by both the single-run path and the
+- [x] **SIM-10**: The kernel is one module, imported unchanged by both the single-run path and the
       sweep worker path. There is no second implementation to drift
 
-- [ ] **SIM-11**: The kernel's hot loop performs no allocation and writes into preallocated
+- [x] **SIM-11**: The kernel's hot loop performs no allocation and writes into preallocated
       buffers, so 10,000 invocations produce no GC pressure
 
-- [ ] **SIM-12**: The correctness checklist from research (ruin clamp, 1x invariant, daily-vs-
+- [x] **SIM-12**: The correctness checklist from research (ruin clamp, 1x invariant, daily-vs-
       cumulative leverage, calendar-day accrual, and the remainder of PITFALLS.md section A) exists
       as unit tests before any UI work begins
 
@@ -275,7 +275,7 @@ measured in CI, not an aspiration.
 |-------------|-------|--------|
 | PERF-01 | Phase 1 | Complete |
 | PERF-01a | Phase 1 | Complete |
-| PERF-02 | Phase 3 | Pending |
+| PERF-02 | Phase 3 | Complete |
 | PERF-03 | Phase 7 | Pending |
 | PERF-04 | Phase 7 | Pending |
 | PERF-05 | Phase 7 | Pending |
@@ -294,18 +294,18 @@ measured in CI, not an aspiration.
 | DATA-07 | Phase 2 | Complete |
 | DATA-08 | Phase 4 | Pending |
 | DATA-09 | Phase 2 | Complete |
-| SIM-01 | Phase 3 | Pending |
-| SIM-02 | Phase 3 | Pending |
-| SIM-03 | Phase 3 | Pending |
-| SIM-04 | Phase 3 | Pending |
-| SIM-05 | Phase 3 | Pending |
-| SIM-06 | Phase 3 | Pending |
-| SIM-07 | Phase 3 | Pending |
-| SIM-08 | Phase 3 | Pending |
+| SIM-01 | Phase 3 | Complete |
+| SIM-02 | Phase 3 | Complete |
+| SIM-03 | Phase 3 | Complete |
+| SIM-04 | Phase 3 | Complete |
+| SIM-05 | Phase 3 | Complete |
+| SIM-06 | Phase 3 | Complete |
+| SIM-07 | Phase 3 | Complete |
+| SIM-08 | Phase 3 | Complete |
 | SIM-09 | Phase 3 | Complete |
-| SIM-10 | Phase 3 | Pending |
-| SIM-11 | Phase 3 | Pending |
-| SIM-12 | Phase 3 | Pending |
+| SIM-10 | Phase 3 | Complete |
+| SIM-11 | Phase 3 | Complete |
+| SIM-12 | Phase 3 | Complete |
 | VALID-01 | Phase 3 | Complete |
 | VALID-02 | Phase 3 | Complete |
 | VALID-03 | Phase 3 | Complete |
