@@ -27,6 +27,14 @@ export default defineConfig({
           name: 'unit',
           environment: 'node',
           include: ['tests/**/*.test.ts', 'tools/**/tests/**/*.test.ts'],
+          // Task 2 (03-05, SIM-11): supplies --expose-gc to the unit project's worker processes
+          // (Vitest's default pool is 'forks') so tests/kernel/allocation.test.ts's heap-delta
+          // proof can force collection. Vitest 4's project-level `execArgv` (not a nested
+          // `poolOptions.forks.execArgv`, which does not exist in this installed version) is
+          // threaded straight into the forked worker's execArgv (see vitest/dist/chunks/
+          // cli-api.*.js's project.config.execArgv wiring), so `npm run test` continues to be
+          // the single command that runs this suite.
+          execArgv: ['--expose-gc'],
         },
       },
       {
