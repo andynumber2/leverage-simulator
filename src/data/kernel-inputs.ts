@@ -23,6 +23,12 @@ import { fromDaysSinceEpoch, indexOfDate, toDaysSinceEpoch } from '../../tools/b
 import type { Manifest, ManifestSeries } from '../../tools/bundle-compiler/src/manifest.ts'
 import { BUNDLE_VERSION, MANIFEST_PATH } from '../data-bundle.generated.ts'
 import { LONG_GAP_FLAG_MIN_DAYS, type KernelOutputs, type KernelParams, type KernelSeries } from '../kernel/backtest.types.ts'
+import { buildContributionFlags, resolveContributionBars, type ContributionFrequency } from './contribution-schedule.ts'
+
+/** Re-exported so `BacktestRequest.contributionFrequency` and any caller resolving a schedule
+ * share the exact same type without a second declaration (plan 03-01's `BacktestRequest` field
+ * type is structurally unchanged: this is the same five-member union it always was). */
+export type { ContributionFrequency }
 
 /** The request surface a single-run script or future UI resolves before calling the kernel. */
 export interface BacktestRequest {
@@ -34,7 +40,7 @@ export interface BacktestRequest {
   holdingPeriodBars: number | null
   initialInvestment: number
   contributionAmount: number
-  contributionFrequency: 'none' | 'daily' | 'monthly' | 'quarterly' | 'yearly'
+  contributionFrequency: ContributionFrequency
   /** Annualized, as a PERCENTAGE (e.g. 0.9 means 0.9%); converted to a fraction here (D-09). */
   expenseRatioPercent: number
   /** Annualized, as a PERCENTAGE; converted to a fraction here (D-09). */
@@ -65,6 +71,12 @@ export interface KernelInputs {
     /** True when D-29's rate-coverage truncation shortened the window below what the price
      * series alone would have supported. */
     truncatedForRateCoverage: boolean
+    /** The resolved contribution schedule's bar count, so a caller can print or check it without
+     * recomputing `resolveContributionBars`. Always 0 for frequency `none`. */
+    contributionCount: number
+    /** The resolved schedule's nominal (pre-D-26-roll) dates, same length as `contributionCount`,
+     * so a caller can print the schedule by eye against what was asked for. */
+    contributionNominalDates: readonly string[]
   }
 }
 
@@ -109,10 +121,19 @@ function assertFinite(name: string, value: number): void {
   }
 }
 
+/**
+ * SIM-07: on a miss, names both the requested id and the sorted list of every series id the
+ * manifest actually carries, so a typo (or a symbol with no bundled dividend-mode counterpart)
+ * names its own fix rather than leaving the caller to guess.
+ */
 function findManifestSeries(manifest: Manifest, id: string): ManifestSeries {
   const entry = manifest.series.find((s) => s.id === id)
   if (entry === undefined) {
-    throw new Error(`kernel-inputs: no series named "${id}" in the compiled bundle manifest`)
+    const existingIds = manifest.series.map((s) => s.id).sort()
+    throw new Error(
+      `kernel-inputs: no series named "${id}" in the compiled bundle manifest; existing series ids: ` +
+        existingIds.join(', '),
+    )
   }
   return entry
 }
@@ -157,11 +178,10 @@ export function buildKernelInputs(bundle: LoadedBundle, request: BacktestRequest
   assertFinite('expenseRatioPercent', request.expenseRatioPercent)
   assertFinite('financingSpreadPercent', request.financingSpreadPercent)
 
-  if (request.contributionFrequency !== 'none') {
-    throw new Error(
-      `kernel-inputs: contributionFrequency "${request.contributionFrequency}" is not implemented yet; ` +
-        `plan 03-04 adds calendar-anchored contribution schedules`,
-    )
+  // D-32: fail loud on a negative holding period rather than letting it fall through to
+  // arithmetic that would silently produce a nonsensical (or empty/negative-length) window.
+  if (request.holdingPeriodBars !== null && request.holdingPeriodBars < 0) {
+    throw new Error(`kernel-inputs: holdingPeriodBars must be >= 0, got ${request.holdingPeriodBars}`)
   }
 
   const seriesId = `${request.symbol}/${request.dividendReinvest ? 'total-return' : 'price-return'}`
@@ -199,7 +219,12 @@ export function buildKernelInputs(bundle: LoadedBundle, request: BacktestRequest
   if (request.holdingPeriodBars === null) {
     endAbsIndex = runLastAbsIndex
   } else {
-    endAbsIndex = entryAbsIndex + request.holdingPeriodBars - 1
+    // SIM-08 empty edge: 0 is in-range and means "just the entry bar" (a 1-bar run), not "zero
+    // bars" -- there is no such thing as a run with no bars at all, and the entry bar itself is
+    // always present (D-28). This is a defined meaning for a valid boundary value, not a D-32
+    // silent coercion of an out-of-range one: any value >= 1 is untouched by the clamp below.
+    const effectiveBars = Math.max(1, request.holdingPeriodBars)
+    endAbsIndex = entryAbsIndex + effectiveBars - 1
     if (endAbsIndex > runLastAbsIndex) {
       const maxBars = runLastAbsIndex - entryAbsIndex + 1
       throw new Error(
@@ -215,11 +240,13 @@ export function buildKernelInputs(bundle: LoadedBundle, request: BacktestRequest
   const expenseRatio = request.expenseRatioPercent / 100
   const financingSpread = request.financingSpreadPercent / 100
 
+  // D-25 through D-28: resolved once here, outside any per-bar loop the kernel will run.
+  const schedule = resolveContributionBars(bundle.calendar, entryAbsIndex, endAbsIndex, request.contributionFrequency)
+  const contributionFlags = buildContributionFlags(barCount, schedule)
+
   const returns = new Float64Array(barCount)
   const shortRate = new Float64Array(barCount)
   const calendarDaysElapsed = new Int32Array(barCount)
-  // request.contributionFrequency is validated to be 'none' above, so this stays zero-filled.
-  const contributionFlags = new Uint8Array(barCount)
 
   for (let k = 0; k < barCount; k++) {
     const absIndex = entryAbsIndex + k
@@ -270,6 +297,8 @@ export function buildKernelInputs(bundle: LoadedBundle, request: BacktestRequest
       seriesId,
       bundleVersion: bundle.manifest.bundleVersion,
       truncatedForRateCoverage,
+      contributionCount: schedule.barIndices.length,
+      contributionNominalDates: schedule.nominalDates,
     },
   }
 }
