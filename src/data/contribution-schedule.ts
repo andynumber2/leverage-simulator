@@ -145,7 +145,16 @@ export function resolveContributionBars(
     )
   }
 
+  // T-03-15/D-32: a value outside the declared union (reachable at runtime from an unvalidated
+  // caller, even though TypeScript rejects it at compile time) fails loud rather than silently
+  // producing NaN-poisoned month arithmetic below.
   const stepMonths = STEP_MONTHS[frequency]
+  if (stepMonths === undefined) {
+    throw new Error(
+      `contribution-schedule: unknown contribution frequency "${String(frequency)}"; supported values are ` +
+        `none, daily, monthly, quarterly, yearly`,
+    )
+  }
   const entry = ymdFromDays(entryDays)
 
   const barIndices: number[] = []

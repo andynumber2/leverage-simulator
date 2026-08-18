@@ -215,6 +215,16 @@ describe('resolveContributionBars collision and long-closure cases (hand-built c
   })
 })
 
+describe('resolveContributionBars unknown-frequency guard (T-03-15, D-32)', () => {
+  test('a runtime frequency value outside the declared union throws naming the value and the supported set, rather than propagating NaN', () => {
+    const bundle = Int32Array.from([toDaysSinceEpoch('2020-01-06'), toDaysSinceEpoch('2020-06-01')])
+    // Cast bypasses TypeScript's compile-time union check to simulate an unvalidated caller.
+    const bogusFrequency = 'fortnightly' as unknown as Parameters<typeof resolveContributionBars>[3]
+
+    expect(() => resolveContributionBars(bundle, 0, 1, bogusFrequency)).toThrowError(/fortnightly/)
+  })
+})
+
 describe('buildContributionFlags', () => {
   test('writes 1 at every scheduled bar index and 0 elsewhere', () => {
     const schedule = { barIndices: Int32Array.from([2, 5, 9]), nominalDates: ['a', 'b', 'c'] }
