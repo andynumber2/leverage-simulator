@@ -3,22 +3,26 @@
  *
  * Top-level layout: a fixed-width parameter column on the left and the result column on the
  * right at viewport widths >= 900px, stacking to a single column below that (04-UI-SPEC.md
- * "Screen structure", D-17). The parameter column is empty in this plan -- plans 04-04/04-05
- * fill it -- and the result column is a single slot (D-21) so Phase 7's heatmap replaces its
- * content rather than rearranging the application.
+ * "Screen structure", D-17). Plan 04-04 fills the parameter column's first controls (symbol,
+ * entry date) and wires D-11/D-12's clear-and-explain path; plan 04-05 adds the remaining
+ * controls. The result column is a single slot (D-21) so Phase 7's heatmap replaces its content
+ * rather than rearranging the application.
  */
 
 import { onMount, Show } from 'solid-js'
 
+import { ParameterColumn } from './components/ParameterColumn/ParameterColumn.tsx'
 import { EquityCurveChart } from './components/ResultColumn/EquityCurveChart.tsx'
 import { LogScaleToggle } from './components/ResultColumn/LogScaleToggle.tsx'
 import { MetricsPanel } from './components/ResultColumn/MetricsPanel.tsx'
 import { RuinBanner } from './components/ResultColumn/RuinBanner.tsx'
+import { ValidationExplanation } from './components/ResultColumn/ValidationExplanation.tsx'
 import {
   backtestRequest,
   currentDerivedMetrics,
   currentKernelInputs,
   currentKernelResult,
+  currentValidationError,
   initializeApp,
   loadedBundle,
   loadError,
@@ -43,7 +47,7 @@ export function App() {
 
   return (
     <div class="app-layout">
-      <aside class="parameter-column" aria-disabled={loadStatus() !== 'ready'} />
+      <ParameterColumn />
       <main class="result-column" data-testid="result-slot">
         <Show when={loadStatus() === 'loading'}>
           <p class="loading-notice">Loading market data...</p>
@@ -59,37 +63,45 @@ export function App() {
         </Show>
 
         <Show when={loadStatus() === 'ready'}>
-          {/* scheduleRun's rAF callback has not resolved the first run yet: keep showing
-              LoadingNotice rather than momentarily flashing an empty-run explanation. */}
-          <Show
-            when={currentKernelInputs() !== null && currentKernelResult() !== null}
-            fallback={<p class="loading-notice">Loading market data...</p>}
-          >
-            <Show
-              when={plottableBarCount() > 0}
-              fallback={<p class="validation-explanation">This run has no plottable bars.</p>}
-            >
-              <div class="chart-scale-row">
-                <LogScaleToggle scale={scaleMode()} onChange={setScaleMode} />
-              </div>
-              <EquityCurveChart
-                inputs={currentKernelInputs()!}
-                result={currentKernelResult()!}
-                calendar={loadedBundle()!.calendar}
-                scale={scaleMode()}
-              />
+          {/* D-11: an invalid parameter combination clears chart and metrics and shows only the
+              explanation, never both. */}
+          <Show when={currentValidationError() !== null}>
+            <ValidationExplanation message={currentValidationError()!} />
+          </Show>
 
-              {/* D-07: metrics and the ruin banner appear only alongside a completed run
-                  (E7 empty); the banner sits above the metrics it makes subordinate. */}
-              <Show when={currentDerivedMetrics() !== null}>
-                <Show when={currentKernelResult()!.ruined && currentDerivedMetrics()!.ruinDate !== null}>
-                  <RuinBanner ruinDate={currentDerivedMetrics()!.ruinDate!} />
-                </Show>
-                <MetricsPanel
+          <Show when={currentValidationError() === null}>
+            {/* scheduleRun's rAF callback has not resolved the first run yet: keep showing
+                LoadingNotice rather than momentarily flashing an empty-run explanation. */}
+            <Show
+              when={currentKernelInputs() !== null && currentKernelResult() !== null}
+              fallback={<p class="loading-notice">Loading market data...</p>}
+            >
+              <Show
+                when={plottableBarCount() > 0}
+                fallback={<p class="empty-run-notice">This run has no plottable bars.</p>}
+              >
+                <div class="chart-scale-row">
+                  <LogScaleToggle scale={scaleMode()} onChange={setScaleMode} />
+                </div>
+                <EquityCurveChart
+                  inputs={currentKernelInputs()!}
                   result={currentKernelResult()!}
-                  metrics={currentDerivedMetrics()!}
-                  contributionAmount={backtestRequest().contributionAmount}
+                  calendar={loadedBundle()!.calendar}
+                  scale={scaleMode()}
                 />
+
+                {/* D-07: metrics and the ruin banner appear only alongside a completed run
+                    (E7 empty); the banner sits above the metrics it makes subordinate. */}
+                <Show when={currentDerivedMetrics() !== null}>
+                  <Show when={currentKernelResult()!.ruined && currentDerivedMetrics()!.ruinDate !== null}>
+                    <RuinBanner ruinDate={currentDerivedMetrics()!.ruinDate!} />
+                  </Show>
+                  <MetricsPanel
+                    result={currentKernelResult()!}
+                    metrics={currentDerivedMetrics()!}
+                    contributionAmount={backtestRequest().contributionAmount}
+                  />
+                </Show>
               </Show>
             </Show>
           </Show>
