@@ -30,6 +30,30 @@ export interface BrowserContextProbeReport {
   error?: string
 }
 
+/** Task 1 (04-06): the PERF-07a/07b figures plus reproducibility disclosure, measured from a
+ * real Playwright pointer drag of the production leverage slider in a genuinely fresh browser
+ * context. */
+export interface InteractionTimingReport {
+  /** The maximum single `longtask` entry duration observed during the drag -- PERF-07a's figure.
+   * `0` when none fired, which is the passing outcome PERF-07a's budget asks for, not a broken
+   * instrument. */
+  maxLongTaskDurationMs: number
+  /** The count of `longtask` entries observed during the drag. Reproducibility information only. */
+  longTaskCount: number
+  /** The maximum `app-recompute` performance-measure duration observed during the drag --
+   * PERF-07b's figure: the coalesced run-and-repaint D-03 says the 16ms frame budget applies to,
+   * not a raw frame delta that would also count browser compositing the app does not control. */
+  maxRecomputeDurationMs: number
+  /** The count of `app-recompute` measures observed during the drag. Strictly greater than 0 and
+   * no greater than `stepCount` is what proves the drag reached the reactive path and that
+   * coalescing did not increase the work (T-04-27). */
+  recomputeCount: number
+  /** The declared number of pointer-move steps the drag issued. */
+  stepCount: number
+  /** `navigator.hardwareConcurrency` as read in the measured page. */
+  hardwareConcurrency: number
+}
+
 /** Task 2 (04-03): the three PERF-08 figures plus reproducibility disclosure, measured against a
  * production `vite preview` build in a genuinely fresh browser context. */
 export interface AppLoadTimingReport {
@@ -81,5 +105,9 @@ declare module 'vitest/internal/browser' {
      * `vite preview` build. See `AppLoadTimingReport`'s field comments for what each figure
      * measures. */
     measureAppLoadTiming: () => Promise<AppLoadTimingReport>
+    /** Task 1 (04-06, PERF-07): measures a real Playwright pointer drag of the production
+     * leverage slider. See `InteractionTimingReport`'s field comments for what each figure
+     * measures. */
+    measureInteractionTiming: () => Promise<InteractionTimingReport>
   }
 }
