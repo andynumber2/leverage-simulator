@@ -12,6 +12,12 @@
  * ruin bar (D-22/D-23); feeding that 0 into a log-scaled series either throws inside uPlot's
  * range computation or renders a nonsensical spike, so the plotted series stops at the last bar
  * before ruin rather than including the clamped zero bars.
+ *
+ * Phase 4 plan 02 (E6 error, D-07): a ruined run adds a second uPlot series, points-only, drawn
+ * at the last plotted bar's own date and value in `--color-destructive` -- the terminator marker.
+ * It never carries the ruin bar's own zero value (log scale still cannot plot zero); the
+ * `RuinBanner` above the chart is what names the exact ruin date. The scale toggle stays
+ * available in the ruined state.
  */
 
 import 'uplot/dist/uPlot.min.css'
@@ -104,6 +110,17 @@ function buildSeriesData(props: EquityCurveChartProps): [Float64Array, Float64Ar
   return [xs, ys]
 }
 
+/** Builds the ruin terminator series (E6 error): `null` everywhere except the last plotted
+ * index, where it carries that same bar's own value -- never the ruin bar's clamped 0 (log scale
+ * still cannot plot zero). Returns `undefined` for a run that never ruined, so no third series is
+ * added to the chart at all. */
+function buildTerminatorData(ys: Float64Array, ruined: boolean): (number | null)[] | undefined {
+  if (!ruined || ys.length === 0) return undefined
+  const data: (number | null)[] = new Array(ys.length).fill(null)
+  data[ys.length - 1] = ys[ys.length - 1] ?? null
+  return data
+}
+
 export function EquityCurveChart(props: EquityCurveChartProps) {
   let containerEl: HTMLDivElement | undefined
   let chart: uPlot | undefined
@@ -116,8 +133,11 @@ export function EquityCurveChart(props: EquityCurveChartProps) {
     }
 
     const [xs, ys] = buildSeriesData(props)
+    const ruined = props.result.ruined && props.result.ruinBarIndex >= 0
+    const terminatorData = buildTerminatorData(ys, ruined)
     const accent = readCssColor('--color-accent')
     const textMuted = readCssColor('--color-text-muted')
+    const destructive = readCssColor('--color-destructive')
 
     // uPlot allots the y axis a fixed 50 CSS px unless told otherwise, which clips any equity
     // value wider than that (a seven-figure final value at 12px mono needs well over 60px), so
@@ -139,6 +159,23 @@ export function EquityCurveChart(props: EquityCurveChartProps) {
       return settledYAxisSize
     }
 
+    const equitySeries: uPlot.Series = {
+      label: 'Equity',
+      stroke: accent,
+      width: 2,
+      points: { show: false },
+    }
+    // E6 error / D-07: the terminator series carries a value only at the last plotted index, so
+    // there is nowhere for a connecting line to draw -- only the single destructive-colored point
+    // renders. The ruin bar's own clamped 0 never enters either series.
+    const ruinSeries: uPlot.Series = {
+      label: 'Ruin',
+      points: { show: true, size: 8, stroke: destructive, fill: destructive },
+    }
+
+    const series: uPlot.Series[] = terminatorData !== undefined ? [{}, equitySeries, ruinSeries] : [{}, equitySeries]
+    const data: uPlot.AlignedData = terminatorData !== undefined ? [xs, ys, terminatorData] : [xs, ys]
+
     const options: uPlot.Options = {
       width: containerEl.clientWidth || 800,
       height: CHART_HEIGHT_PX,
@@ -146,22 +183,14 @@ export function EquityCurveChart(props: EquityCurveChartProps) {
         x: { time: true },
         y: { distr: props.scale === 'log' ? 3 : 1 },
       },
-      series: [
-        {},
-        {
-          label: 'Equity',
-          stroke: accent,
-          width: 2,
-          points: { show: false },
-        },
-      ],
+      series,
       axes: [
         { stroke: textMuted, font: AXIS_FONT },
         { stroke: textMuted, font: AXIS_FONT, size: sizeYAxis },
       ],
     }
 
-    chart = new uPlot(options, [xs, ys], containerEl)
+    chart = new uPlot(options, data, containerEl)
   }
 
   createEffect(() => {
