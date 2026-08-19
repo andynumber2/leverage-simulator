@@ -174,7 +174,7 @@ Plans:
   4. Copying the URL and opening it in a fresh browser reproduces the exact run, enforced by a determinism test. The link carries the data-bundle version, and a link created against an older bundle either reproduces faithfully or states clearly that the data has changed.
   5. Measured on real hardware and reported by the benchmark command: cold load reaches interactive in under 1500ms with data load and decode under 1000ms, warm load is under 300ms, dragging the leverage slider sustains 60fps with no main-thread task exceeding 50ms, and the app builds to static assets that deploy to Cloudflare Pages with no backend, no database and no runtime external API calls, loading and decoding bundled assets directly into typed arrays and working fully offline after first load.
 
-**Plans:** 4/8 plans executed
+**Plans:** 6/8 plans executed
 
 Plans:
 **Wave 1**
@@ -192,8 +192,8 @@ Plans:
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
-- [ ] 04-05-PLAN.md: Holding mode, contribution schedule, both cost parameters cited inline, and the three-variant explanation surface with its stacking order
-- [ ] 04-06-PLAN.md: PERF-07. Long task and coalesced-recompute duration measured across a real pointer drag of the leverage slider
+- [x] 04-05-PLAN.md: Holding mode, contribution schedule, both cost parameters cited inline, and the three-variant explanation surface with its stacking order
+- [x] 04-06-PLAN.md: PERF-07. Long task and coalesced-recompute duration measured across a real pointer drag of the leverage slider
 
 **Wave 5** *(blocked on Wave 4 completion)*
 
@@ -286,7 +286,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | 1. Performance Spike and Budget Lock | 6/6 | Complete    | 2026-08-17 |
 | 2. Compiled Data Bundle | 8/8 | Complete    | 2026-08-17 |
 | 3. Simulation Kernel and the UPRO/TQQQ Gate | 6/6 | In Progress|  |
-| 4. First Defensible Backtest in the Browser | 4/8 | In Progress|  |
+| 4. First Defensible Backtest in the Browser | 6/8 | In Progress|  |
 | 5. Attribution and the Credibility Surface | 0/TBD | Not started | - |
 | 6. Heatmap Design Pass | 0/TBD | Not started | - |
 | 7. Sweep Engine and the Heatmap | 0/TBD | Not started | - |
