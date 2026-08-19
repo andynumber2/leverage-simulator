@@ -16,9 +16,10 @@ import { EquityCurveChart } from './components/ResultColumn/EquityCurveChart.tsx
 import { LogScaleToggle } from './components/ResultColumn/LogScaleToggle.tsx'
 import { MetricsPanel } from './components/ResultColumn/MetricsPanel.tsx'
 import { RuinBanner } from './components/ResultColumn/RuinBanner.tsx'
-import { ValidationExplanation } from './components/ResultColumn/ValidationExplanation.tsx'
+import { ValidationExplanation, type ExplanationVariant } from './components/ResultColumn/ValidationExplanation.tsx'
 import {
   backtestRequest,
+  currentCaveatMessage,
   currentDerivedMetrics,
   currentKernelInputs,
   currentKernelResult,
@@ -30,6 +31,19 @@ import {
   scaleMode,
   setScaleMode,
 } from './state.ts'
+
+/** D-10/D-11/UI-SPEC E9: the current set of explanation variants, in whatever order they were
+ * found -- `ValidationExplanation` owns the stacking order, not this function. `bundle-mismatch`
+ * has no producer yet; its position in the stack is reserved here for plan 04-07 to fill without
+ * touching this array-building logic. */
+function explanationVariants(): ExplanationVariant[] {
+  const variants: ExplanationVariant[] = []
+  const error = currentValidationError()
+  if (error !== null) variants.push({ kind: 'single-field-eviction', message: error })
+  const caveat = currentCaveatMessage()
+  if (caveat !== null) variants.push({ kind: 'cross-field-caveat', message: caveat })
+  return variants
+}
 
 /** A run with zero plottable bars (D-11's clear-and-explain path) never reaches the chart --
  * the chart element is absent rather than rendering an empty axis frame (E6 empty). */
@@ -64,10 +78,11 @@ export function App() {
 
         <Show when={loadStatus() === 'ready'}>
           {/* D-11: an invalid parameter combination clears chart and metrics and shows only the
-              explanation, never both. */}
-          <Show when={currentValidationError() !== null}>
-            <ValidationExplanation message={currentValidationError()!} />
-          </Show>
+              explanation. D-10: a cross-field caveat renders here too, but alongside the still-
+              computed chart and metrics below -- ValidationExplanation itself decides the
+              stacking order, this call site only supplies the current set (UI-SPEC E9 empty: an
+              empty array renders no DOM nodes at all). */}
+          <ValidationExplanation variants={explanationVariants()} />
 
           <Show when={currentValidationError() === null}>
             {/* scheduleRun's rAF callback has not resolved the first run yet: keep showing
