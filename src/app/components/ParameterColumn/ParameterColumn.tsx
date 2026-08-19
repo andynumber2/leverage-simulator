@@ -12,6 +12,7 @@ import { Show } from 'solid-js'
 
 import { loadStatus } from '../../state.ts'
 import { EntryDateControl } from './EntryDateControl.tsx'
+import { LeverageControl } from './LeverageControl.tsx'
 import { SymbolControl } from './SymbolControl.tsx'
 
 export function ParameterColumn() {
@@ -25,6 +26,7 @@ export function ParameterColumn() {
         </p>
       </Show>
       <SymbolControl disabled={disabled()} />
+      <LeverageControl disabled={disabled()} />
       <EntryDateControl disabled={disabled()} />
     </aside>
   )
