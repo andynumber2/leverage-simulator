@@ -141,6 +141,35 @@ test('the y-axis gutter is measured from its labels, so wide equity values are n
   expect(labels.length).toBeGreaterThan(0) // the chart mounted fully, not just a bare canvas
 })
 
+test('the y-axis gutter is the same width on a 2x display as on a 1x one', async () => {
+  // The reported symptom was a chart whose axis clipped on a Retina laptop panel but rendered
+  // correctly once the same, unresized window was dragged to a 1x external monitor. uPlot
+  // recomputes axis sizes on `dppxchange`, so any device-pixel-ratio factor in the gutter
+  // measurement silently changes the answer when the window moves between displays. The gutter
+  // is specified in CSS pixels, so the correct dependence on the ratio is none at all.
+  async function mountAndMeasureGutter(): Promise<number> {
+    container = document.createElement('div')
+    document.body.appendChild(container)
+    disposeApp = mountApp(container)
+    await waitFor(() => container!.querySelector('[data-testid="equity-curve-chart"] .u-over') !== null)
+    const over = container.querySelector<HTMLElement>('[data-testid="equity-curve-chart"] .u-over')
+    const gutter = over!.offsetLeft
+    disposeApp()
+    disposeApp = undefined
+    container.remove()
+    container = undefined
+    return gutter
+  }
+
+  const atOneX = await mountAndMeasureGutter()
+
+  vi.stubGlobal('devicePixelRatio', 2)
+  const atTwoX = await mountAndMeasureGutter()
+
+  expect(atTwoX).toBe(atOneX)
+  expect(atTwoX).toBeGreaterThan(UPLOT_DEFAULT_AXIS_SIZE_PX)
+})
+
 test('axisSizeForLabels sizes to the widest label plus the tick and gap', () => {
   // One stub character width, so the expected number is arithmetic rather than font-dependent.
   const measure = (label: string): number => label.length * 7

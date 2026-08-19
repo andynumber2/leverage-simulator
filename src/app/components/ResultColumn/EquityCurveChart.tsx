@@ -52,6 +52,27 @@ export function axisSizeForLabels(
   return Math.ceil(tickSizePx + gapPx + widest)
 }
 
+/**
+ * Measures label widths in CSS pixels, which is the unit uPlot's `axis.size` is expressed in.
+ *
+ * Deliberately a private context rather than uPlot's own, for two reasons:
+ *
+ * 1. uPlot caches the last font it assigned (`setFontStyle` skips the assignment when the font
+ *    string is unchanged), so writing to `chart.ctx.font` behind its back desyncs that cache and
+ *    can leave a later label drawn in the wrong size.
+ * 2. uPlot scales its canvas and its axis font by `pxRatio`, so measuring there returns device
+ *    pixels that then have to be divided back down. Measuring here with the CSS-sized font keeps
+ *    the result in CSS pixels with no device-pixel-ratio arithmetic to get wrong -- which matters
+ *    because uPlot recomputes axis sizes on `dppxchange`, so a ratio error only shows up after
+ *    the window moves to a display with a different ratio.
+ */
+function cssPixelTextMeasurer(font: string): (label: string) => number {
+  const ctx = document.createElement('canvas').getContext('2d')
+  if (ctx === null) return (label) => label.length * 8 // no 2d context: over-estimate, never clip
+  ctx.font = font
+  return (label) => ctx.measureText(label).width
+}
+
 export interface EquityCurveChartProps {
   inputs: KernelInputs
   result: KernelResult
@@ -104,15 +125,13 @@ export function EquityCurveChart(props: EquityCurveChartProps) {
     // `cycleNum > 1` is uPlot's convergence bail-out: resizing the axis changes the plot area,
     // which can change the splits, which re-invokes this -- returning the settled width breaks
     // the feedback loop.
+    const measureLabel = cssPixelTextMeasurer(AXIS_FONT)
     let settledYAxisSize = 0
     const sizeYAxis = (self: uPlot, values: string[], axisIdx: number, cycleNum: number): number => {
       if (cycleNum > 1) return settledYAxisSize
       const axis = self.axes[axisIdx]
-      self.ctx.font = AXIS_FONT
       settledYAxisSize = axisSizeForLabels(
-        // uPlot's canvas is scaled by devicePixelRatio, so measureText returns device pixels
-        // while `size` is expected in CSS pixels.
-        (label) => self.ctx.measureText(label).width / (devicePixelRatio || 1),
+        measureLabel,
         values ?? [],
         axis?.ticks?.size ?? UPLOT_DEFAULT_TICK_SIZE_PX,
         axis?.gap ?? UPLOT_DEFAULT_AXIS_GAP_PX,
