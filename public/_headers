@@ -3,3 +3,14 @@
 
 /data/manifest.*.json
   Cache-Control: public, max-age=31536000, immutable
+
+# Plan 04-08 (D-04): index.html and the generated service worker are NOT content-hashed and must
+# propagate on every redeploy, while the two hashed rules above stay immutable. Workbox's own
+# precache manifest inside sw.js is itself content-hash based (each precached URL carries its own
+# revision hash), so a stale sw.js being re-fetched promptly is what lets a redeploy actually
+# invalidate the entries that changed -- an immutable sw.js would freeze the precache forever.
+/index.html
+  Cache-Control: no-cache
+
+/sw.js
+  Cache-Control: no-cache

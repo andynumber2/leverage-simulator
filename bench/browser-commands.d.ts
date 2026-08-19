@@ -73,6 +73,24 @@ export interface AppLoadTimingReport {
   hardwareConcurrency: number
 }
 
+/** Task 2 (04-08, DATA-08): the offline-after-first-load report, measured against a production
+ * `vite preview` build in a genuinely fresh browser context whose network is disabled at the
+ * Playwright layer after the service worker precaches the whole bundled universe. */
+export interface OfflineCheckReport {
+  /** Whether the second, offline navigation reached the `app-interactive` mark. */
+  reachedInteractive: boolean
+  /** The count of requests that failed during the offline navigation -- 0 is the passing
+   * outcome; a route the service worker did not precache surfaces here as a real failure. */
+  failedRequestCount: number
+  /** Up to the first ten failed requests' `"METHOD url"` strings, for a readable assertion
+   * message. */
+  failedRequests: string[]
+  /** Whether a symbol OTHER than the default landing run's could be selected and computed while
+   * offline -- what distinguishes precaching the whole universe (D-04) from precaching only the
+   * symbol already opened. */
+  nonDefaultSymbolComputed: boolean
+}
+
 declare module 'vitest/internal/browser' {
   interface BrowserCommands {
     recordMeasurement: (row: MeasurementRow) => Promise<null>
@@ -109,5 +127,10 @@ declare module 'vitest/internal/browser' {
      * leverage slider. See `InteractionTimingReport`'s field comments for what each figure
      * measures. */
     measureInteractionTiming: () => Promise<InteractionTimingReport>
+    /** Task 2 (04-08, DATA-08): the offline-after-first-load proof. See `OfflineCheckReport`'s
+     * field comments for what each figure means. Declared on the `app` project's `browser.
+     * commands` block in `vitest.config.ts`, not the `bench` project's -- the other commands
+     * above are. */
+    runOfflineCheck: () => Promise<OfflineCheckReport>
   }
 }
