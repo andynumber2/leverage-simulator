@@ -42,7 +42,7 @@ measured in CI, not an aspiration.
 - [ ] **PERF-07**: No main-thread task exceeds 50ms during any interaction, verified by long-task
       measurement. Dragging a slider sustains 60fps
 
-- [ ] **PERF-08**: Cold load reaches interactive in under 1500ms and completes data load and
+- [x] **PERF-08**: Cold load reaches interactive in under 1500ms and completes data load and
       decode in under 1000ms on a typical broadband connection; warm load is under 300ms
 
 - [ ] **PERF-09**: Heatmap pan and zoom sustain 60fps at full cell count
@@ -281,7 +281,7 @@ measured in CI, not an aspiration.
 | PERF-05 | Phase 7 | Pending |
 | PERF-06 | Phase 7 | Pending |
 | PERF-07 | Phase 4 | Pending |
-| PERF-08 | Phase 4 | Pending |
+| PERF-08 | Phase 4 | Complete |
 | PERF-09 | Phase 7 | Pending |
 | PERF-10 | Phase 1 | Complete |
 | PERF-11 | Phase 1 | Complete |
