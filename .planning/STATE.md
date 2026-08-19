@@ -2,17 +2,17 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_phase: 03
-current_phase_name: simulation-kernel-and-the-upro-tqqq-gate
-status: phase-complete
-stopped_at: Phase 4 context gathered
-last_updated: "2026-08-19T03:47:05.909Z"
-last_activity: 2026-08-18
-last_activity_desc: "Phase 03 shipped as PR #3; Nyquist validation completed for phases 01 and 02"
+current_phase: 04
+current_phase_name: first-defensible-backtest-in-the-browser
+status: executing
+stopped_at: Phase 4 UI-SPEC approved
+last_updated: "2026-08-19T04:51:55.723Z"
+last_activity: 2026-08-19
+last_activity_desc: Phase 04 execution started
 progress:
   total_phases: 4
   completed_phases: 3
-  total_plans: 20
+  total_plans: 28
   completed_plans: 20
 ---
 
@@ -23,14 +23,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-08-16)
 
 **Core value:** Given a symbol, a leverage level, an entry point, and a contribution schedule, produce a defensible outcome and show which mechanism consumed the money, in a form that can be pasted into an argument.
-**Current focus:** Phase 03 — simulation-kernel-and-the-upro-tqqq-gate
+**Current focus:** Phase 04 — first-defensible-backtest-in-the-browser
 
 ## Current Position
 
-Phase: 03 (simulation-kernel-and-the-upro-tqqq-gate) - COMPLETE
-Plan: 6 of 6
-Status: Phase 03 shipped as PR #3, awaiting CI and merge. Next: Phase 4.
-Last activity: 2026-08-18 - Completed quick task 260818-v2d: resolve WINDOWS #2 calibration runner-variance in bench/calibration.ts
+Phase: 04 (first-defensible-backtest-in-the-browser) — EXECUTING
+Plan: 1 of 8
+Status: Executing Phase 04
+Last activity: 2026-08-19 — Phase 04 execution started
 
 Progress: [██████████] 100%
 
@@ -159,6 +159,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-08-19T03:47:05.891Z
-Stopped at: Phase 4 context gathered
-Resume file: .planning/phases/04-first-defensible-backtest-in-the-browser/04-CONTEXT.md
+Last session: 2026-08-19T03:57:13.720Z
+Stopped at: Phase 4 UI-SPEC approved
+Resume file: .planning/phases/04-first-defensible-backtest-in-the-browser/04-UI-SPEC.md
