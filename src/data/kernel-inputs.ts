@@ -9,21 +9,21 @@
  * kernel's types and the bundle decoder; the kernel itself imports nothing from here (SIM-10).
  */
 
-import { readFile } from 'node:fs/promises'
-import path from 'node:path'
-
 import {
-  calendarView,
-  decodeHeader,
   seriesView,
   type AssetHeader,
   type SeriesDescriptor,
 } from '../../tools/bundle-compiler/src/binary-format.ts'
 import { fromDaysSinceEpoch, indexOfDate, toDaysSinceEpoch } from '../../tools/bundle-compiler/src/calendar.ts'
 import type { Manifest, ManifestSeries } from '../../tools/bundle-compiler/src/manifest.ts'
-import { BUNDLE_VERSION, MANIFEST_PATH } from '../data-bundle.generated.ts'
 import { LONG_GAP_FLAG_MIN_DAYS, type KernelOutputs, type KernelParams, type KernelSeries } from '../kernel/backtest.types.ts'
+import type { LoadedBundle } from './bundle-source.ts'
 import { buildContributionFlags, resolveContributionBars, type ContributionFrequency } from './contribution-schedule.ts'
+
+/** D-02: `LoadedBundle` is declared in `./bundle-source.ts` now; re-exported here as a TYPE ONLY
+ * so this re-export is erased at build time and no Node module enters the browser graph through
+ * this module's callers. */
+export type { LoadedBundle }
 
 /** Re-exported so `BacktestRequest.contributionFrequency` and any caller resolving a schedule
  * share the exact same type without a second declaration (plan 03-01's `BacktestRequest` field
@@ -45,13 +45,6 @@ export interface BacktestRequest {
   expenseRatioPercent: number
   /** Annualized, as a PERCENTAGE; converted to a fraction here (D-09). */
   financingSpreadPercent: number
-}
-
-/** The decoded manifest, every asset's decoded header/buffer, and the shared calendar view. */
-export interface LoadedBundle {
-  manifest: Manifest
-  calendar: Int32Array
-  assets: Map<string, { buffer: ArrayBuffer; header: AssetHeader }>
 }
 
 export interface KernelInputs {
@@ -78,41 +71,6 @@ export interface KernelInputs {
      * so a caller can print the schedule by eye against what was asked for. */
     contributionNominalDates: readonly string[]
   }
-}
-
-async function readAsArrayBuffer(filePath: string): Promise<ArrayBuffer> {
-  const buf = await readFile(filePath)
-  return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer
-}
-
-/**
- * Resolves the manifest at `path.join(rootDir ?? process.cwd(), 'public', MANIFEST_PATH)`, reads
- * every `assets[].file` plus the shared calendar file from the same directory, and calls
- * `decodeHeader(buffer, BUNDLE_VERSION)` on each so a stale cached asset raises
- * `BundleVersionMismatchError` at load rather than returning numbers that quietly disagree with
- * the manifest describing them.
- */
-export async function loadBundleFromDisk(rootDir?: string): Promise<LoadedBundle> {
-  const baseDir = rootDir ?? process.cwd()
-  const manifestPath = path.join(baseDir, 'public', MANIFEST_PATH)
-  const manifestJson = await readFile(manifestPath, 'utf-8')
-  const manifest = JSON.parse(manifestJson) as Manifest
-  const dataDir = path.dirname(manifestPath)
-
-  const assets = new Map<string, { buffer: ArrayBuffer; header: AssetHeader }>()
-
-  const calendarBuffer = await readAsArrayBuffer(path.join(dataDir, manifest.calendar.file))
-  const calendarHeader = decodeHeader(calendarBuffer, BUNDLE_VERSION)
-  assets.set(manifest.calendar.file, { buffer: calendarBuffer, header: calendarHeader })
-  const calendar = calendarView(calendarBuffer, calendarHeader)
-
-  for (const asset of manifest.assets) {
-    const buffer = await readAsArrayBuffer(path.join(dataDir, asset.file))
-    const header = decodeHeader(buffer, BUNDLE_VERSION)
-    assets.set(asset.file, { buffer, header })
-  }
-
-  return { manifest, calendar, assets }
 }
 
 function assertFinite(name: string, value: number): void {

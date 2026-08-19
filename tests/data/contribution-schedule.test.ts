@@ -13,7 +13,8 @@ import { fromDaysSinceEpoch, indexOfDate, toDaysSinceEpoch } from '../../tools/b
 import { runBacktest } from '../../src/kernel/backtest.ts'
 import type { KernelOutputs, KernelParams, KernelSeries } from '../../src/kernel/backtest.types.ts'
 import { buildContributionFlags, resolveContributionBars } from '../../src/data/contribution-schedule.ts'
-import { loadBundleFromDisk, type LoadedBundle } from '../../src/data/kernel-inputs.ts'
+import type { LoadedBundle } from '../../src/data/kernel-inputs.ts'
+import { loadBundleFromDisk } from '../../src/data/load-bundle-node.ts'
 
 function entryIndexFor(bundle: LoadedBundle, isoDate: string): number {
   const idx = indexOfDate({ days: bundle.calendar }, toDaysSinceEpoch(isoDate))

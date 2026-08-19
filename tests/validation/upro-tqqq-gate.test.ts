@@ -18,7 +18,8 @@ import { describe, expect, test } from 'vitest'
 
 import { seriesView } from '../../tools/bundle-compiler/src/binary-format.ts'
 import { fromDaysSinceEpoch, toDaysSinceEpoch } from '../../tools/bundle-compiler/src/calendar.ts'
-import { buildKernelInputs, loadBundleFromDisk, type BacktestRequest, type LoadedBundle } from '../../src/data/kernel-inputs.ts'
+import { buildKernelInputs, type BacktestRequest, type LoadedBundle } from '../../src/data/kernel-inputs.ts'
+import { loadBundleFromDisk } from '../../src/data/load-bundle-node.ts'
 import { runBacktest } from '../../src/kernel/backtest.ts'
 import {
   computeTrackingError,

@@ -13,7 +13,8 @@ import { describe, expect, test } from 'vitest'
 
 import { runBacktest } from '../../src/kernel/backtest.ts'
 import type { KernelOutputs, KernelParams, KernelSeries } from '../../src/kernel/backtest.types.ts'
-import { buildKernelInputs, loadBundleFromDisk, type BacktestRequest } from '../../src/data/kernel-inputs.ts'
+import { buildKernelInputs, type BacktestRequest } from '../../src/data/kernel-inputs.ts'
+import { loadBundleFromDisk } from '../../src/data/load-bundle-node.ts'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const KERNEL_DIR = path.resolve(__dirname, '../../src/kernel')

@@ -2,6 +2,7 @@ import path from 'node:path'
 
 import { playwright } from '@vitest/browser-playwright'
 import { defineConfig } from 'vitest/config'
+import solid from 'vite-plugin-solid'
 
 import {
   claimCalibrationScore,
@@ -27,6 +28,19 @@ export default defineConfig({
           name: 'unit',
           environment: 'node',
           include: ['tests/**/*.test.ts', 'tools/**/tests/**/*.test.ts'],
+          // Scoped to the `.browser.test.ts` suffix, not the whole `tests/app/` directory, so a
+          // plain `tests/app/*.test.ts` covering a pure app-layer module still runs here (in the
+          // fast Node project) instead of silently matching neither project and never executing.
+          // `exclude` replaces (not merges with) Vitest's own default exclude list, so the usual
+          // defaults are repeated here alongside the new entry.
+          exclude: [
+            '**/node_modules/**',
+            '**/dist/**',
+            '**/cypress/**',
+            '**/.{idea,git,cache,output,temp}/**',
+            '**/{karma,rollup,webpack,vite,vitest,jest,ava,babel,nyc,cypress,tsup,build}.config.*',
+            'tests/app/**/*.browser.test.ts',
+          ],
           // Task 2 (03-05, SIM-11): supplies --expose-gc to the unit project's worker processes
           // (Vitest's default pool is 'forks') so tests/kernel/allocation.test.ts's heap-delta
           // proof can force collection. Vitest 4's project-level `execArgv` (not a nested
@@ -94,6 +108,24 @@ export default defineConfig({
               // bundle into the real SPX series PERF-02 measures runBacktest against.
               readKernelSeries: async (_context) => readProductionKernelSeries(COMPILED_BUNDLE_DIR),
             },
+          },
+        },
+      },
+      {
+        plugins: [solid()],
+        test: {
+          name: 'app',
+          include: ['tests/app/**/*.browser.test.ts'],
+          browser: {
+            enabled: true,
+            // This host's LANG/LC_* are unset (POSIX locale), which Chromium reports to
+            // Intl.NumberFormat as an invalid tag ("en-US@posix") -- uPlot's own module-level
+            // `new Intl.NumberFormat(navigator.language, ...)` call throws on import as a
+            // result. Pinning the Playwright browser context's locale sidesteps the host's
+            // malformed locale entirely, independent of what the CI/dev sandbox's env vars are.
+            provider: playwright({ contextOptions: { locale: 'en-US' } }),
+            headless: true,
+            instances: [{ browser: 'chromium' }],
           },
         },
       },
