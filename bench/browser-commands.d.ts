@@ -30,6 +30,25 @@ export interface BrowserContextProbeReport {
   error?: string
 }
 
+/** Task 2 (04-03): the three PERF-08 figures plus reproducibility disclosure, measured against a
+ * production `vite preview` build in a genuinely fresh browser context. */
+export interface AppLoadTimingReport {
+  /** `app-data-ready`'s `startTime` on the cold (first) navigation -- PERF-08b's figure. */
+  coldDataReadyMs: number
+  /** `app-interactive`'s `startTime` on the cold (first) navigation -- PERF-08a's figure. */
+  coldInteractiveMs: number
+  /** `app-interactive`'s `startTime` on the warm (second, cache-warm) navigation --
+   * PERF-08c's figure. */
+  warmInteractiveMs: number
+  /** The maximum `longtask` entry duration observed during the cold load, `0` when none fired.
+   * Reproducibility information only. */
+  maxLongTaskDurationMs: number
+  /** The count of `longtask` entries observed during the cold load. */
+  longTaskCount: number
+  /** `navigator.hardwareConcurrency` as read in the measured page. */
+  hardwareConcurrency: number
+}
+
 declare module 'vitest/internal/browser' {
   interface BrowserCommands {
     recordMeasurement: (row: MeasurementRow) => Promise<null>
@@ -58,5 +77,9 @@ declare module 'vitest/internal/browser' {
      * custom command receives exposes a real, unrestricted Playwright `BrowserContext`. See
      * `BrowserContextProbeReport`'s field comments for what each probed value means. */
     probeBrowserContext: () => Promise<BrowserContextProbeReport>
+    /** Task 2 (04-03, PERF-08): measures cold and warm load timing against a production
+     * `vite preview` build. See `AppLoadTimingReport`'s field comments for what each figure
+     * measures. */
+    measureAppLoadTiming: () => Promise<AppLoadTimingReport>
   }
 }

@@ -14,6 +14,7 @@ import {
 import { measureBundleBytes } from './bench/bundle-bytes.ts'
 import type { BrowserCapturedEnvironment } from './bench/environment-block.ts'
 import { readProductionKernelSeries } from './bench/kernel-series-bridge.ts'
+import { withPreviewServer } from './bench/preview-server.ts'
 import type { MeasurementRow } from './bench/report.ts'
 
 /** Convention this repo's compiler and CLI both follow (tools/bundle-compiler/src/cli.ts): the
@@ -125,7 +126,10 @@ export default defineConfig({
                   }
                   let canNavigateFreshContext = false
                   if (browser !== null) {
-                    const freshContext = await browser.newContext()
+                    // Pinned locale (matches the 'app' project's contextOptions below): this
+                    // host's LANG/LC_* are unset (POSIX locale), which Chromium reports to
+                    // Intl.NumberFormat as the invalid tag "en-US@posix" otherwise.
+                    const freshContext = await browser.newContext({ locale: 'en-US' })
                     try {
                       const page = await freshContext.newPage()
                       await page.goto('about:blank')
@@ -154,6 +158,98 @@ export default defineConfig({
                   }
                 }
               },
+              // Task 2 (04-03): PERF-08a/08b/08c's measurement. Runs Node-side, wrapped in
+              // withPreviewServer so the measured origin is always the real production build,
+              // never the dev server (RESEARCH.md Pitfall 2). Task 1's probe already proved
+              // context.context.browser() reaches a real Browser handle, which is what this
+              // command uses to create a genuinely fresh, cache-empty context -- never the test
+              // runner's own context, whose cache is already warm from the run.
+              measureAppLoadTiming: async (context) =>
+                withPreviewServer(async (origin) => {
+                  const browser = context.context.browser()
+                  if (browser === null) {
+                    throw new Error(
+                      'measureAppLoadTiming: no Browser handle reachable from ' +
+                        'context.context.browser() -- Task 1s probeBrowserContext must report ' +
+                        'hasBrowserHandle=true for this command to run',
+                    )
+                  }
+                  // Pinned locale (matches the 'app' project's contextOptions below): this
+                  // host's LANG/LC_* are unset (POSIX locale), which Chromium reports to
+                  // Intl.NumberFormat as the invalid tag "en-US@posix" otherwise, throwing
+                  // inside uPlot's own module-level Intl.NumberFormat call on import.
+                  const freshContext = await browser.newContext({ locale: 'en-US' })
+                  try {
+                    const longTaskDurations: number[] = []
+                    await freshContext.exposeFunction(
+                      '__recordLongTask',
+                      (duration: number) => {
+                        longTaskDurations.push(duration)
+                      },
+                    )
+                    // Installed before any navigation in this context, so it observes the
+                    // longtask entry type from the very first byte of every page this context
+                    // ever loads, cold and warm alike. `buffered: true` catches entries that
+                    // fired before the observer's own construction completed.
+                    await freshContext.addInitScript(() => {
+                      new PerformanceObserver((list) => {
+                        for (const entry of list.getEntries()) {
+                          // @ts-expect-error -- injected by exposeFunction, not declared on window
+                          window.__recordLongTask(entry.duration)
+                        }
+                      }).observe({ type: 'longtask', buffered: true })
+                    })
+
+                    const page = await freshContext.newPage()
+                    try {
+                      // Cold load: the context's HTTP cache is genuinely empty (a freshly
+                      // created context, never reused across measurements).
+                      await page.goto(origin, { waitUntil: 'load' })
+                      await page.waitForFunction(
+                        () => performance.getEntriesByName('app-data-ready').length > 0,
+                      )
+                      const coldDataReadyMs = await page.evaluate(
+                        () => performance.getEntriesByName('app-data-ready')[0]!.startTime,
+                      )
+                      await page.waitForFunction(
+                        () => performance.getEntriesByName('app-interactive').length > 0,
+                      )
+                      const coldInteractiveMs = await page.evaluate(
+                        () => performance.getEntriesByName('app-interactive')[0]!.startTime,
+                      )
+                      const hardwareConcurrency = await page.evaluate(
+                        () => navigator.hardwareConcurrency,
+                      )
+
+                      // Warm load: a second navigation in the SAME context, whose HTTP cache is
+                      // now warm. A new navigation's Performance timeline starts fresh, so
+                      // entries read here belong only to this second load.
+                      await page.goto(origin, { waitUntil: 'load' })
+                      await page.waitForFunction(
+                        () => performance.getEntriesByName('app-interactive').length > 0,
+                      )
+                      const warmInteractiveMs = await page.evaluate(
+                        () => performance.getEntriesByName('app-interactive')[0]!.startTime,
+                      )
+
+                      const maxLongTaskDurationMs =
+                        longTaskDurations.length > 0 ? Math.max(...longTaskDurations) : 0
+
+                      return {
+                        coldDataReadyMs,
+                        coldInteractiveMs,
+                        warmInteractiveMs,
+                        maxLongTaskDurationMs,
+                        longTaskCount: longTaskDurations.length,
+                        hardwareConcurrency,
+                      }
+                    } finally {
+                      await page.close()
+                    }
+                  } finally {
+                    await freshContext.close()
+                  }
+                }),
             },
           },
         },
