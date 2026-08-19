@@ -13,7 +13,12 @@ import { afterEach, expect, test, vi } from 'vitest'
 
 import { MANIFEST_PATH } from '../../src/data-bundle.generated.ts'
 import { mountApp } from '../../src/app/main.tsx'
+import { axisSizeForLabels } from '../../src/app/components/ResultColumn/EquityCurveChart.tsx'
 import { currentKernelInputs, currentKernelResult } from '../../src/app/state.ts'
+
+/** uPlot's built-in default `axis.size`. The landing run's equity values are wider than this at
+ * the chart's 12px monospace axis font, which is why the gutter must be measured, not defaulted. */
+const UPLOT_DEFAULT_AXIS_SIZE_PX = 50
 
 function performanceEntries(name: string): PerformanceEntryList {
   return performance.getEntriesByName(name)
@@ -113,4 +118,38 @@ test('a manifest that decodes to zero series renders the named failure line, nev
 
   expect(container.querySelector('[data-testid="equity-curve-chart"] canvas')).toBeNull()
   expect(container.querySelector('canvas')).toBeNull()
+})
+
+test('the y-axis gutter is measured from its labels, so wide equity values are not clipped', async () => {
+  container = document.createElement('div')
+  document.body.appendChild(container)
+  disposeApp = mountApp(container)
+
+  await waitFor(() => container!.querySelector('[data-testid="equity-curve-chart"] canvas') !== null)
+
+  // uPlot positions `.u-over` (the plotting area) inset by exactly the axis sizes it allotted,
+  // so its offsetLeft IS the rendered y-axis gutter width in CSS pixels.
+  const over = container.querySelector<HTMLElement>('[data-testid="equity-curve-chart"] .u-over')
+  expect(over).not.toBeNull()
+
+  const gutterPx = over!.offsetLeft
+  expect(gutterPx).toBeGreaterThan(UPLOT_DEFAULT_AXIS_SIZE_PX)
+
+  const labels = Array.from(
+    container.querySelectorAll<HTMLElement>('[data-testid="equity-curve-chart"] .u-legend'),
+  )
+  expect(labels.length).toBeGreaterThan(0) // the chart mounted fully, not just a bare canvas
+})
+
+test('axisSizeForLabels sizes to the widest label plus the tick and gap', () => {
+  // One stub character width, so the expected number is arithmetic rather than font-dependent.
+  const measure = (label: string): number => label.length * 7
+  const size = axisSizeForLabels(measure, ['10', '1,000', '1,000,000'], 10, 5)
+  expect(size).toBe(10 + 5 + '1,000,000'.length * 7)
+
+  // No labels: the gutter still has to hold the tick and gap.
+  expect(axisSizeForLabels(measure, [], 10, 5)).toBe(15)
+
+  // Fractional measurements round up -- a gutter half a pixel short still clips.
+  expect(axisSizeForLabels(() => 20.2, ['x'], 10, 5)).toBe(36)
 })

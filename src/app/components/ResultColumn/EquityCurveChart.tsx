@@ -26,6 +26,32 @@ import type { ScaleMode } from '../../state.ts'
 const AXIS_FONT = '12px ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace'
 const CHART_HEIGHT_PX = 360
 
+/** uPlot's fallbacks for `axis.ticks.size` and `axis.gap`, used when an axis has not overridden
+ * them and uPlot's own defaults are not yet reflected on the axis object. */
+const UPLOT_DEFAULT_TICK_SIZE_PX = 10
+const UPLOT_DEFAULT_AXIS_GAP_PX = 5
+
+/**
+ * Width the y-axis gutter needs to draw `values` without clipping: the widest label plus the
+ * tick length and the label/baseline gap.
+ *
+ * Split out from the uPlot hook below so it can be tested against a stub measurer -- the
+ * clipping bug it fixes is a width computation, not a canvas behaviour.
+ */
+export function axisSizeForLabels(
+  measureWidth: (label: string) => number,
+  values: readonly string[],
+  tickSizePx: number,
+  gapPx: number,
+): number {
+  let widest = 0
+  for (const value of values) {
+    const width = measureWidth(value)
+    if (width > widest) widest = width
+  }
+  return Math.ceil(tickSizePx + gapPx + widest)
+}
+
 export interface EquityCurveChartProps {
   inputs: KernelInputs
   result: KernelResult
@@ -72,6 +98,28 @@ export function EquityCurveChart(props: EquityCurveChartProps) {
     const accent = readCssColor('--color-accent')
     const textMuted = readCssColor('--color-text-muted')
 
+    // uPlot allots the y axis a fixed 50 CSS px unless told otherwise, which clips any equity
+    // value wider than that (a seven-figure final value at 12px mono needs well over 60px), so
+    // the gutter is measured from the labels uPlot is about to draw rather than guessed.
+    // `cycleNum > 1` is uPlot's convergence bail-out: resizing the axis changes the plot area,
+    // which can change the splits, which re-invokes this -- returning the settled width breaks
+    // the feedback loop.
+    let settledYAxisSize = 0
+    const sizeYAxis = (self: uPlot, values: string[], axisIdx: number, cycleNum: number): number => {
+      if (cycleNum > 1) return settledYAxisSize
+      const axis = self.axes[axisIdx]
+      self.ctx.font = AXIS_FONT
+      settledYAxisSize = axisSizeForLabels(
+        // uPlot's canvas is scaled by devicePixelRatio, so measureText returns device pixels
+        // while `size` is expected in CSS pixels.
+        (label) => self.ctx.measureText(label).width / (devicePixelRatio || 1),
+        values ?? [],
+        axis?.ticks?.size ?? UPLOT_DEFAULT_TICK_SIZE_PX,
+        axis?.gap ?? UPLOT_DEFAULT_AXIS_GAP_PX,
+      )
+      return settledYAxisSize
+    }
+
     const options: uPlot.Options = {
       width: containerEl.clientWidth || 800,
       height: CHART_HEIGHT_PX,
@@ -90,7 +138,7 @@ export function EquityCurveChart(props: EquityCurveChartProps) {
       ],
       axes: [
         { stroke: textMuted, font: AXIS_FONT },
-        { stroke: textMuted, font: AXIS_FONT },
+        { stroke: textMuted, font: AXIS_FONT, size: sizeYAxis },
       ],
     }
 
