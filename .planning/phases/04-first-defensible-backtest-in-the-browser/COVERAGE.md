@@ -1,0 +1,1 @@
+No external API integration: APP-03 forbids a backend, a database and any runtime external API call, so the phase's only network activity is fetching its own content-hashed static assets from its own origin, and the deterministic detector returned `detected: false` over the phase scope at plan time.
