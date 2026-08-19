@@ -60,6 +60,11 @@ jobs:
 
       - run: npm run test:app
 
+      # 04-03: builds the real production dist/ output PERF-08's preview-server harness measures
+      # against. Without this step the preview server has nothing to serve, and every PERF-08 row
+      # would fail on a missing dist/ -- a correct but useless failure mode to discover only here.
+      - run: npm run build
+
       - run: npm run bench
 
       - uses: actions/upload-artifact@v4

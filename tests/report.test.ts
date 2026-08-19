@@ -48,7 +48,13 @@ const environment: EnvironmentBlock = {
 
 /** A full, always-present row set covering all eight requirement groups (PERF-02..PERF-09),
  * mirroring what bench/report.ts's buildFullRowSet produces from PERF_BUDGETS: used directly
- * here so these tests do not depend on any particular measurement having run. */
+ * here so these tests do not depend on any particular measurement having run.
+ *
+ * PERF-08a/08b/08c carry a real (passing) measurement, not `unmeasured`: 04-03's PERF-08
+ * coverage invariant requires this of any "healthy, in-budget" fixture from this point on.
+ * PERF-07a/07b deliberately stay unmeasured -- that harness is a separate, later plan in this
+ * same phase, and the coverage invariant must not require it yet (see the dedicated PERF-08
+ * coverage describe block below). */
 const fullRowSet: MeasurementRow[] = [
   row({ budgetId: 'PERF-02', requirementId: 'PERF-02', measuredMs: null, normalizedMs: null, budgetMs: 16, anchorMs: 16, anchorLabel: 'one frame', verdict: 'unmeasured' }),
   row({ budgetId: 'PERF-03', requirementId: 'PERF-03', measuredMs: null, normalizedMs: null, budgetMs: 1000, anchorMs: 1000, anchorLabel: 'holds attention', verdict: 'unmeasured' }),
@@ -57,9 +63,9 @@ const fullRowSet: MeasurementRow[] = [
   row({ budgetId: 'PERF-06', requirementId: 'PERF-06', measuredMs: null, normalizedMs: null, budgetMs: 16, anchorMs: 16, anchorLabel: 'one frame', verdict: 'unmeasured' }),
   row({ budgetId: 'PERF-07a', requirementId: 'PERF-07', measuredMs: null, normalizedMs: null, budgetMs: 50, anchorMs: 50, anchorLabel: 'long task threshold', verdict: 'unmeasured' }),
   row({ budgetId: 'PERF-07b', requirementId: 'PERF-07', measuredMs: null, normalizedMs: null, budgetMs: 16, anchorMs: 16, anchorLabel: 'one frame', verdict: 'unmeasured' }),
-  row({ budgetId: 'PERF-08a', requirementId: 'PERF-08', measuredMs: null, normalizedMs: null, budgetMs: 1500, anchorMs: 1500, anchorLabel: 'cold load ceiling', verdict: 'unmeasured' }),
-  row({ budgetId: 'PERF-08b', requirementId: 'PERF-08', measuredMs: null, normalizedMs: null, budgetMs: 1000, anchorMs: 1000, anchorLabel: 'holds attention', verdict: 'unmeasured' }),
-  row({ budgetId: 'PERF-08c', requirementId: 'PERF-08', measuredMs: null, normalizedMs: null, budgetMs: 300, anchorMs: 300, anchorLabel: 'warm load ceiling', verdict: 'unmeasured' }),
+  row({ budgetId: 'PERF-08a', requirementId: 'PERF-08', measuredMs: 100, normalizedMs: 100, budgetMs: 1500, anchorMs: 1500, anchorLabel: 'cold load ceiling', source: 'production', verdict: 'pass' }),
+  row({ budgetId: 'PERF-08b', requirementId: 'PERF-08', measuredMs: 100, normalizedMs: 100, budgetMs: 1000, anchorMs: 1000, anchorLabel: 'holds attention', source: 'production', verdict: 'pass' }),
+  row({ budgetId: 'PERF-08c', requirementId: 'PERF-08', measuredMs: 100, normalizedMs: 100, budgetMs: 300, anchorMs: 300, anchorLabel: 'warm load ceiling', source: 'production', verdict: 'pass' }),
   row({ budgetId: 'PERF-09', requirementId: 'PERF-09', measuredMs: null, normalizedMs: null, budgetMs: 16, anchorMs: 16, anchorLabel: 'one frame', verdict: 'unmeasured' }),
 ]
 
@@ -187,8 +193,8 @@ describe('assertRunInvariants', () => {
   })
 
   test('a full row set plus an environment block whose calibrationScore matches every measured row does not throw', () => {
-    // fullRowSet's only measured row is PERF-05 (measuredMs: 4, normalizedMs: 4), so a score of
-    // 1 keeps measuredMs === normalizedMs * score.
+    // fullRowSet's measured rows are PERF-05 (4/4) and PERF-08a/08b/08c (100/100 each), so a
+    // score of 1 keeps measuredMs === normalizedMs * score for every one of them.
     const coherentEnvironment: EnvironmentBlock = { ...environment, calibrationScore: 1 }
     expect(() => assertRunInvariants(fullRowSet, 500, coherentEnvironment)).not.toThrow()
   })
@@ -207,8 +213,9 @@ describe('assertRunInvariants', () => {
 
   test('unmeasured rows are skipped by the coherence check, not treated as a divergence', () => {
     const coherentEnvironment: EnvironmentBlock = { ...environment, calibrationScore: 1 }
-    // Every unmeasured row in fullRowSet has measuredMs/normalizedMs both null; only PERF-05 is
-    // measured, and it is coherent with a score of 1.
+    // Every unmeasured row in fullRowSet (PERF-02, PERF-03, PERF-04, PERF-06, PERF-07a, PERF-07b,
+    // PERF-09) has measuredMs/normalizedMs both null; the measured rows (PERF-05, PERF-08a/08b/
+    // 08c) are all coherent with a score of 1.
     expect(() => assertRunInvariants(fullRowSet, 500, coherentEnvironment)).not.toThrow()
   })
 
@@ -220,10 +227,17 @@ describe('assertRunInvariants', () => {
   })
 
   test('a row with normalizedMs === 0 and measuredMs === 0 is coherent with any score and does not throw or produce NaN', () => {
-    const zeroRow = fullRowSet.map((r) =>
-      r.budgetId === 'PERF-05' ? { ...r, measuredMs: 0, normalizedMs: 0 } : r,
-    )
     const someEnvironment: EnvironmentBlock = { ...environment, calibrationScore: 3.7 }
+    const zeroRow = fullRowSet.map((r) => {
+      if (r.budgetId === 'PERF-05') return { ...r, measuredMs: 0, normalizedMs: 0 }
+      // fullRowSet's PERF-08a/08b/08c are denominated at score 1 (measuredMs === normalizedMs);
+      // re-denominate them at this test's score so they stay coherent rather than accidentally
+      // exercising the divergence check this test is not about.
+      if (r.budgetId === 'PERF-08a' || r.budgetId === 'PERF-08b' || r.budgetId === 'PERF-08c') {
+        return { ...r, normalizedMs: (r.measuredMs as number) / someEnvironment.calibrationScore }
+      }
+      return r
+    })
     expect(() => assertRunInvariants(zeroRow, 500, someEnvironment)).not.toThrow()
   })
 
@@ -251,6 +265,45 @@ describe('assertRunInvariants', () => {
     expect(ascendingMessage).toBe(descendingMessage)
     // PERF-05 sorts before PERF-08a ascending, so it must appear first regardless of input order.
     expect(ascendingMessage.indexOf('PERF-05')).toBeLessThan(ascendingMessage.indexOf('PERF-08a'))
+  })
+})
+
+describe('assertRunInvariants: PERF-08 coverage (04-03)', () => {
+  test('throws when a PERF-08 sub-budget due by PERF_08_COVERAGE_PHASE is still unmeasured, naming its budget id', () => {
+    const rows = fullRowSet.map((r) =>
+      r.budgetId === 'PERF-08a'
+        ? { ...r, measuredMs: null, normalizedMs: null, verdict: 'unmeasured' as const }
+        : r,
+    )
+    expect(() => assertRunInvariants(rows, 500)).toThrow(/PERF-08a/)
+    expect(() => assertRunInvariants(rows, 500)).toThrow(/still unmeasured/i)
+  })
+
+  test('throws naming all three PERF-08a/08b/08c ids when all three regress to unmeasured', () => {
+    const rows = fullRowSet.map((r) =>
+      r.budgetId === 'PERF-08a' || r.budgetId === 'PERF-08b' || r.budgetId === 'PERF-08c'
+        ? { ...r, measuredMs: null, normalizedMs: null, verdict: 'unmeasured' as const }
+        : r,
+    )
+    expect(() => assertRunInvariants(rows, 500)).toThrow(/PERF-08a/)
+    expect(() => assertRunInvariants(rows, 500)).toThrow(/PERF-08b/)
+    expect(() => assertRunInvariants(rows, 500)).toThrow(/PERF-08c/)
+  })
+
+  test('does not throw when PERF-07a/07b remain unmeasured: the coverage check is scoped to requirementId PERF-08 only', () => {
+    // fullRowSet's PERF-07a/07b are already unmeasured (that harness is a separate, later plan
+    // in this same phase); the PERF-08 coverage check must stay silent about them.
+    expect(() => assertRunInvariants(fullRowSet, 500)).not.toThrow()
+  })
+
+  test('does not throw for a budget id whose own implementedInPhase is after PERF_08_COVERAGE_PHASE', () => {
+    // PERF-03/04/06/09 carry implementedInPhase: 7 and remain unmeasured in fullRowSet; none of
+    // them are requirementId PERF-08, so this is really the same scoping guarantee restated
+    // against the non-PERF-08 unmeasured rows already present in the fixture.
+    expect(
+      fullRowSet.some((r) => r.requirementId !== 'PERF-08' && r.verdict === 'unmeasured'),
+    ).toBe(true)
+    expect(() => assertRunInvariants(fullRowSet, 500)).not.toThrow()
   })
 })
 
@@ -299,6 +352,20 @@ describe('D-23: unit-denominated rows (DATA-BUNDLE-BYTES, DATA-BUNDLE-DECODE)', 
     verdict: 'pass',
   }
 
+  /** The rest of the PERF-08 family (04-03's coverage invariant requires all of it measured,
+   * not just `byteRow`'s own DATA-BUNDLE-BYTES id), so `buildFullRowSet([byteRow, ...])` below
+   * exercises score-coherence in isolation without also tripping the coverage check these tests
+   * are not about. Parametrized by `score` (`normalizedMs = measuredMs / score`) so each caller
+   * stays coherent under whatever `calibrationScore` its own test uses. */
+  function perf08FamilyRows(score: number): MeasurementRow[] {
+    return [
+      row({ budgetId: 'DATA-BUNDLE-DECODE', requirementId: 'PERF-08', measuredMs: 1, normalizedMs: 1 / score, budgetMs: 100, anchorMs: 100, anchorLabel: 'feels instant', source: 'production', verdict: 'pass' }),
+      row({ budgetId: 'PERF-08a', requirementId: 'PERF-08', measuredMs: 100, normalizedMs: 100 / score, budgetMs: 1500, anchorMs: 1500, anchorLabel: 'cold load ceiling', source: 'production', verdict: 'pass' }),
+      row({ budgetId: 'PERF-08b', requirementId: 'PERF-08', measuredMs: 100, normalizedMs: 100 / score, budgetMs: 1000, anchorMs: 1000, anchorLabel: 'holds attention', source: 'production', verdict: 'pass' }),
+      row({ budgetId: 'PERF-08c', requirementId: 'PERF-08', measuredMs: 100, normalizedMs: 100 / score, budgetMs: 300, anchorMs: 300, anchorLabel: 'warm load ceiling', source: 'production', verdict: 'pass' }),
+    ]
+  }
+
   test('renderTable prints a byte suffix for a byte-denominated row and a millisecond suffix for a millisecond row', () => {
     const msRow = row({ budgetId: 'PERF-02', requirementId: 'PERF-02', normalizedMs: 5, measuredMs: 5, budgetMs: 16, anchorMs: 16, verdict: 'pass' })
     const output = renderTable([byteRow, msRow], environment, 500)
@@ -324,7 +391,7 @@ describe('D-23: unit-denominated rows (DATA-BUNDLE-BYTES, DATA-BUNDLE-DECODE)', 
   })
 
   test('assertRunInvariants does not treat a byte row (normalizedMs === measuredMs) as score-divergent when the machine score is not 1.0', () => {
-    const full = buildFullRowSet([byteRow])
+    const full = buildFullRowSet([byteRow, ...perf08FamilyRows(3.7)])
     const nonUnitScoreEnvironment: EnvironmentBlock = { ...environment, calibrationScore: 3.7 }
     expect(() => assertRunInvariants(full, 500, nonUnitScoreEnvironment)).not.toThrow()
   })
@@ -339,7 +406,7 @@ describe('D-23: unit-denominated rows (DATA-BUNDLE-BYTES, DATA-BUNDLE-DECODE)', 
       anchorMs: 16,
       verdict: 'pass',
     })
-    const full = buildFullRowSet([byteRow, divergentMsRow])
+    const full = buildFullRowSet([byteRow, ...perf08FamilyRows(1), divergentMsRow])
     const environmentScoreOne: EnvironmentBlock = { ...environment, calibrationScore: 1 }
     expect(() => assertRunInvariants(full, 500, environmentScoreOne)).toThrow(/PERF-02/)
   })
