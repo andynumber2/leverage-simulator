@@ -21,6 +21,16 @@ import type { MeasurementRow } from './bench/report.ts'
  * compiled bundle always lands at "public/data" under the working directory. */
 const COMPILED_BUNDLE_DIR = path.resolve(process.cwd(), 'public', 'data')
 
+/** Task 1 (04-06, PERF-07): number of pointer-move steps `measureInteractionTiming`'s drag
+ * issues. Each `page.mouse.move` call is a real CDP round trip, so the drag's actual wall-clock
+ * duration is governed by host/runner speed, not a value this harness sets directly. A step
+ * count this large is what makes D-03's coalescing claim testable regardless of that duration:
+ * however long the drag turns out to take, 300 pointer-move events distributed across it are
+ * overwhelmingly likely to land more than one to a single ~16.67ms (60Hz) animation-frame
+ * window, which is the condition PERF-07b's "one coalesced recompute, not one per event" claim
+ * needs in order to be exercised at all. */
+const INTERACTION_DRAG_STEP_COUNT = 300
+
 export default defineConfig({
   test: {
     projects: [
@@ -241,6 +251,127 @@ export default defineConfig({
                         warmInteractiveMs,
                         maxLongTaskDurationMs,
                         longTaskCount: longTaskDurations.length,
+                        hardwareConcurrency,
+                      }
+                    } finally {
+                      await page.close()
+                    }
+                  } finally {
+                    await freshContext.close()
+                  }
+                }),
+              // Task 1 (04-06, PERF-07): a real Playwright pointer drag of the production
+              // leverage slider (RESEARCH.md Architecture Patterns Pattern 6). Mirrors
+              // measureAppLoadTiming's fresh-context + buffered-longtask-observer mechanism; the
+              // structural difference is a single navigation (there is no cold/warm split for an
+              // interaction measurement) followed by a real mouse drag instead of a second
+              // page.goto. Never dispatches a synthetic 'input' event: the measured path must
+              // include event dispatch, reactive propagation, the kernel run and the canvas
+              // repaint, which a page-script synthetic-event-dispatch loop would skip the first of (and can
+              // silently skip the frame boundary too).
+              measureInteractionTiming: async (context) =>
+                withPreviewServer(async (origin) => {
+                  const browser = context.context.browser()
+                  if (browser === null) {
+                    throw new Error(
+                      'measureInteractionTiming: no Browser handle reachable from ' +
+                        'context.context.browser() -- Task 1s probeBrowserContext must report ' +
+                        'hasBrowserHandle=true for this command to run',
+                    )
+                  }
+                  // Pinned locale, same reason as measureAppLoadTiming's fresh context above.
+                  const freshContext = await browser.newContext({ locale: 'en-US' })
+                  try {
+                    const longTaskDurations: number[] = []
+                    await freshContext.exposeFunction(
+                      '__recordInteractionLongTask',
+                      (duration: number) => {
+                        longTaskDurations.push(duration)
+                      },
+                    )
+                    // Installed before any navigation, per measureAppLoadTiming's own comment:
+                    // this observes the longtask entry type from the very first byte of the page
+                    // this context loads. buffered: true catches entries fired before the
+                    // observer's own construction completed.
+                    await freshContext.addInitScript(() => {
+                      new PerformanceObserver((list) => {
+                        for (const entry of list.getEntries()) {
+                          // @ts-expect-error -- injected by exposeFunction, not declared on window
+                          window.__recordInteractionLongTask(entry.duration)
+                        }
+                      }).observe({ type: 'longtask', buffered: true })
+                    })
+
+                    const page = await freshContext.newPage()
+                    try {
+                      await page.goto(origin, { waitUntil: 'load' })
+                      // Start from a fully loaded, idle page rather than racing initial load, so
+                      // neither figure below carries load-time work PERF-08 already owns.
+                      await page.waitForFunction(
+                        () => performance.getEntriesByName('app-interactive').length > 0,
+                      )
+                      longTaskDurations.length = 0
+                      await page.evaluate(() => {
+                        performance.clearMeasures('app-recompute')
+                      })
+
+                      const slider = page.locator('[data-testid="leverage-slider"]')
+                      const box = await slider.boundingBox()
+                      if (box === null) {
+                        throw new Error(
+                          'measureInteractionTiming: leverage slider has no bounding box -- it ' +
+                            'did not render',
+                        )
+                      }
+                      const y = box.y + box.height / 2
+                      const startX = box.x + 2
+                      const endX = box.x + box.width - 2
+
+                      // A real pointer drag: press on the track (which itself jumps the native
+                      // range input's value, and starts a drag), move across the control's full
+                      // width in INTERACTION_DRAG_STEP_COUNT steps, release. No synthetic event dispatch
+                      // anywhere in this path -- the browser's own native slider handling is
+                      // what turns these mouse events into 'input' events.
+                      await page.mouse.move(startX, y)
+                      await page.mouse.down()
+                      for (let i = 1; i <= INTERACTION_DRAG_STEP_COUNT; i++) {
+                        const x = startX + ((endX - startX) * i) / INTERACTION_DRAG_STEP_COUNT
+                        // eslint-disable-next-line no-await-in-loop
+                        await page.mouse.move(x, y)
+                      }
+                      await page.mouse.up()
+
+                      // Let the drag's final coalesced recompute (scheduled for the next
+                      // animation frame after the last input event) actually settle before
+                      // reading measures back.
+                      await page.evaluate(
+                        () =>
+                          new Promise<void>((resolve) => {
+                            requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+                          }),
+                      )
+
+                      const recompute = await page.evaluate(() => {
+                        const measures = performance.getEntriesByName('app-recompute', 'measure')
+                        return {
+                          count: measures.length,
+                          maxDurationMs:
+                            measures.length > 0
+                              ? Math.max(...measures.map((m) => m.duration))
+                              : 0,
+                        }
+                      })
+                      const hardwareConcurrency = await page.evaluate(
+                        () => navigator.hardwareConcurrency,
+                      )
+
+                      return {
+                        maxLongTaskDurationMs:
+                          longTaskDurations.length > 0 ? Math.max(...longTaskDurations) : 0,
+                        longTaskCount: longTaskDurations.length,
+                        maxRecomputeDurationMs: recompute.maxDurationMs,
+                        recomputeCount: recompute.count,
+                        stepCount: INTERACTION_DRAG_STEP_COUNT,
                         hardwareConcurrency,
                       }
                     } finally {
