@@ -276,8 +276,14 @@ export function renderTable(
  * could accidentally ignore.
  *
  * - Every one of the eight requirement group headers (PERF-02..PERF-09) must be present.
- * - At least one row must be genuinely measured: a harness that measures nothing is broken,
- *   not passing (PERF-10's empty-input edge case).
+ * - At least one row must be genuinely measured, or at least one info line must have been
+ *   recorded: a harness that produces neither a measurement nor a diagnostic line is broken,
+ *   not passing (PERF-10's empty-input edge case). The info-line escape hatch exists for
+ *   diagnostic-only bench files (04-03's `playwright-context-probe.bench.test.ts`) that pin a
+ *   mechanism fact rather than a duration: `recordInfoLine` is still a genuine, asserted signal
+ *   that the harness ran and reported something real, which is what this invariant exists to
+ *   require -- it was never specifically about `MeasurementRow` as the only acceptable shape of
+ *   evidence.
  * - Every row's budgetId must exist in PERF_BUDGETS.
  * - No row may carry verdict "fail". This is the authoritative gate: it has visibility into
  *   every row regardless of which bench file recorded it, so a breach cannot be silenced by
@@ -293,6 +299,7 @@ export function assertRunInvariants(
   rows: readonly MeasurementRow[],
   totalRuntimeMs: number,
   environment?: EnvironmentBlock,
+  infoLines: readonly string[] = [],
 ): void {
   const present = new Set(rows.map((r) => r.requirementId))
   const missing = allRequirementIds().filter((id) => !present.has(id))
@@ -302,11 +309,11 @@ export function assertRunInvariants(
     )
   }
 
-  const anyMeasured = rows.some((r) => r.verdict !== 'unmeasured')
+  const anyMeasured = rows.some((r) => r.verdict !== 'unmeasured') || infoLines.length > 0
   if (rows.length === 0 || !anyMeasured) {
     throw new Error(
-      'assertRunInvariants: zero rows measured this run: a harness that measures nothing is ' +
-        'broken, not passing',
+      'assertRunInvariants: zero rows measured and zero info lines recorded this run: a ' +
+        'harness that reports nothing is broken, not passing',
     )
   }
 

@@ -107,6 +107,53 @@ export default defineConfig({
               // only Node can do" pattern readBundleBytes uses, here decoding the committed
               // bundle into the real SPX series PERF-02 measures runBacktest against.
               readKernelSeries: async (_context) => readProductionKernelSeries(COMPILED_BUNDLE_DIR),
+              // Task 1 (04-03, RESEARCH.md Open Question 1): settles, rather than assumes, that
+              // the `context` object a custom command receives exposes a real, unrestricted
+              // Playwright `BrowserContext` at `context.context`. PERF-08's whole harness
+              // (bench/preview-server.ts, bench/perf-08.bench.test.ts) depends on this being true.
+              // The whole body is wrapped so a thrown error becomes a reported message rather than
+              // an unhandled rejection that would crash the command bridge itself.
+              probeBrowserContext: async (context) => {
+                try {
+                  const hasContext = context.context !== undefined
+                  const hasNewPage = typeof context.context?.newPage === 'function'
+                  let hasBrowserHandle = false
+                  let browser: ReturnType<typeof context.context.browser> = null
+                  if (typeof context.context?.browser === 'function') {
+                    browser = context.context.browser()
+                    hasBrowserHandle = browser !== null
+                  }
+                  let canNavigateFreshContext = false
+                  if (browser !== null) {
+                    const freshContext = await browser.newContext()
+                    try {
+                      const page = await freshContext.newPage()
+                      await page.goto('about:blank')
+                      const readyState = await page.evaluate(() => document.readyState)
+                      canNavigateFreshContext = readyState === 'complete' || readyState === 'interactive'
+                    } finally {
+                      await freshContext.close()
+                    }
+                  }
+                  const constructorName = context.context?.constructor?.name ?? 'undefined'
+                  return {
+                    hasContext,
+                    hasNewPage,
+                    hasBrowserHandle,
+                    canNavigateFreshContext,
+                    constructorName,
+                  }
+                } catch (error) {
+                  return {
+                    hasContext: false,
+                    hasNewPage: false,
+                    hasBrowserHandle: false,
+                    canNavigateFreshContext: false,
+                    constructorName: 'error',
+                    error: error instanceof Error ? error.message : String(error),
+                  }
+                }
+              },
             },
           },
         },

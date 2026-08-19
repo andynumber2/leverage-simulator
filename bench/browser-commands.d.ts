@@ -11,6 +11,25 @@ import type { BrowserCapturedEnvironment } from './environment-block.ts'
 import type { ProductionKernelSeriesPayload } from './kernel-series-bridge.ts'
 import type { MeasurementRow } from './report.ts'
 
+/** Task 1 (04-03): the committed answer to RESEARCH.md Open Question 1. Four booleans and one
+ * string, plus an optional error message when the probe's body threw. */
+export interface BrowserContextProbeReport {
+  /** Whether `context.context` is present at all on the command's first parameter. */
+  hasContext: boolean
+  /** Whether `typeof context.context.newPage` is `function`. */
+  hasNewPage: boolean
+  /** Whether `typeof context.context.browser` is `function` and calling it returned a non-null
+   * `Browser`, the handle PERF-08's fresh-cache context (Task 2) needs. */
+  hasBrowserHandle: boolean
+  /** Whether a page opened from a freshly created context (via the `Browser` handle above)
+   * could navigate to `about:blank` and read `document.readyState`. */
+  canNavigateFreshContext: boolean
+  /** The constructor name of `context.context`, or `'undefined'`/`'error'`. */
+  constructorName: string
+  /** Present only when the probe's body threw; the thrown error's message. */
+  error?: string
+}
+
 declare module 'vitest/internal/browser' {
   interface BrowserCommands {
     recordMeasurement: (row: MeasurementRow) => Promise<null>
@@ -35,5 +54,9 @@ declare module 'vitest/internal/browser' {
      * `runBacktest` against, decoded Node-side from the committed bundle since the browser
      * context has no filesystem access to public/data/'s source directory. */
     readKernelSeries: () => Promise<ProductionKernelSeriesPayload>
+    /** Task 1 (04-03): settles RESEARCH.md Open Question 1 -- whether the `context` object a
+     * custom command receives exposes a real, unrestricted Playwright `BrowserContext`. See
+     * `BrowserContextProbeReport`'s field comments for what each probed value means. */
+    probeBrowserContext: () => Promise<BrowserContextProbeReport>
   }
 }
