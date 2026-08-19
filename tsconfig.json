@@ -12,7 +12,9 @@
     "resolveJsonModule": true,
     "isolatedModules": true,
     "noEmit": true,
-    "allowImportingTsExtensions": true
+    "allowImportingTsExtensions": true,
+    "jsx": "preserve",
+    "jsxImportSource": "solid-js"
   },
-  "include": ["*.ts", "bench/**/*.ts", "tests/**/*.ts", "tools/**/*.ts", "src/**/*.ts"]
+  "include": ["*.ts", "bench/**/*.ts", "tests/**/*.ts", "tools/**/*.ts", "src/**/*.ts", "src/**/*.tsx", "tests/**/*.tsx"]
 }

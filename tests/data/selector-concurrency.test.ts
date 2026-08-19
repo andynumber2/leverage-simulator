@@ -28,7 +28,8 @@ import { fileURLToPath } from 'node:url'
 
 import { describe, expect, test } from 'vitest'
 
-import { buildKernelInputs, loadBundleFromDisk, type BacktestRequest } from '../../src/data/kernel-inputs.ts'
+import { buildKernelInputs, type BacktestRequest } from '../../src/data/kernel-inputs.ts'
+import { loadBundleFromDisk } from '../../src/data/load-bundle-node.ts'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const KERNEL_INPUTS_PATH = path.resolve(__dirname, '../../src/data/kernel-inputs.ts')

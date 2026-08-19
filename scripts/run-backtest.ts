@@ -20,7 +20,8 @@ import { parseArgs } from 'node:util'
 
 import { fromDaysSinceEpoch } from '../tools/bundle-compiler/src/calendar.ts'
 import { runBacktest } from '../src/kernel/backtest.ts'
-import { buildKernelInputs, loadBundleFromDisk, type BacktestRequest } from '../src/data/kernel-inputs.ts'
+import { buildKernelInputs, type BacktestRequest } from '../src/data/kernel-inputs.ts'
+import { loadBundleFromDisk } from '../src/data/load-bundle-node.ts'
 import {
   COST_PARAMETERS,
   FINANCING_SPREAD_DEFAULT,

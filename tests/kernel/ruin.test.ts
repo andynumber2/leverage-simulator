@@ -11,7 +11,8 @@
 import { describe, expect, test } from 'vitest'
 
 import { fromDaysSinceEpoch } from '../../tools/bundle-compiler/src/calendar.ts'
-import { buildKernelInputs, loadBundleFromDisk, type BacktestRequest } from '../../src/data/kernel-inputs.ts'
+import { buildKernelInputs, type BacktestRequest } from '../../src/data/kernel-inputs.ts'
+import { loadBundleFromDisk } from '../../src/data/load-bundle-node.ts'
 import { runBacktest } from '../../src/kernel/backtest.ts'
 import { LONG_GAP_FLAG_MIN_DAYS } from '../../src/kernel/backtest.types.ts'
 import { baseKernelParams, makeKernelSeries, makeOutputs } from './fixtures.ts'
