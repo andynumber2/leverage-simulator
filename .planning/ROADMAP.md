@@ -174,12 +174,12 @@ Plans:
   4. Copying the URL and opening it in a fresh browser reproduces the exact run, enforced by a determinism test. The link carries the data-bundle version, and a link created against an older bundle either reproduces faithfully or states clearly that the data has changed.
   5. Measured on real hardware and reported by the benchmark command: cold load reaches interactive in under 1500ms with data load and decode under 1000ms, warm load is under 300ms, dragging the leverage slider sustains 60fps with no main-thread task exceeding 50ms, and the app builds to static assets that deploy to Cloudflare Pages with no backend, no database and no runtime external API calls, loading and decoding bundled assets directly into typed arrays and working fully offline after first load.
 
-**Plans:** 8 plans
+**Plans:** 1/8 plans executed
 
 Plans:
 **Wave 1**
 
-- [ ] 04-01-PLAN.md: Tracer. Static Vite plus Solid build, the D-02 byte-source split, and one real SPX 3x equity curve painted in the browser from the committed bundle on a log axis
+- [x] 04-01-PLAN.md: Tracer. Static Vite plus Solid build, the D-02 byte-source split, and one real SPX 3x equity curve painted in the browser from the committed bundle on a log axis
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
@@ -286,7 +286,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | 1. Performance Spike and Budget Lock | 6/6 | Complete    | 2026-08-17 |
 | 2. Compiled Data Bundle | 8/8 | Complete    | 2026-08-17 |
 | 3. Simulation Kernel and the UPRO/TQQQ Gate | 6/6 | In Progress|  |
-| 4. First Defensible Backtest in the Browser | 0/8 | Not started | - |
+| 4. First Defensible Backtest in the Browser | 1/8 | In Progress|  |
 | 5. Attribution and the Credibility Surface | 0/TBD | Not started | - |
 | 6. Heatmap Design Pass | 0/TBD | Not started | - |
 | 7. Sweep Engine and the Heatmap | 0/TBD | Not started | - |

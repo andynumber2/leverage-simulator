@@ -76,7 +76,7 @@ measured in CI, not an aspiration.
 - [x] **DATA-07**: The bundled universe includes S&P 500 (daily to 1928), Nasdaq-100/QQQ, the
       real leveraged ETFs UPRO, TQQQ, SSO and QLD, and VTI, EFA, EEM and TLT
 
-- [ ] **DATA-08**: The app loads and decodes bundled assets directly into typed arrays with no
+- [x] **DATA-08**: The app loads and decodes bundled assets directly into typed arrays with no
       per-row parsing, and works fully offline after first load
 
 - [x] **DATA-09**: Data assets are content-versioned so a redeploy cannot serve a stale cached
@@ -181,7 +181,7 @@ measured in CI, not an aspiration.
 - [ ] **VIZ-07**: Color scales are perceptually uniform and colorblind-safe, and outcomes spanning
       orders of magnitude use a log or otherwise non-linear mapping rather than linear color
 
-- [ ] **VIZ-08**: Equity curves offer a log scale, and the choice of scale is visible
+- [x] **VIZ-08**: Equity curves offer a log scale, and the choice of scale is visible
 - [ ] **VIZ-09**: In hold-to-today mode, the short-horizon artifact at the recent edge is visually
       marked, so the right side of the chart is not read as comparable to the left
 
@@ -229,7 +229,7 @@ measured in CI, not an aspiration.
 
 - [ ] **APP-01**: User can select a symbol from the bundled universe
 - [ ] **APP-02**: User can select the history tier, with each tier's meaning stated on screen
-- [ ] **APP-03**: The app is a fully static build deployable to Cloudflare Pages with no backend,
+- [x] **APP-03**: The app is a fully static build deployable to Cloudflare Pages with no backend,
       no database, and no runtime external API calls
 
 - [ ] **APP-04**: Invalid or impossible parameter combinations are prevented or explained, not
@@ -292,7 +292,7 @@ measured in CI, not an aspiration.
 | DATA-05 | Phase 2 | Complete |
 | DATA-06 | Phase 2 | Complete |
 | DATA-07 | Phase 2 | Complete |
-| DATA-08 | Phase 4 | Pending |
+| DATA-08 | Phase 4 | Complete |
 | DATA-09 | Phase 2 | Complete |
 | SIM-01 | Phase 3 | Complete |
 | SIM-02 | Phase 3 | Complete |
@@ -326,7 +326,7 @@ measured in CI, not an aspiration.
 | VIZ-05 | Phase 6 | Pending |
 | VIZ-06 | Phase 7 | Pending |
 | VIZ-07 | Phase 6 | Pending |
-| VIZ-08 | Phase 4 | Pending |
+| VIZ-08 | Phase 4 | Complete |
 | VIZ-09 | Phase 7 | Pending |
 | VIZ-10 | Phase 6 | Pending |
 | VIZ-11 | Phase 4 | Pending |
@@ -343,7 +343,7 @@ measured in CI, not an aspiration.
 | SHARE-06 | Phase 8 | Pending |
 | APP-01 | Phase 4 | Pending |
 | APP-02 | Phase 5 | Pending |
-| APP-03 | Phase 4 | Pending |
+| APP-03 | Phase 4 | Complete |
 | APP-04 | Phase 4 | Pending |
 
 **Coverage:**
