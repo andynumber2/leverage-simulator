@@ -118,7 +118,12 @@ export default defineConfig({
           include: ['tests/app/**/*.browser.test.ts'],
           browser: {
             enabled: true,
-            provider: playwright(),
+            // This host's LANG/LC_* are unset (POSIX locale), which Chromium reports to
+            // Intl.NumberFormat as an invalid tag ("en-US@posix") -- uPlot's own module-level
+            // `new Intl.NumberFormat(navigator.language, ...)` call throws on import as a
+            // result. Pinning the Playwright browser context's locale sidesteps the host's
+            // malformed locale entirely, independent of what the CI/dev sandbox's env vars are.
+            provider: playwright({ contextOptions: { locale: 'en-US' } }),
             headless: true,
             instances: [{ browser: 'chromium' }],
           },

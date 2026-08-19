@@ -1,0 +1,120 @@
+/**
+ * src/app/styles.css
+ *
+ * Design tokens as CSS custom properties (04-UI-SPEC.md "Color", "Spacing Scale",
+ * "Typography"). Theme switching logic (prefers-color-scheme + manual override -> data-theme)
+ * is plan 04-08; the tokens ship here because EquityCurveChart reads them at render time from
+ * its first commit (via getComputedStyle), and the default (light) palette must be correct
+ * before any theme toggle exists.
+ */
+
+:root {
+  --color-bg: #f5f6f7;
+  --color-surface: #ffffff;
+  --color-border: #e1e4e8;
+  --color-text: #1a1d21;
+  --color-text-muted: #5b6169;
+  --color-accent: #2e6bd6;
+  --color-destructive: #c4341f;
+
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 16px;
+  --space-lg: 24px;
+  --space-xl: 32px;
+
+  --font-size-label: 12px;
+  --font-size-body: 14px;
+  --font-size-secondary-metric: 16px;
+  --font-size-headline-metric: 28px;
+
+  --font-ui: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+}
+
+[data-theme='dark'] {
+  --color-bg: #14161a;
+  --color-surface: #1d2024;
+  --color-border: #2b2f35;
+  --color-text: #e7e9ec;
+  --color-text-muted: #9aa0a8;
+  --color-accent: #5b9bf0;
+  --color-destructive: #e2604b;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-ui);
+  font-size: var(--font-size-body);
+}
+
+#root {
+  min-height: 100vh;
+}
+
+/* D-17: fixed-width parameter column left, result column right, at >= 900px; stacks to a
+   single column below that, parameter group above the result group. */
+.app-layout {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  padding: var(--space-md);
+}
+
+.parameter-column {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+}
+
+.result-column {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  padding: var(--space-md);
+  min-height: 200px;
+}
+
+@media (min-width: 900px) {
+  .app-layout {
+    flex-direction: row;
+    align-items: flex-start;
+  }
+
+  .parameter-column {
+    flex: 0 0 280px;
+    align-self: stretch;
+    overflow-y: auto;
+  }
+
+  .result-column {
+    flex: 1 1 auto;
+  }
+}
+
+.loading-notice,
+.validation-explanation {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-body);
+}
+
+.load-failure {
+  color: var(--color-destructive);
+}
+
+.equity-curve-chart {
+  width: 100%;
+}
