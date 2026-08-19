@@ -227,12 +227,12 @@ measured in CI, not an aspiration.
 
 ### Application Shell
 
-- [ ] **APP-01**: User can select a symbol from the bundled universe
+- [x] **APP-01**: User can select a symbol from the bundled universe
 - [ ] **APP-02**: User can select the history tier, with each tier's meaning stated on screen
 - [x] **APP-03**: The app is a fully static build deployable to Cloudflare Pages with no backend,
       no database, and no runtime external API calls
 
-- [ ] **APP-04**: Invalid or impossible parameter combinations are prevented or explained, not
+- [x] **APP-04**: Invalid or impossible parameter combinations are prevented or explained, not
       silently coerced
 
 ## v2 Requirements
@@ -341,10 +341,10 @@ measured in CI, not an aspiration.
 | SHARE-04 | Phase 8 | Pending |
 | SHARE-05 | Phase 8 | Pending |
 | SHARE-06 | Phase 8 | Pending |
-| APP-01 | Phase 4 | Pending |
+| APP-01 | Phase 4 | Complete |
 | APP-02 | Phase 5 | Pending |
 | APP-03 | Phase 4 | Complete |
-| APP-04 | Phase 4 | Pending |
+| APP-04 | Phase 4 | Complete |
 
 **Coverage:**
 
