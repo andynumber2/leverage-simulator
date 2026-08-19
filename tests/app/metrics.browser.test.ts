@@ -73,6 +73,29 @@ test('the CAGR qualifier appears and the IRR-equals-CAGR note disappears once co
   expect(note).toBeNull()
 })
 
+test('the log/linear toggle renders both labels in the DOM at all times, and clicking switches the active scale without the chart throwing', async () => {
+  const el = await mountAndWaitForResult()
+
+  const logButton = el.querySelector<HTMLButtonElement>('[data-testid="log-scale-toggle-log"]')
+  const linearButton = el.querySelector<HTMLButtonElement>('[data-testid="log-scale-toggle-linear"]')
+  expect(logButton).not.toBeNull()
+  expect(linearButton).not.toBeNull()
+  expect(logButton!.textContent).toBe('log')
+  expect(linearButton!.textContent).toBe('linear')
+  expect(logButton!.getAttribute('aria-pressed')).toBe('true')
+
+  linearButton!.click()
+  await waitFor(() => logButton!.getAttribute('aria-pressed') === 'false')
+
+  // Both labels remain in the DOM after the switch; only the active state changed.
+  expect(el.querySelector('[data-testid="log-scale-toggle-log"]')).not.toBeNull()
+  expect(el.querySelector('[data-testid="log-scale-toggle-linear"]')).not.toBeNull()
+  expect(linearButton!.getAttribute('aria-pressed')).toBe('true')
+
+  const canvas = el.querySelector('[data-testid="equity-curve-chart"] canvas')
+  expect(canvas).not.toBeNull()
+})
+
 test('five metric rows render in the fixed order for a non-ruined run, and the dropped-contributions row is absent', async () => {
   const el = await mountAndWaitForResult()
 
