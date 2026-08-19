@@ -9,7 +9,7 @@
  * blank chart or an empty control (DATA-08 empty edge).
  */
 
-import { afterEach, expect, test, vi } from 'vitest'
+import { afterEach, beforeEach, expect, test, vi } from 'vitest'
 
 import { MANIFEST_PATH } from '../../src/data-bundle.generated.ts'
 import { mountApp } from '../../src/app/main.tsx'
@@ -36,6 +36,15 @@ async function waitFor(predicate: () => boolean, timeoutMs = 5000): Promise<void
 
 let container: HTMLDivElement | undefined
 let disposeApp: (() => void) | undefined
+
+// Plan 04-07: `mountApp` now decodes `window.location.search` as a permalink (D-13). The Vitest
+// browser-mode iframe this file runs in carries its OWN `sessionId`/`iframeId` query params
+// (harness plumbing, unrelated to this app), which `decodeParams` correctly rejects as unknown
+// keys -- this file's tests are about the tracer path, not the permalink feature, so they clear
+// the incidental harness params back to a clean boot before every mount.
+beforeEach(() => {
+  window.history.replaceState(null, '', window.location.pathname)
+})
 
 afterEach(() => {
   disposeApp?.()

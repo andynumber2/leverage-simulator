@@ -35,6 +35,18 @@
  * thrown message as the caveat text -- rendered verbatim, the same discipline as the eviction
  * path. D-29's rate-coverage truncation deliberately produces no caveat at all; see the note
  * above `scheduleRun` for why naming the end date on the control is the honest fix instead.
+ *
+ * Plan 04-07 (D-13 through D-16): `applyPermalinkFromLocation` decodes `window.location.search`
+ * exactly once per module lifetime, at the very top of `initializeApp`, before either the cached
+ * or fresh-load branch runs `applyLoadedBundle` -- ordering that matters, because
+ * `applyLoadedBundle`'s own entry-date default only fires when `request.entryDate` is still `''`
+ * (see the comment above it), so a permalink-supplied entry date must already be in the store
+ * before that check runs, or it would be silently clobbered back to the series' first date on
+ * every load. `storeSuccessfulRun` re-serializes the just-completed run through `encodeParams`
+ * into `history.replaceState` -- an entry-replacing write, never a new-entry-appending one (D-03's
+ * rAF coalescing already fires on every slider-drag frame, and a new-entry-appending write there
+ * would fill the back button with thousands of entries in a single scrub) -- so `CopyLinkButton`
+ * can simply copy `window.location.href` rather than re-deriving the same encoding a second time.
  */
 
 import { createSignal } from 'solid-js'
@@ -49,6 +61,8 @@ import type { KernelResult } from '../kernel/backtest.types.ts'
 import { solveCagr } from '../metrics/cagr.ts'
 import { buildCashFlows, solveIrr } from '../metrics/irr.ts'
 import { FINANCING_SPREAD_DEFAULT, GENERIC_3X_EXPENSE_RATIO } from '../validation/cost-parameters.ts'
+import { BUNDLE_VERSION } from '../data-bundle.generated.ts'
+import { decodeParams, encodeParams, type PermalinkParams } from './permalink.ts'
 
 export type LoadStatus = 'loading' | 'ready' | 'failed'
 export type ScaleMode = 'log' | 'linear'
@@ -81,6 +95,16 @@ const [kernelInputs, setKernelInputs] = createSignal<KernelInputs | null>(null)
 const [kernelResult, setKernelResult] = createSignal<KernelResult | null>(null)
 const [validationError, setValidationError] = createSignal<string | null>(null)
 const [caveatMessage, setCaveatMessage] = createSignal<string | null>(null)
+
+/** D-15: the `bundleVersion` a decoded permalink carried, or `null` when this session did not
+ * boot from a permalink at all (an empty query string, or a decode error, which reads as "no
+ * comparable link version" rather than a mismatch of its own). `BundleVersionBanner` compares
+ * this against the imported `BUNDLE_VERSION` constant. */
+const [linkBundleVersion, setLinkBundleVersion] = createSignal<string | null>(null)
+
+export function currentLinkBundleVersion(): string | null {
+  return linkBundleVersion()
+}
 
 /** METR-01 through METR-05's four derived values, computed once per completed run (D-05/D-06/
  * D-07/D-08). `irr`/`cagr` are `null` exactly when `solveIrr`/`solveCagr` are (D-08's undefined
@@ -186,6 +210,46 @@ export function currentCaveatMessage(): string | null {
  * to stay stable. */
 const HOLDING_PERIOD_OVERRUN_PATTERN = 'runs past the last supported bar'
 
+/**
+ * D-13 through D-15: re-serializes the just-completed run through `encodeParams` and writes it
+ * into the address bar with `history.replaceState` -- an entry-replacing write, never a
+ * new-entry-appending one (D-03: the rAF-coalesced recompute fires on every slider-drag frame; a
+ * new-entry-appending write there would put thousands of entries behind the back button in a
+ * single scrub). `holdMode`/`holdingPeriodBars` are derived from
+ * `request.holdingPeriodBars` (D-13's "every parameter, always" applies to what was actually
+ * asked for, not a resolved fallback: a fixed period that overran and was retried still encodes
+ * as `holdMode=fixed` with the ORIGINAL requested bar count, so reopening the link reproduces the
+ * exact same D-10 caveat-and-compute retry, not a silently different fixed-mode run).
+ * `resolvedEndDate` is `inputs.window.lastDate`, the actual end THIS run computed to (D-14) --
+ * informational only; decode never feeds it back into `buildKernelInputs`, which recomputes the
+ * window itself from `entryDate`/`holdingPeriodBars` alone. `tier` is hard-coded `'strict'` (D-09
+ * pins it for the whole of Phase 4) and `bundleVersion` is the imported `BUNDLE_VERSION` (D-15:
+ * the currently deployed bundle -- the only one this build can address, per `MANIFEST_PATH`
+ * pointing at exactly one manifest).
+ */
+function syncPermalinkUrl(inputs: KernelInputs): void {
+  const params: PermalinkParams = {
+    symbol: request.symbol,
+    dividendReinvest: request.dividendReinvest,
+    leverage: request.leverage,
+    entryDate: request.entryDate,
+    holdingPeriodBars: request.holdingPeriodBars,
+    initialInvestment: request.initialInvestment,
+    contributionAmount: request.contributionAmount,
+    contributionFrequency: request.contributionFrequency,
+    expenseRatioPercent: request.expenseRatioPercent,
+    financingSpreadPercent: request.financingSpreadPercent,
+    holdMode: request.holdingPeriodBars === null ? 'end-of-data' : 'fixed',
+    resolvedEndDate: inputs.window.lastDate,
+    tier: 'strict',
+    scale: scale(),
+    bundleVersion: BUNDLE_VERSION,
+  }
+  const qs = encodeParams(params)
+  const newUrl = `${window.location.pathname}?${qs.toString()}${window.location.hash}`
+  window.history.replaceState(null, '', newUrl)
+}
+
 /** Stores a completed run plus its already-resolved caveat state (D-10), shared by the normal path
  * and the D-10 retry path below so both write through the same three signals in the same order.
  * `caveat` is supplied by the caller rather than re-derived here: the two success paths compute it
@@ -202,6 +266,7 @@ function storeSuccessfulRun(
   setDerivedMetrics(computeDerivedMetrics(currentBundle, inputs, result))
   setValidationError(null)
   setCaveatMessage(caveat)
+  syncPermalinkUrl(inputs)
 }
 
 /* D-29's rate-coverage truncation deliberately produces NO caveat in the open-ended mode.
@@ -286,18 +351,36 @@ export function scheduleRun(): void {
  * several. Cleared when the load settles, so the Retry button can start a genuinely new one. */
 let loadInFlight: Promise<void> | null = null
 
+/** D-13: `applyPermalinkFromLocation` (below) only ever reads `window.location.search` once per
+ * module lifetime -- a real page load never wants a second decode of the same URL clobbering
+ * whatever the user has since typed into the controls. `resetAppState` clears it (alongside
+ * `loadInFlight`) so a test that changes `window.location.search` and wants a genuinely fresh
+ * decode can force one, the same way it forces a fresh bundle fetch. */
+let permalinkApplied = false
+
+/** D-11/D-12: set for exactly the one `applyLoadedBundle` call that follows a boot-time decode
+ * error, so that call's own `scheduleRun()` is skipped -- the decode error already evicted the
+ * run (`clearForEviction`, called synchronously inside `applyPermalinkFromLocation`, before the
+ * bundle has even loaded); without this, `applyLoadedBundle`'s normal `scheduleRun()` would
+ * immediately compute a fresh, valid default-landing-run result and silently overwrite that
+ * eviction, leaving nothing on screen to explain what went wrong with the link. */
+let permalinkDecodeFailedAtBoot = false
+
 /**
  * Discards the loaded bundle and every derived signal, so the next `initializeApp` performs a
  * real fetch rather than reusing the cached bundle.
  *
  * The module holds app state in singletons, which is what lets `initializeApp` be idempotent.
  * Anything that needs to observe a DIFFERENT load outcome from the same module -- a test
- * stubbing `fetch` to exercise the failure path, or a future in-app bundle swap -- has to clear
+ * stubbing `fetch` to exercise the failure path, a test that wants a fresh permalink decode
+ * against a different `window.location.search`, or a future in-app bundle swap -- has to clear
  * that cache explicitly, because "load it again" is otherwise indistinguishable from "you
  * already have it".
  */
 export function resetAppState(): void {
   loadInFlight = null
+  permalinkApplied = false
+  permalinkDecodeFailedAtBoot = false
   setBundle(null)
   setStatus('loading')
   setLoadErrorMessage(null)
@@ -306,6 +389,50 @@ export function resetAppState(): void {
   setDerivedMetrics(null)
   setValidationError(null)
   setCaveatMessage(null)
+  setLinkBundleVersion(null)
+}
+
+/**
+ * D-13/D-11/D-12: decodes `window.location.search` exactly once (guarded by `permalinkApplied`)
+ * and seeds the request store and scale from the result, called from the very top of
+ * `initializeApp` -- before `applyLoadedBundle` runs, so a permalink-supplied `entryDate` is
+ * already in the store by the time that function's own default-entry-date check reads it.
+ *
+ * An empty query string (`decoded.status === 'empty'`) leaves `DEFAULT_REQUEST` untouched: the
+ * default landing run. A successful decode (`'ok'`) seeds every one of `BacktestRequest`'s ten
+ * fields plus `scale`, and records the link's `bundleVersion` for `BundleVersionBanner`. A decode
+ * error (`'error'`) leaves the request store at its default shape (still "the default landing
+ * run", per the plan's own wording) but evicts the run that would otherwise follow -- see
+ * `permalinkDecodeFailedAtBoot`'s doc comment -- and raises the explanation through the same
+ * D-11/D-12 surface a live single-field eviction uses, naming the offending key verbatim from
+ * `decodeParams`' own error message.
+ */
+function applyPermalinkFromLocation(): void {
+  if (permalinkApplied) return
+  permalinkApplied = true
+
+  const decoded = decodeParams(new URLSearchParams(window.location.search))
+  if (decoded.status === 'ok') {
+    const { params } = decoded
+    setLinkBundleVersion(params.bundleVersion)
+    setRequestStore({
+      symbol: params.symbol,
+      dividendReinvest: params.dividendReinvest,
+      leverage: params.leverage,
+      entryDate: params.entryDate,
+      holdingPeriodBars: params.holdingPeriodBars,
+      initialInvestment: params.initialInvestment,
+      contributionAmount: params.contributionAmount,
+      contributionFrequency: params.contributionFrequency,
+      expenseRatioPercent: params.expenseRatioPercent,
+      financingSpreadPercent: params.financingSpreadPercent,
+    })
+    setScaleSignal(params.scale)
+  } else if (decoded.status === 'error') {
+    permalinkDecodeFailedAtBoot = true
+    clearForEviction(decoded.error)
+  }
+  // decoded.status === 'empty': nothing to seed -- DEFAULT_REQUEST is already in place.
 }
 
 /**
@@ -326,6 +453,8 @@ export function resetAppState(): void {
  * bundle is null and no load is in flight, so it always performs a genuine retry.
  */
 export async function initializeApp(): Promise<void> {
+  applyPermalinkFromLocation()
+
   const cached = bundle()
   if (cached !== null && status() === 'ready') {
     // Only the FETCH is skipped. Everything a mount does AFTER the bytes arrive still runs, so a
@@ -358,6 +487,18 @@ export async function initializeApp(): Promise<void> {
  * selected series (D-09 pins the strict tier) and schedule the first run. Shared by the fresh-load
  * and cached-bundle paths so the two cannot drift -- the difference between them is the fetch, and
  * only the fetch.
+ *
+ * Plan 04-07: the entry-date default below is now conditional on `request.entryDate` still being
+ * `''` (the store's un-set sentinel, `DEFAULT_REQUEST`'s own value). Unconditionally overwriting
+ * it, as this function did before, silently clobbered a permalink-supplied entry date on every
+ * load -- `applyPermalinkFromLocation` (called before this, from `initializeApp`) may already have
+ * seeded a real date here, and this is the ONE place in the app that ever assigns to `entryDate`
+ * without a user action driving it, so it is the one place that needed to learn not to overwrite a
+ * caller-supplied value. A mount that reuses the cached bundle (D-02's idempotency) still resolves
+ * correctly: `permalinkApplied`'s guard means `applyPermalinkFromLocation` is a no-op on a second
+ * mount, and `request.entryDate` is already non-empty (either the permalink's date or the first
+ * mount's own resolved default), so this check continues to correctly skip re-defaulting either
+ * way.
  */
 function applyLoadedBundle(loaded: LoadedBundle): void {
   const seriesId = `${request.symbol}/${request.dividendReinvest ? 'total-return' : 'price-return'}`
@@ -373,8 +514,18 @@ function applyLoadedBundle(loaded: LoadedBundle): void {
     throw new Error(`app: series "${seriesId}" has no strict-tier date range in the loaded bundle manifest`)
   }
 
-  setRequestStore('entryDate', seriesEntry.tiers.strict.firstDate)
+  if (request.entryDate === '') {
+    setRequestStore('entryDate', seriesEntry.tiers.strict.firstDate)
+  }
   setStatus('ready')
+
+  if (permalinkDecodeFailedAtBoot) {
+    // D-11: the boot-time decode error already evicted the run (see
+    // `applyPermalinkFromLocation`'s `clearForEviction` call); skip this one scheduled run so a
+    // freshly computed default-landing-run result does not silently overwrite that eviction.
+    permalinkDecodeFailedAtBoot = false
+    return
+  }
   scheduleRun()
 }
 

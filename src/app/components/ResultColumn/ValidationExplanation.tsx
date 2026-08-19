@@ -17,8 +17,10 @@
  * the supported window before this variant is ever produced, so the chart and metrics stay on
  * screen alongside it.
  *
- * Variant `bundle-mismatch` (D-15): the slot and its position in the stacking order are declared
- * here; plan 04-07 supplies the comparison and the message. No caller produces this variant yet.
+ * Variant `bundle-mismatch` (D-15): the slot and its position in the stacking order (first) are
+ * declared here; `src/app/components/ResultColumn/BundleVersionBanner.tsx`'s
+ * `bundleVersionMismatchVariant` (plan 04-07) supplies the comparison and the message, and
+ * `App.tsx`'s `explanationVariants()` pushes the result into the same array this component sorts.
  */
 
 import { For } from 'solid-js'

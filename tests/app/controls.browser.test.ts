@@ -11,7 +11,7 @@
  * blur; and every control in the parameter column is disabled while the load status is 'loading'.
  */
 
-import { afterEach, expect, test, vi } from 'vitest'
+import { afterEach, beforeEach, expect, test, vi } from 'vitest'
 
 import { MANIFEST_PATH } from '../../src/data-bundle.generated.ts'
 import { mountApp } from '../../src/app/main.tsx'
@@ -40,6 +40,15 @@ async function nextFrame(): Promise<void> {
 
 let container: HTMLDivElement | undefined
 let disposeApp: (() => void) | undefined
+
+// Plan 04-07: `mountApp` now decodes `window.location.search` as a permalink (D-13). The Vitest
+// browser-mode iframe this file runs in carries its OWN `sessionId`/`iframeId` query params
+// (harness plumbing, unrelated to this app), which `decodeParams` correctly rejects as unknown
+// keys -- this file's tests are about the parameter controls, not the permalink feature, so they
+// clear the incidental harness params back to a clean boot before every mount.
+beforeEach(() => {
+  window.history.replaceState(null, '', window.location.pathname)
+})
 
 afterEach(() => {
   disposeApp?.()
@@ -178,10 +187,27 @@ test('the NDX dividend-mode eviction clears the result and names 1999-03-04, wit
 
   expect(el.querySelector('[data-testid="equity-curve-chart"] canvas')).toBeNull()
   expect(el.querySelector('[data-testid="metrics-panel"]')).toBeNull()
+
+  // Plan 04-07: `applyLoadedBundle` no longer resets `entryDate` on every mount (that
+  // unconditional reset was the exact D-11/D-12 permalink-clobbering bug this plan fixes), so a
+  // test that deliberately leaves the store evicted must restore a valid configuration itself --
+  // a later test's own mount would otherwise inherit this eviction and never see a result at all.
+  updateBacktestRequest({ symbol: 'SPX', dividendReinvest: true, entryDate: '2015-01-30' })
+  await waitFor(() => currentValidationError() === null && currentKernelResult() !== null)
 })
 
 test('a partially typed date does not recompute or evict', async () => {
   const el = await mountAndWaitForResult()
+
+  // `mountAndWaitForResult` only waits for a metrics panel to exist in the DOM -- module-level
+  // signals (including `currentKernelResult()`) persist across mounts within this file, so a
+  // freshly mounted component can render one on its very first frame using the PREVIOUS test's
+  // leftover result, before this mount's own `applyLoadedBundle`-triggered `scheduleRun()` (every
+  // mount schedules exactly one, whether or not anything actually changed) has itself settled.
+  // Waiting two more frames here lets that redundant recompute flush before the "before" baseline
+  // is captured, so it is not mistaken for the one this test deliberately provokes below.
+  await nextFrame()
+  await nextFrame()
 
   const beforeResult = currentKernelResult()
   const beforeInputs = currentKernelInputs()
