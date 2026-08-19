@@ -15,6 +15,16 @@
  * final-value multiple and the ruin date -- once per completed run, not per render. Nothing added
  * here allocates per frame beyond these scalars: `buildCashFlows` and `solveIrr`/`solveCagr` run
  * exactly once, inside the same coalesced callback `runBacktest` already runs in.
+ *
+ * Phase 4 plan 04: `buildKernelInputs` itself is the single-field bound and range validator
+ * (D-32); it already throws a named `Error` on an out-of-range entry date, naming the offending
+ * value and the supported range. `scheduleRun` now catches that throw rather than letting it
+ * escape the rAF callback, clears the run (D-11: no stale result stays on screen alongside
+ * controls that no longer describe it) and stores the thrown message verbatim for
+ * `ValidationExplanation` to render (D-12: explained, never silently moved). This is also the
+ * mechanism a D-12 eviction reaches the screen through: `EntryDateControl` does not re-derive its
+ * own is-this-date-still-valid check, it relies on this same catch firing when a bound recomputes
+ * out from under an already-set value.
  */
 
 import { createSignal } from 'solid-js'
@@ -59,6 +69,7 @@ const [loadErrorMessage, setLoadErrorMessage] = createSignal<string | null>(null
 const [bundle, setBundle] = createSignal<LoadedBundle | null>(null)
 const [kernelInputs, setKernelInputs] = createSignal<KernelInputs | null>(null)
 const [kernelResult, setKernelResult] = createSignal<KernelResult | null>(null)
+const [validationError, setValidationError] = createSignal<string | null>(null)
 
 /** METR-01 through METR-05's four derived values, computed once per completed run (D-05/D-06/
  * D-07/D-08). `irr`/`cagr` are `null` exactly when `solveIrr`/`solveCagr` are (D-08's undefined
@@ -140,6 +151,14 @@ export function currentKernelResult(): KernelResult | null {
   return kernelResult()
 }
 
+/** D-11/D-12: the message `buildKernelInputs` threw for the most recent run attempt, or `null`
+ * when the most recent attempt succeeded. Non-null exactly when `currentKernelInputs()` and
+ * `currentKernelResult()` are `null` -- the two states are mutually exclusive by construction in
+ * `scheduleRun` below. */
+export function currentValidationError(): string | null {
+  return validationError()
+}
+
 /** D-03/Pattern 5: a module-level guard so any number of writes within one animation frame
  * collapse into exactly one `buildKernelInputs` + `runBacktest` call. */
 let scheduled = false
@@ -159,6 +178,17 @@ export function scheduleRun(): void {
       setKernelInputs(inputs)
       setKernelResult(result)
       setDerivedMetrics(computeDerivedMetrics(currentBundle, inputs, result))
+      setValidationError(null)
+    } catch (err) {
+      // D-11: clear the result area rather than retaining a stale run under a stale marker --
+      // no number stays on screen that no longer corresponds to the controls beside it.
+      // D-12: `buildKernelInputs`' own thrown message already names the offending value and the
+      // supported range (D-32); it is displayed verbatim rather than re-authored here.
+      const message = err instanceof Error ? err.message : String(err)
+      setKernelInputs(null)
+      setKernelResult(null)
+      setDerivedMetrics(null)
+      setValidationError(message)
     } finally {
       performance.mark('recompute-end')
       performance.measure('app-recompute', 'recompute-start', 'recompute-end')
