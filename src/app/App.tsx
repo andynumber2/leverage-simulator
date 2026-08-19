@@ -11,7 +11,12 @@
 import { onMount, Show } from 'solid-js'
 
 import { EquityCurveChart } from './components/ResultColumn/EquityCurveChart.tsx'
+import { LogScaleToggle } from './components/ResultColumn/LogScaleToggle.tsx'
+import { MetricsPanel } from './components/ResultColumn/MetricsPanel.tsx'
+import { RuinBanner } from './components/ResultColumn/RuinBanner.tsx'
 import {
+  backtestRequest,
+  currentDerivedMetrics,
   currentKernelInputs,
   currentKernelResult,
   initializeApp,
@@ -19,6 +24,7 @@ import {
   loadError,
   loadStatus,
   scaleMode,
+  setScaleMode,
 } from './state.ts'
 
 /** A run with zero plottable bars (D-11's clear-and-explain path) never reaches the chart --
@@ -63,12 +69,28 @@ export function App() {
               when={plottableBarCount() > 0}
               fallback={<p class="validation-explanation">This run has no plottable bars.</p>}
             >
+              <div class="chart-scale-row">
+                <LogScaleToggle scale={scaleMode()} onChange={setScaleMode} />
+              </div>
               <EquityCurveChart
                 inputs={currentKernelInputs()!}
                 result={currentKernelResult()!}
                 calendar={loadedBundle()!.calendar}
                 scale={scaleMode()}
               />
+
+              {/* D-07: metrics and the ruin banner appear only alongside a completed run
+                  (E7 empty); the banner sits above the metrics it makes subordinate. */}
+              <Show when={currentDerivedMetrics() !== null}>
+                <Show when={currentKernelResult()!.ruined && currentDerivedMetrics()!.ruinDate !== null}>
+                  <RuinBanner ruinDate={currentDerivedMetrics()!.ruinDate!} />
+                </Show>
+                <MetricsPanel
+                  result={currentKernelResult()!}
+                  metrics={currentDerivedMetrics()!}
+                  contributionAmount={backtestRequest().contributionAmount}
+                />
+              </Show>
             </Show>
           </Show>
         </Show>

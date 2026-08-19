@@ -29,7 +29,9 @@
  * Allocation discipline (SIM-11): every accumulator is a scalar; the three output arrays are
  * preallocated by the caller; the result object is built once, after the loop. No module-level
  * mutable binding exists in this file, so concurrent callers holding their own output buffers
- * cannot interfere with one another.
+ * cannot interfere with one another. Phase 4 F-01/METR-03 adds two more scalars, a running peak
+ * and a running maximum drawdown, updated once per bar from `outValue[i]` after it is finalized
+ * on every path that writes it -- still two `let` bindings and no new array.
  *
  * Import discipline (SIM-10): this module type-imports its own types from `./backtest.types.ts`
  * and nothing else. `FINANCING_DAY_COUNT_BASIS` and `EXPENSE_DAY_COUNT_BASIS` are re-declared
@@ -83,6 +85,9 @@ export function runBacktest(params: KernelParams, series: KernelSeries, outputs:
   let droppedContributionsTotal = 0
   let totalContributed = initialInvestment
   let longGapBarCount = 0
+  // F-01/METR-03: running peak and running maximum drawdown, updated once per bar below.
+  let peakValue = initialInvestment
+  let maxDrawdown = 0
 
   for (let i = 0; i < barCount; i++) {
     if (i === 0) {
@@ -90,6 +95,12 @@ export function runBacktest(params: KernelParams, series: KernelSeries, outputs:
       outValue[0] = initialInvestment
       outRuined[0] = 0
       outLongGap[0] = 0
+      if (outValue[0]! > peakValue) {
+        peakValue = outValue[0]!
+      } else if (peakValue > 0) {
+        const drawdown = 1 - outValue[0]! / peakValue
+        if (drawdown > maxDrawdown) maxDrawdown = drawdown
+      }
       continue
     }
 
@@ -104,6 +115,12 @@ export function runBacktest(params: KernelParams, series: KernelSeries, outputs:
     if (ruined) {
       outValue[i] = 0
       outRuined[i] = 1
+      if (outValue[i]! > peakValue) {
+        peakValue = outValue[i]!
+      } else if (peakValue > 0) {
+        const drawdown = 1 - outValue[i]! / peakValue
+        if (drawdown > maxDrawdown) maxDrawdown = drawdown
+      }
       if (contributionFlags[i] === 1) {
         droppedContributionsTotal += contributionAmount
       }
@@ -130,6 +147,14 @@ export function runBacktest(params: KernelParams, series: KernelSeries, outputs:
       ruinBarIndex = i
       outValue[i] = 0
       outRuined[i] = 1
+      // D-22/D-23: the ruin bar's value is exactly 0 against a strictly positive prior peak, so
+      // this crossing always drives maxDrawdown to exactly 1.
+      if (outValue[i]! > peakValue) {
+        peakValue = outValue[i]!
+      } else if (peakValue > 0) {
+        const drawdown = 1 - outValue[i]! / peakValue
+        if (drawdown > maxDrawdown) maxDrawdown = drawdown
+      }
       if (contributionFlags[i] === 1) {
         droppedContributionsTotal += contributionAmount
       }
@@ -145,6 +170,12 @@ export function runBacktest(params: KernelParams, series: KernelSeries, outputs:
 
     outValue[i] = value
     outRuined[i] = 0
+    if (outValue[i]! > peakValue) {
+      peakValue = outValue[i]!
+    } else if (peakValue > 0) {
+      const drawdown = 1 - outValue[i]! / peakValue
+      if (drawdown > maxDrawdown) maxDrawdown = drawdown
+    }
   }
 
   const finalValue = barCount > 0 ? (outValue[barCount - 1] ?? 0) : initialInvestment
@@ -157,5 +188,6 @@ export function runBacktest(params: KernelParams, series: KernelSeries, outputs:
     totalContributed,
     longGapBarCount,
     barCount,
+    maxDrawdown,
   }
 }

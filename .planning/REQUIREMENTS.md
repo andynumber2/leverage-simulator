@@ -135,15 +135,15 @@ measured in CI, not an aspiration.
 
 ### Metrics
 
-- [ ] **METR-01**: IRR (money-weighted return) is computed and is the default annualized metric
+- [x] **METR-01**: IRR (money-weighted return) is computed and is the default annualized metric
       whenever contributions are non-zero
 
-- [ ] **METR-02**: CAGR is available but is suppressed or explicitly qualified when a contribution
+- [x] **METR-02**: CAGR is available but is suppressed or explicitly qualified when a contribution
       schedule makes it misleading
 
-- [ ] **METR-03**: Maximum drawdown is computed and reported
-- [ ] **METR-04**: Final value as a multiple of total contributed is computed and reported
-- [ ] **METR-05**: A ruin flag is computed and reported, and is presented as a categorical outcome
+- [x] **METR-03**: Maximum drawdown is computed and reported
+- [x] **METR-04**: Final value as a multiple of total contributed is computed and reported
+- [x] **METR-05**: A ruin flag is computed and reported, and is presented as a categorical outcome
       distinct from a merely bad numeric result
 
 - [ ] **METR-06**: A sweep computes all display metrics per cell in a single pass, so switching the
@@ -310,11 +310,11 @@ measured in CI, not an aspiration.
 | VALID-02 | Phase 3 | Complete |
 | VALID-03 | Phase 3 | Complete |
 | VALID-04 | Phase 5 | Pending |
-| METR-01 | Phase 4 | Pending |
-| METR-02 | Phase 4 | Pending |
-| METR-03 | Phase 4 | Pending |
-| METR-04 | Phase 4 | Pending |
-| METR-05 | Phase 4 | Pending |
+| METR-01 | Phase 4 | Complete |
+| METR-02 | Phase 4 | Complete |
+| METR-03 | Phase 4 | Complete |
+| METR-04 | Phase 4 | Complete |
+| METR-05 | Phase 4 | Complete |
 | METR-06 | Phase 7 | Pending |
 | ATTR-01 | Phase 5 | Pending |
 | ATTR-02 | Phase 5 | Pending |
