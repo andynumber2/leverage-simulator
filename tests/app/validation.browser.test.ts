@@ -5,7 +5,8 @@
  * remaining data renders the D-10 caveat naming the limiting date while the chart and the metrics
  * panel both remain in the DOM; an evicted entry date (D-12) removes both and leaves only the
  * explanation; a state carrying both an eviction and a caveat renders both, in the fixed stacking
- * order, rather than one; the happy path renders no explanation element at all; a negative
+ * order, rather than one; the happy path (the default open-ended landing state) renders no
+ * explanation element at all, and the open-ended control names its resolved end date; a negative
  * contribution amount and a negative expense ratio are each rejected at their control with the
  * value unchanged; and clearing a cost field restores the imported default.
  *
@@ -27,10 +28,12 @@ import { GENERIC_3X_EXPENSE_RATIO } from '../../src/validation/cost-parameters.t
 import {
   backtestRequest,
   currentCaveatMessage,
+  currentKernelInputs,
   currentValidationError,
   loadedBundle,
   updateBacktestRequest,
 } from '../../src/app/state.ts'
+import { resolveEntryDateBounds } from '../../src/app/bounds.ts'
 
 async function waitFor(predicate: () => boolean, timeoutMs = 5000): Promise<void> {
   const start = performance.now()
@@ -67,32 +70,48 @@ async function mountAndWaitForResult(): Promise<HTMLDivElement> {
 test('the happy path renders no explanation element at all', async () => {
   const el = await mountAndWaitForResult()
 
-  // The raw hold-to-today default legitimately carries D-29's rate-coverage caveat (a real,
-  // permanent fact of this bundled data -- exercised in its own test below), so this asserts the
-  // "absent by default" rendering behavior against a parameter state that genuinely has none of
-  // the three variants active: a short fixed holding period, well inside every bound.
-  const fixedRadio = el.querySelector<HTMLInputElement>('[data-testid="holding-mode-fixed"]')!
-  fixedRadio.click()
-  await waitFor(() => currentValidationError() === null && currentCaveatMessage() === null && backtestRequest().holdingPeriodBars !== null)
+  // The default landing state IS the happy path: open-ended mode over a valid window. D-29's
+  // rate-coverage truncation no longer produces a caveat here (the control names the resolved end
+  // date rather than promising "today", so there is no discrepancy to explain), so this asserts
+  // against the state a first-time visitor actually sees rather than a contrived fixed window.
+  updateBacktestRequest({ holdingPeriodBars: null })
+  await waitFor(() => currentValidationError() === null && backtestRequest().holdingPeriodBars === null)
+  await nextFrame()
 
+  expect(currentCaveatMessage()).toBeNull()
   expect(el.querySelectorAll('[data-testid="validation-explanation"]').length).toBe(0)
 })
 
-test('the raw hold-to-today default carries the D-29 rate-coverage caveat while the chart and metrics stay on screen', async () => {
+test('the open-ended mode names the resolved end date instead of promising "today", and raises no caveat for the one-bar rate-coverage lag', async () => {
   const el = await mountAndWaitForResult()
 
   // state.ts's request store is a module-level singleton that persists across tests in this file
   // (KNOWN HAZARD): an earlier test may have left holdingPeriodBars set to a fixed value, so this
-  // explicitly returns to hold-to-today mode rather than relying on the module's original default.
+  // explicitly returns to open-ended mode rather than relying on the module's original default.
   updateBacktestRequest({ holdingPeriodBars: null })
-  await waitFor(() => currentCaveatMessage() !== null)
-  expect(backtestRequest().holdingPeriodBars).toBeNull()
+  await waitFor(() => backtestRequest().holdingPeriodBars === null)
+  await nextFrame()
 
-  const explanation = el.querySelector('[data-variant="cross-field-caveat"]')
-  expect(explanation).not.toBeNull()
-  expect(explanation!.textContent).toMatch(/runs past the last supported bar/)
+  // The label states the bar the run actually ends on. `@rate/rate` ends one trading day before
+  // the price series, so this date is the rate-coverage boundary, not the last priced bar -- the
+  // whole point of naming it is that the control cannot promise more than the run delivers.
+  const bundle = loadedBundle()
+  expect(bundle).not.toBeNull()
+  const bounds = resolveEntryDateBounds(bundle!.manifest, backtestRequest().symbol, backtestRequest().dividendReinvest, 'strict')
+  expect(bounds.ok).toBe(true)
+  const endDate = (bounds as { ok: true; lastDate: string }).lastDate
 
+  const openEndedLabel = el.querySelector('[data-testid="holding-mode-open-ended"]')!.parentElement!
+  expect(openEndedLabel.textContent).toContain(endDate)
+  expect(openEndedLabel.textContent).not.toMatch(/today/i)
+
+  // The run really does end on the date the label names.
+  expect(currentKernelInputs()!.window.lastDate).toBe(endDate)
+
+  // ...and therefore nothing is caveated, while the chart and metrics are on screen as normal.
+  expect(currentCaveatMessage()).toBeNull()
   expect(currentValidationError()).toBeNull()
+  expect(el.querySelectorAll('[data-testid="validation-explanation"]').length).toBe(0)
   expect(el.querySelector('[data-testid="equity-curve-chart"] canvas')).not.toBeNull()
   expect(el.querySelector('[data-testid="metrics-panel"]')).not.toBeNull()
 })

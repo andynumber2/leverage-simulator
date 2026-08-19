@@ -33,11 +33,8 @@
  * resolves to the exact same supported window the thrown message already names), stores the
  * successful retry's result so the chart and metrics stay on screen, and keeps the original
  * thrown message as the caveat text -- rendered verbatim, the same discipline as the eviction
- * path. D-29's rate-coverage truncation reaches the identical caveat class through a route that
- * never throws at all, but only in hold-to-today mode (`holdToTodayRateCoverageCaveat` below) --
- * `meta.truncatedForRateCoverage` is a dataset-wide fact, true for effectively every run over this
- * bundle regardless of the requested window, and only describes THIS run's own end in hold-to-
- * today mode, where `buildKernelInputs` always resolves the window to that exact boundary.
+ * path. D-29's rate-coverage truncation deliberately produces no caveat at all; see the note
+ * above `scheduleRun` for why naming the end date on the control is the honest fix instead.
  */
 
 import { createSignal } from 'solid-js'
@@ -207,22 +204,21 @@ function storeSuccessfulRun(
   setCaveatMessage(caveat)
 }
 
-/** D-29 reaching D-10's caveat class through a route that never throws (hold-to-today mode only).
- * `meta.truncatedForRateCoverage` is a DATASET-WIDE fact (the shared `@rate/rate` series ends a
- * few trading days before every price series it is paired with, `src/validation/
- * cost-parameters.ts`'s `ragged-right-edge-truncation` mechanism) -- true for effectively every
- * run over this bundle regardless of the requested window, NOT specific to whether THIS run's own
- * end was actually determined by it. It is only a faithful "this run was cut short by rate
- * coverage" statement when `holdingPeriodBars` is `null`: `buildKernelInputs` sets
- * `endAbsIndex = runLastAbsIndex` (the min of both series) in exactly that case, by construction,
- * so the run's own end date genuinely IS the rate-coverage boundary. In fixed mode the run's end
- * is whatever bar count was asked for and is unrelated to this flag; a fixed period that actually
- * reaches the boundary gets its caveat from the explicit overrun throw below instead, whose
- * message is accurate to the SPECIFIC requested window rather than this dataset-wide flag. */
-function holdToTodayRateCoverageCaveat(holdingPeriodBars: number | null, inputs: KernelInputs): string | null {
-  if (holdingPeriodBars !== null || !inputs.meta.truncatedForRateCoverage) return null
-  return `Holding period runs past the last supported bar (${inputs.window.lastDate}). Showing results through that date.`
-}
+/* D-29's rate-coverage truncation deliberately produces NO caveat in the open-ended mode.
+ * `meta.truncatedForRateCoverage` is a dataset-wide fact, not a property of a particular run: the
+ * shared `@rate/rate` series ends one trading day before the price series it is paired with
+ * (`src/validation/cost-parameters.ts`'s `ragged-right-edge-truncation` mechanism), so the flag is
+ * true for effectively every run over this bundle. Caveating it made the default landing view
+ * carry a permanent `role="alert"` about a one-bar publication lag on a multi-decade backtest,
+ * which spends the explanation surface's credibility on the one thing that cannot change a
+ * conclusion -- and stayed silent about the far larger gap, that a manually-refreshed bundle can
+ * be months behind the wall clock.
+ *
+ * `HoldingModeControl` now names the resolved end date instead of promising "today", so the
+ * control and the run agree by construction and there is no discrepancy left to explain. A fixed
+ * holding period that genuinely overruns still gets its caveat from the explicit throw below,
+ * whose message is accurate to the specific requested window.
+ */
 
 /** D-11: clears the result area rather than retaining a stale run under a stale marker -- no
  * number stays on screen that no longer corresponds to the controls beside it. */
@@ -250,7 +246,7 @@ export function scheduleRun(): void {
     try {
       const inputs = buildKernelInputs(currentBundle, { ...request })
       const result = runBacktest(inputs.params, inputs.series, inputs.outputs)
-      storeSuccessfulRun(currentBundle, inputs, result, holdToTodayRateCoverageCaveat(request.holdingPeriodBars, inputs))
+      storeSuccessfulRun(currentBundle, inputs, result, null)
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
       if (message.includes(HOLDING_PERIOD_OVERRUN_PATTERN)) {
@@ -259,8 +255,7 @@ export function scheduleRun(): void {
         // "hold to the last fully-supported bar", D-29) and render the caveat above a
         // still-computed result, rather than clearing it (clear-and-explain is variant 1 only).
         // buildKernelInputs' own thrown text is the caveat, rendered verbatim (D-10's key link) --
-        // accurate to the specific requested window, unlike the dataset-wide flag
-        // holdToTodayRateCoverageCaveat reads.
+        // accurate to the specific requested window, unlike the dataset-wide rate-coverage flag.
         try {
           const fallbackInputs = buildKernelInputs(currentBundle, { ...request, holdingPeriodBars: null })
           const fallbackResult = runBacktest(fallbackInputs.params, fallbackInputs.series, fallbackInputs.outputs)
