@@ -277,10 +277,13 @@ body {
   width: 100%;
 }
 
-/* D-19: the log/linear toggle is a persistently visible control adjacent to the chart. */
+/* D-19: the log/linear toggle and the theme override sit together, persistently visible,
+   adjacent to the chart. */
 .chart-scale-row {
   display: flex;
+  align-items: center;
   justify-content: flex-end;
+  gap: var(--space-sm);
   margin-bottom: var(--space-sm);
 }
 
@@ -305,6 +308,30 @@ body {
 .log-scale-toggle__button--active {
   color: var(--color-accent);
   border-color: var(--color-accent);
+}
+
+/* D-19 (task text): the manual theme-override control is deliberately NEVER accent-colored --
+   accent stays reserved for the equity-curve stroke, the active log/linear toggle state, focus
+   outlines and the Copy link button, so the chart stays the screen's only saturated element. Its
+   state is communicated by icon swap alone (ThemeToggle.tsx), styled like every other muted
+   chrome control. 44x44px minimum hit area (Spacing Scale's icon-only touch-target exception). */
+.theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+  padding: var(--space-xs);
+  color: var(--color-text-muted);
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.theme-toggle svg {
+  width: 16px;
+  height: 16px;
 }
 
 /* D-07: the ruin banner is a categorical state change, styled in the reserved destructive color,

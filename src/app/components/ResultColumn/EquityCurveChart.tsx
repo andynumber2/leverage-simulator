@@ -18,15 +18,24 @@
  * It never carries the ruin bar's own zero value (log scale still cannot plot zero); the
  * `RuinBanner` above the chart is what names the exact ruin date. The scale toggle stays
  * available in the ruined state.
+ *
+ * Plan 04-08 (D-19/VIZ-11): subscribes to `onThemeChange` and bumps a local `themeVersion` signal
+ * on every theme change, tracked by the same `createEffect` below that already rebuilds on a
+ * scale/result/inputs change. `rebuildChart` already destroys and recreates the uPlot instance on
+ * every call (rather than patching `setScale`/`setData` on an existing one), which is exactly the
+ * "recreate the instance" path 04-RESEARCH.md's assumption A4 says is acceptable when a partial
+ * update cannot be confirmed -- no separate theme-specific code path is needed, the existing
+ * rebuild already re-reads `--color-accent`/`--color-text-muted` fresh via `getComputedStyle`.
  */
 
 import 'uplot/dist/uPlot.min.css'
 
-import { createEffect, onCleanup } from 'solid-js'
+import { createEffect, createSignal, onCleanup } from 'solid-js'
 import uPlot from 'uplot'
 
 import type { KernelInputs } from '../../../data/kernel-inputs.ts'
 import type { KernelResult } from '../../../kernel/backtest.types.ts'
+import { onThemeChange } from '../../theme.ts'
 import type { ScaleMode } from '../../state.ts'
 
 const AXIS_FONT = '12px ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace'
@@ -193,19 +202,28 @@ export function EquityCurveChart(props: EquityCurveChartProps) {
     chart = new uPlot(options, data, containerEl)
   }
 
+  // D-19/VIZ-11: bumped by onThemeChange below, tracked by the createEffect underneath so a
+  // theme change rebuilds the chart the same way a scale toggle or a new result does.
+  const [themeVersion, setThemeVersion] = createSignal(0)
+  const unsubscribeThemeChange = onThemeChange(() => setThemeVersion((v) => v + 1))
+
   createEffect(() => {
     // Re-track every prop that changes what gets drawn, so a scale toggle or a new result
     // rebuilds the chart. uPlot requires updating the scale config (not just data) for a distr
     // change to take effect (Pattern 4), so this tracer rebuilds the instance outright rather
-    // than patching setScale/setData on an existing one.
+    // than patching setScale/setData on an existing one. themeVersion is tracked for the same
+    // reason: canvas gets no free prefers-color-scheme styling, so a theme change must rebuild
+    // too, which re-reads --color-accent/--color-text-muted fresh via getComputedStyle.
     void props.scale
     void props.result
     void props.inputs
+    void themeVersion()
     rebuildChart()
   })
 
   onCleanup(() => {
     chart?.destroy()
+    unsubscribeThemeChange()
   })
 
   return <div ref={containerEl} class="equity-curve-chart" data-testid="equity-curve-chart" />
