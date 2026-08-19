@@ -12,6 +12,7 @@ import { Show } from 'solid-js'
 
 import { loadStatus } from '../../state.ts'
 import { ContributionControl } from './ContributionControl.tsx'
+import { CostControls } from './CostControls.tsx'
 import { EntryDateControl } from './EntryDateControl.tsx'
 import { HoldingModeControl } from './HoldingModeControl.tsx'
 import { LeverageControl } from './LeverageControl.tsx'
@@ -32,6 +33,7 @@ export function ParameterColumn() {
       <EntryDateControl disabled={disabled()} />
       <HoldingModeControl disabled={disabled()} />
       <ContributionControl disabled={disabled()} />
+      <CostControls disabled={disabled()} />
     </aside>
   )
 }
