@@ -160,6 +160,76 @@ body {
   font-size: var(--font-size-label);
 }
 
+.holding-mode-control {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.holding-mode-choice {
+  display: flex;
+  gap: var(--space-sm);
+  font-size: var(--font-size-body);
+}
+
+.holding-mode-option {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+/* UI-SPEC E4 long-text: a bar count is a whole number of trading days, no upper visual bound
+   declared -- width left to the browser's native number-input rendering. */
+.holding-period-bars-input {
+  font-family: var(--font-mono);
+  width: 8ch;
+  padding: var(--space-xs);
+}
+
+.contribution-control {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+/* UI-SPEC E4 long-text: a monospace slot sized for a nine-digit figure, so the control's width
+   does not vary with the typed amount. */
+.contribution-amount-input {
+  font-family: var(--font-mono);
+  width: 9ch;
+  padding: var(--space-xs);
+}
+
+.contribution-error {
+  color: var(--color-destructive);
+  font-size: var(--font-size-label);
+}
+
+.cost-controls {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.expense-ratio-control,
+.financing-spread-control {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+/* UI-SPEC E5: both cost fields render in percent units, monospace, a fixed-width slot. */
+.cost-input {
+  font-family: var(--font-mono);
+  width: 7ch;
+  padding: var(--space-xs);
+}
+
+.cost-error {
+  color: var(--color-destructive);
+  font-size: var(--font-size-label);
+}
+
 .result-column {
   background: var(--color-surface);
   border: 1px solid var(--color-border);

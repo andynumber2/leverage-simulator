@@ -25,6 +25,19 @@
  * mechanism a D-12 eviction reaches the screen through: `EntryDateControl` does not re-derive its
  * own is-this-date-still-valid check, it relies on this same catch firing when a bound recomputes
  * out from under an already-set value.
+ *
+ * Phase 4 plan 05: D-10's other half. A fixed holding period running past the last supported bar
+ * is a DIFFERENT throw than the D-12 range rejection above (its message contains "runs past the
+ * last supported bar" -- `HOLDING_PERIOD_OVERRUN_PATTERN` below), and is caveat-and-compute, not
+ * clear-and-explain: `scheduleRun` catches it, retries with `holdingPeriodBars: null` (which
+ * resolves to the exact same supported window the thrown message already names), stores the
+ * successful retry's result so the chart and metrics stay on screen, and keeps the original
+ * thrown message as the caveat text -- rendered verbatim, the same discipline as the eviction
+ * path. D-29's rate-coverage truncation reaches the identical caveat class through a route that
+ * never throws at all, but only in hold-to-today mode (`holdToTodayRateCoverageCaveat` below) --
+ * `meta.truncatedForRateCoverage` is a dataset-wide fact, true for effectively every run over this
+ * bundle regardless of the requested window, and only describes THIS run's own end in hold-to-
+ * today mode, where `buildKernelInputs` always resolves the window to that exact boundary.
  */
 
 import { createSignal } from 'solid-js'
@@ -70,6 +83,7 @@ const [bundle, setBundle] = createSignal<LoadedBundle | null>(null)
 const [kernelInputs, setKernelInputs] = createSignal<KernelInputs | null>(null)
 const [kernelResult, setKernelResult] = createSignal<KernelResult | null>(null)
 const [validationError, setValidationError] = createSignal<string | null>(null)
+const [caveatMessage, setCaveatMessage] = createSignal<string | null>(null)
 
 /** METR-01 through METR-05's four derived values, computed once per completed run (D-05/D-06/
  * D-07/D-08). `irr`/`cagr` are `null` exactly when `solveIrr`/`solveCagr` are (D-08's undefined
@@ -159,6 +173,67 @@ export function currentValidationError(): string | null {
   return validationError()
 }
 
+/** D-10: non-`null` exactly when the most recent successful run carries a cross-field caveat --
+ * either a fixed holding period that was accepted and resolved to the supported window, or D-29's
+ * rate-coverage truncation reached without a throw at all. Independent of
+ * `currentValidationError()`: a caveat coexists with a completed, still-rendered run, never with
+ * an evicted one. */
+export function currentCaveatMessage(): string | null {
+  return caveatMessage()
+}
+
+/** D-10: the exact substring `buildKernelInputs` uses when a fixed holding period runs past the
+ * last supported bar -- the one D-32 range-rejection throw this plan treats as caveat-and-compute
+ * rather than clear-and-explain. Matched against the thrown message rather than re-derived, so
+ * this stays correct even if the message's surrounding wording changes; only this fragment needs
+ * to stay stable. */
+const HOLDING_PERIOD_OVERRUN_PATTERN = 'runs past the last supported bar'
+
+/** Stores a completed run plus its already-resolved caveat state (D-10), shared by the normal path
+ * and the D-10 retry path below so both write through the same three signals in the same order.
+ * `caveat` is supplied by the caller rather than re-derived here: the two success paths compute it
+ * from different sources (see call sites), and folding that decision into this helper would hide
+ * which source won when both could apply. */
+function storeSuccessfulRun(
+  currentBundle: LoadedBundle,
+  inputs: KernelInputs,
+  result: KernelResult,
+  caveat: string | null,
+): void {
+  setKernelInputs(inputs)
+  setKernelResult(result)
+  setDerivedMetrics(computeDerivedMetrics(currentBundle, inputs, result))
+  setValidationError(null)
+  setCaveatMessage(caveat)
+}
+
+/** D-29 reaching D-10's caveat class through a route that never throws (hold-to-today mode only).
+ * `meta.truncatedForRateCoverage` is a DATASET-WIDE fact (the shared `@rate/rate` series ends a
+ * few trading days before every price series it is paired with, `src/validation/
+ * cost-parameters.ts`'s `ragged-right-edge-truncation` mechanism) -- true for effectively every
+ * run over this bundle regardless of the requested window, NOT specific to whether THIS run's own
+ * end was actually determined by it. It is only a faithful "this run was cut short by rate
+ * coverage" statement when `holdingPeriodBars` is `null`: `buildKernelInputs` sets
+ * `endAbsIndex = runLastAbsIndex` (the min of both series) in exactly that case, by construction,
+ * so the run's own end date genuinely IS the rate-coverage boundary. In fixed mode the run's end
+ * is whatever bar count was asked for and is unrelated to this flag; a fixed period that actually
+ * reaches the boundary gets its caveat from the explicit overrun throw below instead, whose
+ * message is accurate to the SPECIFIC requested window rather than this dataset-wide flag. */
+function holdToTodayRateCoverageCaveat(holdingPeriodBars: number | null, inputs: KernelInputs): string | null {
+  if (holdingPeriodBars !== null || !inputs.meta.truncatedForRateCoverage) return null
+  return `Holding period runs past the last supported bar (${inputs.window.lastDate}). Showing results through that date.`
+}
+
+/** D-11: clears the result area rather than retaining a stale run under a stale marker -- no
+ * number stays on screen that no longer corresponds to the controls beside it. */
+function clearForEviction(message: string): void {
+  setKernelInputs(null)
+  setKernelResult(null)
+  setDerivedMetrics(null)
+  setValidationError(message)
+  setCaveatMessage(null)
+}
+
 /** D-03/Pattern 5: a module-level guard so any number of writes within one animation frame
  * collapse into exactly one `buildKernelInputs` + `runBacktest` call. */
 let scheduled = false
@@ -175,20 +250,34 @@ export function scheduleRun(): void {
     try {
       const inputs = buildKernelInputs(currentBundle, { ...request })
       const result = runBacktest(inputs.params, inputs.series, inputs.outputs)
-      setKernelInputs(inputs)
-      setKernelResult(result)
-      setDerivedMetrics(computeDerivedMetrics(currentBundle, inputs, result))
-      setValidationError(null)
+      storeSuccessfulRun(currentBundle, inputs, result, holdToTodayRateCoverageCaveat(request.holdingPeriodBars, inputs))
     } catch (err) {
-      // D-11: clear the result area rather than retaining a stale run under a stale marker --
-      // no number stays on screen that no longer corresponds to the controls beside it.
-      // D-12: `buildKernelInputs`' own thrown message already names the offending value and the
-      // supported range (D-32); it is displayed verbatim rather than re-authored here.
       const message = err instanceof Error ? err.message : String(err)
-      setKernelInputs(null)
-      setKernelResult(null)
-      setDerivedMetrics(null)
-      setValidationError(message)
+      if (message.includes(HOLDING_PERIOD_OVERRUN_PATTERN)) {
+        // D-10: accepted as input, not blocked -- resolve to the supported window (the exact
+        // window the thrown message's own "max bars"/"ending" already name, since `null` means
+        // "hold to the last fully-supported bar", D-29) and render the caveat above a
+        // still-computed result, rather than clearing it (clear-and-explain is variant 1 only).
+        // buildKernelInputs' own thrown text is the caveat, rendered verbatim (D-10's key link) --
+        // accurate to the specific requested window, unlike the dataset-wide flag
+        // holdToTodayRateCoverageCaveat reads.
+        try {
+          const fallbackInputs = buildKernelInputs(currentBundle, { ...request, holdingPeriodBars: null })
+          const fallbackResult = runBacktest(fallbackInputs.params, fallbackInputs.series, fallbackInputs.outputs)
+          storeSuccessfulRun(currentBundle, fallbackInputs, fallbackResult, message)
+        } catch (fallbackErr) {
+          // Unreachable in practice: every other field already validated on the first attempt,
+          // and holdingPeriodBars: null cannot itself trigger this same range check. Falls
+          // through to eviction rather than leaving a stale run on screen if it is ever reached.
+          const fallbackMessage = fallbackErr instanceof Error ? fallbackErr.message : String(fallbackErr)
+          clearForEviction(fallbackMessage)
+        }
+      } else {
+        // D-11/D-12: single-field eviction, clear-and-explain. buildKernelInputs' own thrown
+        // message already names the offending value and the supported range (D-32); displayed
+        // verbatim rather than re-authored here.
+        clearForEviction(message)
+      }
     } finally {
       performance.mark('recompute-end')
       performance.measure('app-recompute', 'recompute-start', 'recompute-end')
