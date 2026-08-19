@@ -18,7 +18,7 @@
  * exercise the stacking order itself rather than an unreachable combination of app state.
  */
 
-import { afterEach, expect, test } from 'vitest'
+import { afterEach, beforeEach, expect, test } from 'vitest'
 import { render } from 'solid-js/web'
 
 import { mountApp } from '../../src/app/main.tsx'
@@ -51,6 +51,15 @@ async function nextFrame(): Promise<void> {
 
 let container: HTMLDivElement | undefined
 let disposeApp: (() => void) | undefined
+
+// Plan 04-07: `mountApp` now decodes `window.location.search` as a permalink (D-13). The Vitest
+// browser-mode iframe this file runs in carries its OWN `sessionId`/`iframeId` query params
+// (harness plumbing, unrelated to this app), which `decodeParams` correctly rejects as unknown
+// keys -- this file's tests are about the explanation surface, not the permalink feature, so they
+// clear the incidental harness params back to a clean boot before every mount.
+beforeEach(() => {
+  window.history.replaceState(null, '', window.location.pathname)
+})
 
 afterEach(() => {
   disposeApp?.()
@@ -163,6 +172,13 @@ test('an evicted entry date removes both the chart and the metrics panel and lea
   expect(currentCaveatMessage()).toBeNull()
   expect(el.querySelector('[data-testid="equity-curve-chart"] canvas')).toBeNull()
   expect(el.querySelector('[data-testid="metrics-panel"]')).toBeNull()
+
+  // Plan 04-07: `applyLoadedBundle` no longer resets `entryDate` on every mount (that
+  // unconditional reset was the exact D-11/D-12 permalink-clobbering bug this plan fixes), so a
+  // test that deliberately leaves the store evicted must restore a valid configuration itself --
+  // a later test's own mount would otherwise inherit this eviction and never see a result at all.
+  updateBacktestRequest({ entryDate: '2015-01-30' })
+  await waitFor(() => currentValidationError() === null)
 })
 
 test('a state carrying both an eviction and a caveat renders both, in the fixed stacking order, rather than one', () => {

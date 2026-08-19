@@ -12,17 +12,20 @@
 import { onMount, Show } from 'solid-js'
 
 import { ParameterColumn } from './components/ParameterColumn/ParameterColumn.tsx'
+import { bundleVersionMismatchVariant } from './components/ResultColumn/BundleVersionBanner.tsx'
 import { EquityCurveChart } from './components/ResultColumn/EquityCurveChart.tsx'
 import { LogScaleToggle } from './components/ResultColumn/LogScaleToggle.tsx'
 import { MetricsPanel } from './components/ResultColumn/MetricsPanel.tsx'
 import { RuinBanner } from './components/ResultColumn/RuinBanner.tsx'
 import { ValidationExplanation, type ExplanationVariant } from './components/ResultColumn/ValidationExplanation.tsx'
+import { BUNDLE_VERSION } from '../data-bundle.generated.ts'
 import {
   backtestRequest,
   currentCaveatMessage,
   currentDerivedMetrics,
   currentKernelInputs,
   currentKernelResult,
+  currentLinkBundleVersion,
   currentValidationError,
   initializeApp,
   loadedBundle,
@@ -32,12 +35,14 @@ import {
   setScaleMode,
 } from './state.ts'
 
-/** D-10/D-11/UI-SPEC E9: the current set of explanation variants, in whatever order they were
- * found -- `ValidationExplanation` owns the stacking order, not this function. `bundle-mismatch`
- * has no producer yet; its position in the stack is reserved here for plan 04-07 to fill without
- * touching this array-building logic. */
+/** D-10/D-11/D-15/UI-SPEC E9: the current set of explanation variants, in whatever order they
+ * were found -- `ValidationExplanation` owns the stacking order, not this function. Plan 04-07
+ * fills the `bundle-mismatch` slot plan 04-05 reserved, via `bundleVersionMismatchVariant`, without
+ * touching this array-building logic's shape (push-if-applicable, same as the other two). */
 function explanationVariants(): ExplanationVariant[] {
   const variants: ExplanationVariant[] = []
+  const mismatch = bundleVersionMismatchVariant(currentLinkBundleVersion(), BUNDLE_VERSION)
+  if (mismatch !== null) variants.push(mismatch)
   const error = currentValidationError()
   if (error !== null) variants.push({ kind: 'single-field-eviction', message: error })
   const caveat = currentCaveatMessage()

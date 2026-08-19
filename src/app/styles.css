@@ -355,3 +355,56 @@ body {
   font-size: var(--font-size-label);
   flex-basis: 100%;
 }
+
+/* SHARE-01/UI-SPEC E10: the phase's one explicit CTA, accent-colored per the Color table's
+   "Copy Link button" row. Fixed min-width across all three label states (idle/confirmed/failed)
+   is what actually keeps the button from resizing on state change -- verified by
+   getBoundingClientRect in tests/app/permalink.browser.test.ts -- not the label text's character
+   count, which varies. */
+.copy-link-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  margin-top: var(--space-md);
+}
+
+.copy-link-button {
+  min-width: 140px;
+  min-height: 44px;
+  padding: var(--space-xs) var(--space-md);
+  font-family: var(--font-ui);
+  font-size: var(--font-size-body);
+  font-weight: 600;
+  color: var(--color-accent);
+  background: transparent;
+  border: 1px solid var(--color-accent);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.copy-link-button:disabled {
+  color: var(--color-text-muted);
+  border-color: var(--color-border);
+  cursor: not-allowed;
+}
+
+.copy-link-button[data-copy-state='failed'] {
+  color: var(--color-destructive);
+  border-color: var(--color-destructive);
+}
+
+/* UI-SPEC E10 error/overflow: the ONE state the permalink is ever rendered inline in at all --
+   a scrollable single-line monospace field, never wrapped or truncated silently. */
+.copy-link-fallback {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-label);
+  color: var(--color-text);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  padding: var(--space-xs) var(--space-sm);
+  overflow-x: auto;
+  white-space: nowrap;
+}

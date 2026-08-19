@@ -48,7 +48,7 @@ const moneyArb = (maxCents: number) => fc.integer({ min: 0, max: maxCents }).map
 const percentArb = fc.integer({ min: 0, max: 1_000_000 }).map(basisPointsToPercent) // 0.0000 .. 100.0000
 
 const isoDateArb = fc
-  .date({ min: new Date(Date.UTC(1900, 0, 1)), max: new Date(Date.UTC(2100, 11, 31)) })
+  .date({ min: new Date(Date.UTC(1900, 0, 1)), max: new Date(Date.UTC(2100, 11, 31)), noInvalidDate: true })
   .map((d) => d.toISOString().slice(0, 10))
 
 const HEX_CHARS = '0123456789abcdef'.split('')
