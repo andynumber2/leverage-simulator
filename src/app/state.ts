@@ -282,36 +282,109 @@ export function scheduleRun(): void {
   })
 }
 
+/** The in-flight load, so concurrent `initializeApp` calls share one fetch instead of racing
+ * several. Cleared when the load settles, so the Retry button can start a genuinely new one. */
+let loadInFlight: Promise<void> | null = null
+
+/**
+ * Discards the loaded bundle and every derived signal, so the next `initializeApp` performs a
+ * real fetch rather than reusing the cached bundle.
+ *
+ * The module holds app state in singletons, which is what lets `initializeApp` be idempotent.
+ * Anything that needs to observe a DIFFERENT load outcome from the same module -- a test
+ * stubbing `fetch` to exercise the failure path, or a future in-app bundle swap -- has to clear
+ * that cache explicitly, because "load it again" is otherwise indistinguishable from "you
+ * already have it".
+ */
+export function resetAppState(): void {
+  loadInFlight = null
+  setBundle(null)
+  setStatus('loading')
+  setLoadErrorMessage(null)
+  setKernelInputs(null)
+  setKernelResult(null)
+  setDerivedMetrics(null)
+  setValidationError(null)
+  setCaveatMessage(null)
+}
+
 /**
  * Fetches and decodes the bundle (`loadBundleFromFetch`), resolves the default entry date from
  * the loaded manifest's `SPX/total-return` strict-tier `firstDate` (D-09: Phase 4 pins the
  * strict tier), and schedules the first run. A thrown error -- a non-OK asset response or a
  * manifest that decodes to zero series -- sets `status` to 'failed' carrying the thrown message,
  * which already names the failing detail.
+ *
+ * IDEMPOTENT. `App`'s `onMount` calls this on every mount, and the bundle is ~1.6 MB across 14
+ * assets -- re-fetching and re-decoding all of it because a component mounted a second time is
+ * pure waste in the browser, and in the app test suite it was the direct cause of flaky runs
+ * (eight mounts, eight full bundle loads, tests timing out non-deterministically at whichever
+ * one happened to cross the budget). An already-loaded bundle short-circuits; a load already in
+ * flight is awaited rather than duplicated. `resetAppState` is the way to force a real reload.
+ *
+ * The Retry button is unaffected: it is only reachable from `status === 'failed'`, where the
+ * bundle is null and no load is in flight, so it always performs a genuine retry.
  */
 export async function initializeApp(): Promise<void> {
+  const cached = bundle()
+  if (cached !== null && status() === 'ready') {
+    // Only the FETCH is skipped. Everything a mount does AFTER the bytes arrive still runs, so a
+    // cached mount is indistinguishable from a fresh one apart from the wire time: the entry date
+    // is re-resolved for the current symbol, and a run is scheduled. Skipping those too was the
+    // bug in the first cut of this cache -- a mount left holding a symbol whose window no longer
+    // contains the previous entry date evicted and never recovered, because nothing re-resolved
+    // the date and nothing scheduled a recompute.
+    try {
+      applyLoadedBundle(cached)
+    } catch (err) {
+      setLoadErrorMessage(err instanceof Error ? err.message : String(err))
+      setStatus('failed')
+    }
+    return
+  }
+  if (loadInFlight !== null) return loadInFlight
+
+  const load = runInitialLoad()
+  loadInFlight = load
+  try {
+    await load
+  } finally {
+    loadInFlight = null
+  }
+}
+
+/**
+ * Everything a load does once the bytes are in hand: resolve the entry date for the currently
+ * selected series (D-09 pins the strict tier) and schedule the first run. Shared by the fresh-load
+ * and cached-bundle paths so the two cannot drift -- the difference between them is the fetch, and
+ * only the fetch.
+ */
+function applyLoadedBundle(loaded: LoadedBundle): void {
+  const seriesId = `${request.symbol}/${request.dividendReinvest ? 'total-return' : 'price-return'}`
+  const seriesEntry = loaded.manifest.series.find((s) => s.id === seriesId)
+  if (seriesEntry === undefined) {
+    const existingIds = loaded.manifest.series.map((s) => s.id).sort()
+    throw new Error(
+      `app: no series named "${seriesId}" in the loaded bundle manifest (${loaded.manifest.series.length} series decoded); ` +
+        `existing series ids: ${existingIds.join(', ') || '(none)'}`,
+    )
+  }
+  if (seriesEntry.tiers.strict === null) {
+    throw new Error(`app: series "${seriesId}" has no strict-tier date range in the loaded bundle manifest`)
+  }
+
+  setRequestStore('entryDate', seriesEntry.tiers.strict.firstDate)
+  setStatus('ready')
+  scheduleRun()
+}
+
+async function runInitialLoad(): Promise<void> {
   setStatus('loading')
   setLoadErrorMessage(null)
   try {
     const loadedBundleResult = await loadBundleFromFetch()
     setBundle(loadedBundleResult)
-
-    const seriesId = `${request.symbol}/${request.dividendReinvest ? 'total-return' : 'price-return'}`
-    const seriesEntry = loadedBundleResult.manifest.series.find((s) => s.id === seriesId)
-    if (seriesEntry === undefined) {
-      const existingIds = loadedBundleResult.manifest.series.map((s) => s.id).sort()
-      throw new Error(
-        `app: no series named "${seriesId}" in the loaded bundle manifest (${loadedBundleResult.manifest.series.length} series decoded); ` +
-          `existing series ids: ${existingIds.join(', ') || '(none)'}`,
-      )
-    }
-    if (seriesEntry.tiers.strict === null) {
-      throw new Error(`app: series "${seriesId}" has no strict-tier date range in the loaded bundle manifest`)
-    }
-
-    setRequestStore('entryDate', seriesEntry.tiers.strict.firstDate)
-    setStatus('ready')
-    scheduleRun()
+    applyLoadedBundle(loadedBundleResult)
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
     setLoadErrorMessage(message)

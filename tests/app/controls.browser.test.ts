@@ -20,6 +20,7 @@ import {
   currentKernelInputs,
   currentKernelResult,
   currentValidationError,
+  resetAppState,
   updateBacktestRequest,
 } from '../../src/app/state.ts'
 
@@ -139,6 +140,12 @@ test('the dividend toggle is disabled with a stated reason for a symbol whose di
     }
     return originalFetch(input, init)
   })
+
+  // `initializeApp` reuses an already-loaded bundle, so without clearing it this mount would skip
+  // the fetch entirely and never see the stub above -- the manifest would still carry
+  // SPX/price-return and the toggle would correctly stay enabled, failing the assertion for a
+  // reason that has nothing to do with what the test is checking.
+  resetAppState()
 
   const el = await mountAndWaitForResult()
 

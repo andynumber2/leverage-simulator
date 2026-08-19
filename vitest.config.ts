@@ -390,6 +390,13 @@ export default defineConfig({
         test: {
           name: 'app',
           include: ['tests/app/**/*.browser.test.ts'],
+          // Each file drives a real browser page that fetches and decodes the full ~1.6 MB
+          // bundle at least once. Running the files concurrently put four of those in flight at
+          // the same time on a container with 2 GB of memory, and tests timed out at whichever
+          // load happened to lose the race -- a different set every run, which made the suite's
+          // result partly random and its greens worth little. Serializing files trades a little
+          // wall clock for a deterministic verdict. Same reason the bench project sets it.
+          fileParallelism: false,
           browser: {
             enabled: true,
             // This host's LANG/LC_* are unset (POSIX locale), which Chromium reports to

@@ -14,7 +14,7 @@ import { afterEach, expect, test, vi } from 'vitest'
 import { MANIFEST_PATH } from '../../src/data-bundle.generated.ts'
 import { mountApp } from '../../src/app/main.tsx'
 import { axisSizeForLabels } from '../../src/app/components/ResultColumn/EquityCurveChart.tsx'
-import { currentKernelInputs, currentKernelResult } from '../../src/app/state.ts'
+import { currentKernelInputs, currentKernelResult, resetAppState } from '../../src/app/state.ts'
 
 /** uPlot's built-in default `axis.size`. The landing run's equity values are wider than this at
  * the chart's 12px monospace axis font, which is why the gutter must be measured, not defaulted. */
@@ -105,6 +105,12 @@ test('a manifest that decodes to zero series renders the named failure line, nev
     }
     return originalFetch(input, init)
   })
+
+  // `initializeApp` is idempotent and reuses an already-loaded bundle, so an earlier test's
+  // successful load would otherwise make this mount skip the fetch entirely and never see the
+  // stub. Clearing the cached bundle is what makes "load it again" distinguishable from
+  // "you already have it".
+  resetAppState()
 
   container = document.createElement('div')
   document.body.appendChild(container)
