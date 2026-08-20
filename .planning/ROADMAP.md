@@ -34,7 +34,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 1: Performance Spike and Budget Lock** - Measure the hot loop and the 10k-cell repaint on real hardware, then commit the architecture and the budgets (completed 2026-08-17)
 - [x] **Phase 2: Compiled Data Bundle** - A CLI compiler turns raw CSVs into versioned binary assets with machine-readable provenance (completed 2026-08-17)
 - [x] **Phase 3: Simulation Kernel and the UPRO/TQQQ Gate** - The cost model, proven against real leveraged-ETF history before any UI is built on it (completed 2026-08-18)
-- [ ] **Phase 4: First Defensible Backtest in the Browser** - A real single run, in the browser, that can be pasted as a link
+- [x] **Phase 4: First Defensible Backtest in the Browser** - A real single run, in the browser, that can be pasted as a link (completed 2026-08-20)
 - [ ] **Phase 5: Attribution and the Credibility Surface** - Name which mechanism consumed the money, and let a skeptic check every assumption
 - [ ] **Phase 6: Heatmap Design Pass** - Argue the entry-date x leverage treatment from throwaway mockups, since there is no prior art to copy
 - [ ] **Phase 7: Sweep Engine and the Heatmap** - 10,000 backtests fanned across workers and painted progressively without stalling the UI

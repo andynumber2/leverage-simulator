@@ -4,14 +4,14 @@ milestone: v1.0
 milestone_name: milestone
 current_phase: 04
 current_phase_name: first-defensible-backtest-in-the-browser
-status: verifying
-stopped_at: Phase 04 at verification -- all 8 plans executed, 04-VERIFICATION.md human_needed, its seven human_verification items now closed by tests/app/narrow-viewport.browser.test.ts
-last_updated: "2026-08-20T03:37:00.000Z"
+status: complete
+stopped_at: Phase 04 shipped and merged to main as 029ea10 (PR #4)
+last_updated: "2026-08-20T16:10:00.000Z"
 last_activity: 2026-08-20
-last_activity_desc: "Quick task 260820-4qx: fixed the uPlot log-scale renderer hang and closed phase 04's backstop UAT"
+last_activity_desc: "Phase 04 shipped: PR #4 merged to main, CI green"
 progress:
   total_phases: 8
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 28
   completed_plans: 28
 ---
@@ -23,18 +23,19 @@ progress:
 See: .planning/PROJECT.md (updated 2026-08-16)
 
 **Core value:** Given a symbol, a leverage level, an entry point, and a contribution schedule, produce a defensible outcome and show which mechanism consumed the money, in a form that can be pasted into an argument.
-**Current focus:** Phase 04 — first-defensible-backtest-in-the-browser
+**Current focus:** Phase 05 — attribution-and-the-credibility-surface (not yet started)
 
 ## Current Position
 
-Phase: 04 (first-defensible-backtest-in-the-browser) — VERIFYING
+Phase: 04 (first-defensible-backtest-in-the-browser) — COMPLETE, merged to main
 Plan: 8 of 8 executed
-Status: Phase 04 sits at verification. 04-VERIFICATION.md's status is `human_needed`; its seven
-human_verification items are now closed by tests/app/narrow-viewport.browser.test.ts (see
-04-UAT.md), which was the last gap keeping the phase from a passing verification.
-Last activity: 2026-08-20 — Quick task 260820-4qx (uPlot log-scale renderer hang fix)
+Status: Shipped. PR #4 merged as 029ea10, CI green on the merge commit.
+  Verification passed 22/22. Security audit closed 33 of 34 threats, 0 blocking.
+  Broken-windows ledger at 0 open.
+Next: Phase 05 (attribution-and-the-credibility-surface). Run /gsd-discuss-phase 05 to begin.
+Last activity: 2026-08-20 — Phase 04 shipped
 
-Progress: [███░░░░░░░] 38%  (3 of 8 roadmap phases complete)
+Progress: [█████░░░░░] 50%  (4 of 8 roadmap phases complete)
 
 > `total_phases` read 4 here until 2026-08-20 and the bar read 75%. The field had been
 > overwritten with the current phase number on every phase transition since `c5eefa2`
