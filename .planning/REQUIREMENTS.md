@@ -39,7 +39,7 @@ measured in CI, not an aspiration.
 - [ ] **PERF-06**: An in-flight sweep is cancelled within one frame when the user changes a
       parameter, and superseded results are discarded rather than painted
 
-- [ ] **PERF-07**: No main-thread task exceeds 50ms during any interaction, verified by long-task
+- [x] **PERF-07**: No main-thread task exceeds 50ms during any interaction, verified by long-task
       measurement. Dragging a slider sustains 60fps
 
 - [x] **PERF-08**: Cold load reaches interactive in under 1500ms and completes data load and
@@ -188,7 +188,7 @@ measured in CI, not an aspiration.
 - [ ] **VIZ-10**: The heatmap carries visible copy stating that entry windows overlap and that the
       grid is a sensitivity analysis over one shared history, not thousands of independent trials
 
-- [ ] **VIZ-11**: Charts are legible in both light and dark
+- [x] **VIZ-11**: Charts are legible in both light and dark
 
 ### Credibility
 
@@ -211,13 +211,13 @@ measured in CI, not an aspiration.
 
 ### Sharing and Export
 
-- [ ] **SHARE-01**: Every parameter is encoded in the URL as readable query params, so a pasted
+- [x] **SHARE-01**: Every parameter is encoded in the URL as readable query params, so a pasted
       link reproduces the exact run
 
-- [ ] **SHARE-02**: The URL carries a data-bundle version, and a permalink created against an older
+- [x] **SHARE-02**: The URL carries a data-bundle version, and a permalink created against an older
       bundle either reproduces faithfully or states clearly that the data has changed
 
-- [ ] **SHARE-03**: Permalink reproducibility is enforced by a determinism test
+- [x] **SHARE-03**: Permalink reproducibility is enforced by a determinism test
 - [ ] **SHARE-04**: User can export the current chart as a PNG
 - [ ] **SHARE-05**: User can export a run's underlying daily series as CSV, so the math can be
       checked independently
@@ -280,7 +280,7 @@ measured in CI, not an aspiration.
 | PERF-04 | Phase 7 | Pending |
 | PERF-05 | Phase 7 | Pending |
 | PERF-06 | Phase 7 | Pending |
-| PERF-07 | Phase 4 | Pending |
+| PERF-07 | Phase 4 | Complete |
 | PERF-08 | Phase 4 | Complete |
 | PERF-09 | Phase 7 | Pending |
 | PERF-10 | Phase 1 | Complete |
@@ -329,15 +329,15 @@ measured in CI, not an aspiration.
 | VIZ-08 | Phase 4 | Complete |
 | VIZ-09 | Phase 7 | Pending |
 | VIZ-10 | Phase 6 | Pending |
-| VIZ-11 | Phase 4 | Pending |
+| VIZ-11 | Phase 4 | Complete |
 | CRED-01 | Phase 5 | Pending |
 | CRED-02 | Phase 5 | Pending |
 | CRED-03 | Phase 5 | Pending |
 | CRED-04 | Phase 5 | Pending |
 | CRED-05 | Phase 5 | Pending |
-| SHARE-01 | Phase 4 | Pending |
-| SHARE-02 | Phase 4 | Pending |
-| SHARE-03 | Phase 4 | Pending |
+| SHARE-01 | Phase 4 | Complete |
+| SHARE-02 | Phase 4 | Complete |
+| SHARE-03 | Phase 4 | Complete |
 | SHARE-04 | Phase 8 | Pending |
 | SHARE-05 | Phase 8 | Pending |
 | SHARE-06 | Phase 8 | Pending |
