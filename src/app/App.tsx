@@ -17,6 +17,7 @@
 import { onMount, Show } from 'solid-js'
 
 import { ParameterColumn } from './components/ParameterColumn/ParameterColumn.tsx'
+import { AttributionPanel } from './components/ResultColumn/AttributionPanel.tsx'
 import { bundleVersionMismatchVariant } from './components/ResultColumn/BundleVersionBanner.tsx'
 import { EquityCurveChart } from './components/ResultColumn/EquityCurveChart.tsx'
 import { LogScaleToggle } from './components/ResultColumn/LogScaleToggle.tsx'
@@ -28,6 +29,7 @@ import { ThemeToggle } from './components/ThemeToggle.tsx'
 import { BUNDLE_VERSION } from '../data-bundle.generated.ts'
 import {
   backtestRequest,
+  currentAttribution,
   currentCaveatMessage,
   currentDerivedMetrics,
   currentKernelInputs,
@@ -141,6 +143,13 @@ export function App() {
                       metrics={currentDerivedMetrics()!}
                       contributionAmount={backtestRequest().contributionAmount}
                     />
+                    {/* D-08: always visible directly under the metrics panel, no independent
+                        empty/loading state -- it renders and clears exactly when MetricsPanel
+                        does. currentAttribution() is non-null in this branch by construction
+                        (storeSuccessfulRun sets both together). */}
+                    <Show when={currentAttribution() !== null}>
+                      <AttributionPanel attribution={currentAttribution()!} />
+                    </Show>
                   </Show>
                 </div>
               </Show>

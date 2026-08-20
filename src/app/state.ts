@@ -71,6 +71,7 @@ import { runBacktest } from '../kernel/backtest.ts'
 import type { KernelResult } from '../kernel/backtest.types.ts'
 import { solveCagr } from '../metrics/cagr.ts'
 import { buildCashFlows, solveIrr } from '../metrics/irr.ts'
+import { computeAttribution, type AttributionResult } from '../validation/attribution.ts'
 import { FINANCING_SPREAD_DEFAULT, GENERIC_3X_EXPENSE_RATIO } from '../validation/cost-parameters.ts'
 import { BUNDLE_VERSION } from '../data-bundle.generated.ts'
 import { decodeParams, encodeParams, type PermalinkParams } from './permalink.ts'
@@ -132,6 +133,17 @@ const [derivedMetrics, setDerivedMetrics] = createSignal<DerivedMetrics | null>(
 
 export function currentDerivedMetrics(): DerivedMetrics | null {
   return derivedMetrics()
+}
+
+/** ATTR-01/ATTR-02/D-08: the current run's cost-decomposition result, computed inside the same
+ * rAF-coalesced pass as `derivedMetrics` (see `storeSuccessfulRun` below) so the attribution panel
+ * never shows a value from a previous run while the chart/metrics show the current one. `null`
+ * exactly when `currentKernelResult()` is `null` -- the two states are mutually exclusive by
+ * construction, same discipline as `derivedMetrics`. */
+const [attribution, setAttribution] = createSignal<AttributionResult | null>(null)
+
+export function currentAttribution(): AttributionResult | null {
+  return attribution()
 }
 
 /** D-06: the resolved calendar date of `ruinBarIndex`, read through the same absolute-calendar-
@@ -343,6 +355,9 @@ function storeSuccessfulRun(
   setKernelInputs(inputs)
   setKernelResult(result)
   setDerivedMetrics(computeDerivedMetrics(currentBundle, inputs, result))
+  // ATTR-01/D-08: computed here, inside the same rAF-coalesced pass runBacktest already ran in
+  // (PERF-07b) -- no second requestAnimationFrame, no second performance.mark pair.
+  setAttribution(computeAttribution(inputs, result))
   setValidationError(null)
   setCaveatMessage(caveat)
   schedulePermalinkSync(inputs)
@@ -370,6 +385,7 @@ function clearForEviction(message: string): void {
   setKernelInputs(null)
   setKernelResult(null)
   setDerivedMetrics(null)
+  setAttribution(null)
   setValidationError(message)
   setCaveatMessage(null)
 }
@@ -476,6 +492,7 @@ export function resetAppState(): void {
   setKernelInputs(null)
   setKernelResult(null)
   setDerivedMetrics(null)
+  setAttribution(null)
   setValidationError(null)
   setCaveatMessage(null)
   setLinkBundleVersion(null)
