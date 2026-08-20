@@ -71,6 +71,14 @@ export interface KernelResult {
   /** Count of bars whose `calendarDaysElapsed >= longGapMinDays` (D-04). */
   longGapBarCount: number
   barCount: number
+  /** The largest peak-to-trough fractional decline of the portfolio value series, tracked
+   * in-loop (Phase 4 F-01, METR-03). The peak is the peak of the portfolio value INCLUDING
+   * applied contributions -- never a contribution-adjusted or money-weighted peak, so this
+   * definition cannot drift later. 0 for a series that never falls below its running peak; 1
+   * for a run that ruins, since the ruin bar's value is exactly 0 against a strictly positive
+   * prior peak; strictly between 0 and 1 for every other run. Unrounded float64; rounding
+   * happens only at render time in `src/metrics/format.ts`. */
+  maxDrawdown: number
 }
 
 /**

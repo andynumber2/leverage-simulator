@@ -14,7 +14,8 @@
 
 import path from 'node:path'
 
-import { buildKernelInputs, loadBundleFromDisk, type BacktestRequest } from '../src/data/kernel-inputs.ts'
+import { buildKernelInputs, type BacktestRequest } from '../src/data/kernel-inputs.ts'
+import { loadBundleFromDisk } from '../src/data/load-bundle-node.ts'
 
 /** SPX's first supported bar (manifest firstDate, calendarStartIndex 0): the earliest possible
  * entry so the measured window spans the full ~25,000-bar committed history, not a shorter slice

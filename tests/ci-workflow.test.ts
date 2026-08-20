@@ -136,3 +136,24 @@ describe('DATA-09 recompile-determinism gate', () => {
     expect(WORKFLOW).toMatch(/Recompile-determinism gate/)
   })
 })
+
+describe('04-03: PERF-08 build-before-bench ordering', () => {
+  test('a npm run build run step is present', () => {
+    expect(WORKFLOW).toMatch(/^\s*-\s*run:\s*npm run build\s*$/m)
+  })
+
+  test('npm run build appears before npm run bench in the workflow: the preview server has ' +
+    'nothing to serve otherwise', () => {
+    // Same positional-index comparison the DATA-09 recompile-determinism assertions already use
+    // for compile-data versus git diff.
+    const buildMentioned = WORKFLOW.indexOf('npm run build') >= 0
+    const benchMentioned = WORKFLOW.indexOf('npm run bench') >= 0
+
+    expect(buildMentioned, 'npm run build not found in workflow').toBe(true)
+    expect(benchMentioned, 'npm run bench not found in workflow').toBe(true)
+
+    const buildPos = WORKFLOW.indexOf('npm run build')
+    const benchPos = WORKFLOW.indexOf('npm run bench')
+    expect(buildPos < benchPos, 'npm run build should appear before npm run bench in the workflow').toBe(true)
+  })
+})

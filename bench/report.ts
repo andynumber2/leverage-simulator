@@ -23,6 +23,16 @@ import type { EnvironmentBlock } from './environment-block.ts'
 
 export type Verdict = 'pass' | 'fail' | 'unmeasured'
 
+/**
+ * 04-03: the highest phase whose PERF-08 sub-budgets must already carry a real measurement (not
+ * `unmeasured`) by the time a bench run's invariants are checked. Scoped to `requirementId ===
+ * 'PERF-08'` specifically, not every budget row due by this phase, so this check tracks only the
+ * family of rows this plan closes out: PERF-07's rows carry the same `implementedInPhase: 4` but
+ * are measured by a separate, later plan in this same phase, and must not trip this check before
+ * that plan lands.
+ */
+export const PERF_08_COVERAGE_PHASE = 4
+
 /** `spike-synthetic`: measured against seeded synthetic input by throwaway spike code (this
  * phase). `production`: measured against the real kernel/UI once a later phase re-registers the
  * row. Per PERF-11's prohibition, a spike-synthetic figure must never be presented as if it were
@@ -276,12 +286,24 @@ export function renderTable(
  * could accidentally ignore.
  *
  * - Every one of the eight requirement group headers (PERF-02..PERF-09) must be present.
- * - At least one row must be genuinely measured: a harness that measures nothing is broken,
- *   not passing (PERF-10's empty-input edge case).
+ * - At least one row must be genuinely measured, or at least one info line must have been
+ *   recorded: a harness that produces neither a measurement nor a diagnostic line is broken,
+ *   not passing (PERF-10's empty-input edge case). The info-line escape hatch exists for
+ *   diagnostic-only bench files (04-03's `playwright-context-probe.bench.test.ts`) that pin a
+ *   mechanism fact rather than a duration: `recordInfoLine` is still a genuine, asserted signal
+ *   that the harness ran and reported something real, which is what this invariant exists to
+ *   require -- it was never specifically about `MeasurementRow` as the only acceptable shape of
+ *   evidence.
  * - Every row's budgetId must exist in PERF_BUDGETS.
  * - No row may carry verdict "fail". This is the authoritative gate: it has visibility into
  *   every row regardless of which bench file recorded it, so a breach cannot be silenced by
  *   removing or weakening a single bench file's own assertion.
+ * - Every `requirementId === 'PERF-08'` budget id whose `implementedInPhase` is at or before
+ *   `PERF_08_COVERAGE_PHASE` must not carry verdict "unmeasured": once a PERF-08 sub-budget's
+ *   harness has landed, that row going back to unmeasured is a run failure, not a silent
+ *   omission (04-03). Checked after the verdict-fail gate above, not before it, for the same
+ *   reason the PERF-03 host-width guard below is: a deliberately-over-budget self-test fixture
+ *   must keep failing on its own breach, not on this check masking it.
  * - When `environment` is supplied, every measured row's implied score
  *   (`measuredMs / normalizedMs`) must agree with `environment.calibrationScore`: this
  *   structurally prevents a future bench file that samples its own score from producing rows
@@ -293,6 +315,7 @@ export function assertRunInvariants(
   rows: readonly MeasurementRow[],
   totalRuntimeMs: number,
   environment?: EnvironmentBlock,
+  infoLines: readonly string[] = [],
 ): void {
   const present = new Set(rows.map((r) => r.requirementId))
   const missing = allRequirementIds().filter((id) => !present.has(id))
@@ -302,11 +325,11 @@ export function assertRunInvariants(
     )
   }
 
-  const anyMeasured = rows.some((r) => r.verdict !== 'unmeasured')
+  const anyMeasured = rows.some((r) => r.verdict !== 'unmeasured') || infoLines.length > 0
   if (rows.length === 0 || !anyMeasured) {
     throw new Error(
-      'assertRunInvariants: zero rows measured this run: a harness that measures nothing is ' +
-        'broken, not passing',
+      'assertRunInvariants: zero rows measured and zero info lines recorded this run: a ' +
+        'harness that reports nothing is broken, not passing',
     )
   }
 
@@ -327,6 +350,32 @@ export function assertRunInvariants(
     const failingIds = failing.map((r) => r.budgetId).sort((a, b) => a.localeCompare(b))
     throw new Error(
       `assertRunInvariants: ${failing.length} row(s) failed budget: ${failingIds.join(', ')}`,
+    )
+  }
+
+  // PERF-08 coverage (04-03): reads the "due" set from PERF_BUDGETS itself (requirementId ===
+  // 'PERF-08' and implementedInPhase <= PERF_08_COVERAGE_PHASE), not a hand-maintained id list,
+  // so a future PERF-08 sub-budget added at a later phase is excluded automatically until its
+  // own implementedInPhase is reached. Deliberately placed after the verdict-fail gate above,
+  // not before it, for the same reason the PERF-03 host-width guard below is: `bench/selftest/
+  // over-budget.selftest.ts` records only a PERF-05 row and must keep failing on its own
+  // deliberate breach, not on this check masking it with an unrelated "PERF-08 unmeasured"
+  // reason.
+  const duePerf08Ids = (Object.keys(PERF_BUDGETS) as BudgetId[]).filter(
+    (id) =>
+      PERF_BUDGETS[id].requirementId === 'PERF-08' &&
+      PERF_BUDGETS[id].implementedInPhase <= PERF_08_COVERAGE_PHASE,
+  )
+  const stillUnmeasuredPerf08 = rows.filter(
+    (r) => duePerf08Ids.includes(r.budgetId) && r.verdict === 'unmeasured',
+  )
+  if (stillUnmeasuredPerf08.length > 0) {
+    const ids = stillUnmeasuredPerf08
+      .map((r) => r.budgetId)
+      .sort((a, b) => a.localeCompare(b))
+    throw new Error(
+      `assertRunInvariants: PERF-08 budget id(s) due for measurement by phase ` +
+        `${PERF_08_COVERAGE_PHASE} are still unmeasured: ${ids.join(', ')}`,
     )
   }
 

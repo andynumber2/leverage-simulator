@@ -39,10 +39,10 @@ measured in CI, not an aspiration.
 - [ ] **PERF-06**: An in-flight sweep is cancelled within one frame when the user changes a
       parameter, and superseded results are discarded rather than painted
 
-- [ ] **PERF-07**: No main-thread task exceeds 50ms during any interaction, verified by long-task
+- [x] **PERF-07**: No main-thread task exceeds 50ms during any interaction, verified by long-task
       measurement. Dragging a slider sustains 60fps
 
-- [ ] **PERF-08**: Cold load reaches interactive in under 1500ms and completes data load and
+- [x] **PERF-08**: Cold load reaches interactive in under 1500ms and completes data load and
       decode in under 1000ms on a typical broadband connection; warm load is under 300ms
 
 - [ ] **PERF-09**: Heatmap pan and zoom sustain 60fps at full cell count
@@ -76,7 +76,7 @@ measured in CI, not an aspiration.
 - [x] **DATA-07**: The bundled universe includes S&P 500 (daily to 1928), Nasdaq-100/QQQ, the
       real leveraged ETFs UPRO, TQQQ, SSO and QLD, and VTI, EFA, EEM and TLT
 
-- [ ] **DATA-08**: The app loads and decodes bundled assets directly into typed arrays with no
+- [x] **DATA-08**: The app loads and decodes bundled assets directly into typed arrays with no
       per-row parsing, and works fully offline after first load
 
 - [x] **DATA-09**: Data assets are content-versioned so a redeploy cannot serve a stale cached
@@ -135,15 +135,15 @@ measured in CI, not an aspiration.
 
 ### Metrics
 
-- [ ] **METR-01**: IRR (money-weighted return) is computed and is the default annualized metric
+- [x] **METR-01**: IRR (money-weighted return) is computed and is the default annualized metric
       whenever contributions are non-zero
 
-- [ ] **METR-02**: CAGR is available but is suppressed or explicitly qualified when a contribution
+- [x] **METR-02**: CAGR is available but is suppressed or explicitly qualified when a contribution
       schedule makes it misleading
 
-- [ ] **METR-03**: Maximum drawdown is computed and reported
-- [ ] **METR-04**: Final value as a multiple of total contributed is computed and reported
-- [ ] **METR-05**: A ruin flag is computed and reported, and is presented as a categorical outcome
+- [x] **METR-03**: Maximum drawdown is computed and reported
+- [x] **METR-04**: Final value as a multiple of total contributed is computed and reported
+- [x] **METR-05**: A ruin flag is computed and reported, and is presented as a categorical outcome
       distinct from a merely bad numeric result
 
 - [ ] **METR-06**: A sweep computes all display metrics per cell in a single pass, so switching the
@@ -181,14 +181,14 @@ measured in CI, not an aspiration.
 - [ ] **VIZ-07**: Color scales are perceptually uniform and colorblind-safe, and outcomes spanning
       orders of magnitude use a log or otherwise non-linear mapping rather than linear color
 
-- [ ] **VIZ-08**: Equity curves offer a log scale, and the choice of scale is visible
+- [x] **VIZ-08**: Equity curves offer a log scale, and the choice of scale is visible
 - [ ] **VIZ-09**: In hold-to-today mode, the short-horizon artifact at the recent edge is visually
       marked, so the right side of the chart is not read as comparable to the left
 
 - [ ] **VIZ-10**: The heatmap carries visible copy stating that entry windows overlap and that the
       grid is a sensitivity analysis over one shared history, not thousands of independent trials
 
-- [ ] **VIZ-11**: Charts are legible in both light and dark
+- [x] **VIZ-11**: Charts are legible in both light and dark
 
 ### Credibility
 
@@ -211,13 +211,13 @@ measured in CI, not an aspiration.
 
 ### Sharing and Export
 
-- [ ] **SHARE-01**: Every parameter is encoded in the URL as readable query params, so a pasted
+- [x] **SHARE-01**: Every parameter is encoded in the URL as readable query params, so a pasted
       link reproduces the exact run
 
-- [ ] **SHARE-02**: The URL carries a data-bundle version, and a permalink created against an older
+- [x] **SHARE-02**: The URL carries a data-bundle version, and a permalink created against an older
       bundle either reproduces faithfully or states clearly that the data has changed
 
-- [ ] **SHARE-03**: Permalink reproducibility is enforced by a determinism test
+- [x] **SHARE-03**: Permalink reproducibility is enforced by a determinism test
 - [ ] **SHARE-04**: User can export the current chart as a PNG
 - [ ] **SHARE-05**: User can export a run's underlying daily series as CSV, so the math can be
       checked independently
@@ -227,12 +227,12 @@ measured in CI, not an aspiration.
 
 ### Application Shell
 
-- [ ] **APP-01**: User can select a symbol from the bundled universe
+- [x] **APP-01**: User can select a symbol from the bundled universe
 - [ ] **APP-02**: User can select the history tier, with each tier's meaning stated on screen
-- [ ] **APP-03**: The app is a fully static build deployable to Cloudflare Pages with no backend,
+- [x] **APP-03**: The app is a fully static build deployable to Cloudflare Pages with no backend,
       no database, and no runtime external API calls
 
-- [ ] **APP-04**: Invalid or impossible parameter combinations are prevented or explained, not
+- [x] **APP-04**: Invalid or impossible parameter combinations are prevented or explained, not
       silently coerced
 
 ## v2 Requirements
@@ -280,8 +280,8 @@ measured in CI, not an aspiration.
 | PERF-04 | Phase 7 | Pending |
 | PERF-05 | Phase 7 | Pending |
 | PERF-06 | Phase 7 | Pending |
-| PERF-07 | Phase 4 | Pending |
-| PERF-08 | Phase 4 | Pending |
+| PERF-07 | Phase 4 | Complete |
+| PERF-08 | Phase 4 | Complete |
 | PERF-09 | Phase 7 | Pending |
 | PERF-10 | Phase 1 | Complete |
 | PERF-11 | Phase 1 | Complete |
@@ -292,7 +292,7 @@ measured in CI, not an aspiration.
 | DATA-05 | Phase 2 | Complete |
 | DATA-06 | Phase 2 | Complete |
 | DATA-07 | Phase 2 | Complete |
-| DATA-08 | Phase 4 | Pending |
+| DATA-08 | Phase 4 | Complete |
 | DATA-09 | Phase 2 | Complete |
 | SIM-01 | Phase 3 | Complete |
 | SIM-02 | Phase 3 | Complete |
@@ -310,11 +310,11 @@ measured in CI, not an aspiration.
 | VALID-02 | Phase 3 | Complete |
 | VALID-03 | Phase 3 | Complete |
 | VALID-04 | Phase 5 | Pending |
-| METR-01 | Phase 4 | Pending |
-| METR-02 | Phase 4 | Pending |
-| METR-03 | Phase 4 | Pending |
-| METR-04 | Phase 4 | Pending |
-| METR-05 | Phase 4 | Pending |
+| METR-01 | Phase 4 | Complete |
+| METR-02 | Phase 4 | Complete |
+| METR-03 | Phase 4 | Complete |
+| METR-04 | Phase 4 | Complete |
+| METR-05 | Phase 4 | Complete |
 | METR-06 | Phase 7 | Pending |
 | ATTR-01 | Phase 5 | Pending |
 | ATTR-02 | Phase 5 | Pending |
@@ -326,25 +326,25 @@ measured in CI, not an aspiration.
 | VIZ-05 | Phase 6 | Pending |
 | VIZ-06 | Phase 7 | Pending |
 | VIZ-07 | Phase 6 | Pending |
-| VIZ-08 | Phase 4 | Pending |
+| VIZ-08 | Phase 4 | Complete |
 | VIZ-09 | Phase 7 | Pending |
 | VIZ-10 | Phase 6 | Pending |
-| VIZ-11 | Phase 4 | Pending |
+| VIZ-11 | Phase 4 | Complete |
 | CRED-01 | Phase 5 | Pending |
 | CRED-02 | Phase 5 | Pending |
 | CRED-03 | Phase 5 | Pending |
 | CRED-04 | Phase 5 | Pending |
 | CRED-05 | Phase 5 | Pending |
-| SHARE-01 | Phase 4 | Pending |
-| SHARE-02 | Phase 4 | Pending |
-| SHARE-03 | Phase 4 | Pending |
+| SHARE-01 | Phase 4 | Complete |
+| SHARE-02 | Phase 4 | Complete |
+| SHARE-03 | Phase 4 | Complete |
 | SHARE-04 | Phase 8 | Pending |
 | SHARE-05 | Phase 8 | Pending |
 | SHARE-06 | Phase 8 | Pending |
-| APP-01 | Phase 4 | Pending |
+| APP-01 | Phase 4 | Complete |
 | APP-02 | Phase 5 | Pending |
-| APP-03 | Phase 4 | Pending |
-| APP-04 | Phase 4 | Pending |
+| APP-03 | Phase 4 | Complete |
+| APP-04 | Phase 4 | Complete |
 
 **Coverage:**
 

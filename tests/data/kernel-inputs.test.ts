@@ -20,7 +20,8 @@ import { describe, expect, test } from 'vitest'
 import { seriesView } from '../../tools/bundle-compiler/src/binary-format.ts'
 import { runBacktest } from '../../src/kernel/backtest.ts'
 import type { KernelOutputs, KernelParams, KernelSeries } from '../../src/kernel/backtest.types.ts'
-import { buildKernelInputs, loadBundleFromDisk, type BacktestRequest, type LoadedBundle } from '../../src/data/kernel-inputs.ts'
+import { buildKernelInputs, type BacktestRequest, type LoadedBundle } from '../../src/data/kernel-inputs.ts'
+import { loadBundleFromDisk } from '../../src/data/load-bundle-node.ts'
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 const RUN_BACKTEST_SCRIPT = path.join(REPO_ROOT, 'scripts/run-backtest.ts')

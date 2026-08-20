@@ -1,0 +1,458 @@
+/**
+ * src/app/styles.css
+ *
+ * Design tokens as CSS custom properties (04-UI-SPEC.md "Color", "Spacing Scale",
+ * "Typography"). Theme switching logic (prefers-color-scheme + manual override -> data-theme)
+ * is plan 04-08; the tokens ship here because EquityCurveChart reads them at render time from
+ * its first commit (via getComputedStyle), and the default (light) palette must be correct
+ * before any theme toggle exists.
+ */
+
+:root {
+  --color-bg: #f5f6f7;
+  --color-surface: #ffffff;
+  --color-border: #e1e4e8;
+  --color-text: #1a1d21;
+  --color-text-muted: #5b6169;
+  --color-accent: #2e6bd6;
+  --color-destructive: #c4341f;
+
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 16px;
+  --space-lg: 24px;
+  --space-xl: 32px;
+
+  --font-size-label: 12px;
+  --font-size-body: 14px;
+  --font-size-secondary-metric: 16px;
+  --font-size-headline-metric: 28px;
+
+  --font-ui: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+}
+
+[data-theme='dark'] {
+  --color-bg: #14161a;
+  --color-surface: #1d2024;
+  --color-border: #2b2f35;
+  --color-text: #e7e9ec;
+  --color-text-muted: #9aa0a8;
+  --color-accent: #5b9bf0;
+  --color-destructive: #e2604b;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-ui);
+  font-size: var(--font-size-body);
+}
+
+#root {
+  min-height: 100vh;
+}
+
+/* D-17: fixed-width parameter column left, result column right, at >= 900px; stacks to a
+   single column below that, parameter group above the result group. */
+.app-layout {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  padding: var(--space-md);
+}
+
+.parameter-column {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  padding: var(--space-lg);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+/* D-18: xs/sm between related elements inside one control group; md/lg separate distinct
+   groups (symbol+dividend mode / entry date / leverage). Never xl+ inside the column. */
+.parameter-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.control-label {
+  font-size: var(--font-size-label);
+  color: var(--color-text);
+}
+
+.dividend-toggle-row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  margin-top: var(--space-xs);
+}
+
+/* UI-SPEC E3 long-text: a fixed ten-character monospace width, locale independent. */
+.entry-date-input {
+  font-family: var(--font-mono);
+  width: 10ch;
+  padding: var(--space-xs);
+}
+
+/* D-18: the reusable inline source-citation annotation, Label size, muted, beside its control --
+   never in a tooltip. */
+.source-citation {
+  display: block;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-label);
+  line-height: 1.4;
+}
+
+.leverage-control {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.leverage-control input[type='range'] {
+  width: 100%;
+}
+
+/* UI-SPEC E2 long-text: a fixed-width slot sized for two integer digits, two decimals and the
+   trailing lowercase x, so a fractional value cannot widen the control. */
+.leverage-readout-slot {
+  display: inline-flex;
+  align-items: baseline;
+  font-family: var(--font-mono);
+}
+
+.leverage-readout {
+  width: 5ch;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-secondary-metric);
+  text-align: right;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  background: var(--color-surface);
+  color: var(--color-text);
+  padding: var(--space-xs);
+}
+
+.leverage-readout-suffix {
+  margin-left: var(--space-xs);
+  color: var(--color-text-muted);
+}
+
+.leverage-range-error {
+  color: var(--color-destructive);
+  font-size: var(--font-size-label);
+}
+
+.holding-mode-control {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.holding-mode-choice {
+  display: flex;
+  gap: var(--space-sm);
+  font-size: var(--font-size-body);
+}
+
+.holding-mode-option {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+/* UI-SPEC E4 long-text: a bar count is a whole number of trading days, no upper visual bound
+   declared -- width left to the browser's native number-input rendering. */
+.holding-period-bars-input {
+  font-family: var(--font-mono);
+  width: 8ch;
+  padding: var(--space-xs);
+}
+
+.contribution-control {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+/* UI-SPEC E4 long-text: a monospace slot sized for a nine-digit figure, so the control's width
+   does not vary with the typed amount. */
+.contribution-amount-input {
+  font-family: var(--font-mono);
+  width: 9ch;
+  padding: var(--space-xs);
+}
+
+.contribution-error {
+  color: var(--color-destructive);
+  font-size: var(--font-size-label);
+}
+
+.cost-controls {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.expense-ratio-control,
+.financing-spread-control {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+/* UI-SPEC E5: both cost fields render in percent units, monospace, a fixed-width slot. */
+.cost-input {
+  font-family: var(--font-mono);
+  width: 7ch;
+  padding: var(--space-xs);
+}
+
+.cost-error {
+  color: var(--color-destructive);
+  font-size: var(--font-size-label);
+}
+
+.result-column {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  padding: var(--space-md);
+  min-height: 200px;
+}
+
+@media (min-width: 900px) {
+  .app-layout {
+    flex-direction: row;
+    align-items: flex-start;
+  }
+
+  .parameter-column {
+    flex: 0 0 280px;
+    align-self: stretch;
+    overflow-y: auto;
+  }
+
+  .result-column {
+    flex: 1 1 auto;
+  }
+}
+
+.loading-notice,
+.empty-run-notice {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-body);
+}
+
+.load-failure {
+  color: var(--color-destructive);
+}
+
+/* D-11/D-12/D-18: single-field eviction and (04-05) cross-field caveat copy renders in the
+   reserved destructive color, never the muted loading/empty-run tone. */
+.validation-explanation {
+  color: var(--color-destructive);
+  font-size: var(--font-size-body);
+  font-weight: 600;
+}
+
+/* D-20: the screenshot region has no styling of its own beyond what its children already
+   contribute -- it exists as a DOM boundary (the data-testid the screenshot-region test asserts
+   containment against), not a second visual card nested inside .result-column. */
+.screenshot-region {
+  display: flex;
+  flex-direction: column;
+}
+
+/* D-20: symbol, effective date range and bundle version -- the facts a screenshot needs beyond
+   the chart and metrics to be self-contained. Muted, Label-sized text: informational, never
+   competing with the chart or the headline metric for first read. */
+.result-summary-header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-sm);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-label);
+  font-family: var(--font-mono);
+}
+
+.equity-curve-chart {
+  width: 100%;
+}
+
+/* D-19: the log/linear toggle and the theme override sit together, persistently visible,
+   adjacent to the chart. */
+.chart-scale-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-sm);
+}
+
+.log-scale-toggle {
+  display: inline-flex;
+  gap: var(--space-xs);
+}
+
+.log-scale-toggle__button {
+  min-width: 44px;
+  min-height: 44px;
+  padding: var(--space-xs) var(--space-sm);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-label);
+  color: var(--color-text-muted);
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.log-scale-toggle__button--active {
+  color: var(--color-accent);
+  border-color: var(--color-accent);
+}
+
+/* D-19 (task text): the manual theme-override control is deliberately NEVER accent-colored --
+   accent stays reserved for the equity-curve stroke, the active log/linear toggle state, focus
+   outlines and the Copy link button, so the chart stays the screen's only saturated element. Its
+   state is communicated by icon swap alone (ThemeToggle.tsx), styled like every other muted
+   chrome control. 44x44px minimum hit area (Spacing Scale's icon-only touch-target exception). */
+.theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+  padding: var(--space-xs);
+  color: var(--color-text-muted);
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.theme-toggle svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* D-07: the ruin banner is a categorical state change, styled in the reserved destructive color,
+   sitting above the (retained, subordinate) metrics panel. */
+.ruin-banner {
+  margin-top: var(--space-md);
+  padding: var(--space-sm) var(--space-md);
+  color: var(--color-destructive);
+  font-weight: 600;
+}
+
+/* METR-01 through METR-04: five fixed rows, the headline (row 1) at 28px monospace, the only
+   element on screen at that size (04-UI-SPEC.md Typography). */
+.metrics-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  margin-top: var(--space-md);
+}
+
+.metric-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-xs) var(--space-sm);
+}
+
+.metric-label {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-label);
+}
+
+.metric-value {
+  font-family: var(--font-mono);
+  font-weight: 600;
+}
+
+.metric-value--headline {
+  font-size: var(--font-size-headline-metric);
+}
+
+.metric-value--secondary {
+  font-size: var(--font-size-secondary-metric);
+}
+
+.metric-note {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-label);
+  flex-basis: 100%;
+}
+
+/* SHARE-01/UI-SPEC E10: the phase's one explicit CTA, accent-colored per the Color table's
+   "Copy Link button" row. Fixed min-width across all three label states (idle/confirmed/failed)
+   is what actually keeps the button from resizing on state change -- verified by
+   getBoundingClientRect in tests/app/permalink.browser.test.ts -- not the label text's character
+   count, which varies. */
+.copy-link-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  margin-top: var(--space-md);
+}
+
+.copy-link-button {
+  min-width: 140px;
+  min-height: 44px;
+  padding: var(--space-xs) var(--space-md);
+  font-family: var(--font-ui);
+  font-size: var(--font-size-body);
+  font-weight: 600;
+  color: var(--color-accent);
+  background: transparent;
+  border: 1px solid var(--color-accent);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.copy-link-button:disabled {
+  color: var(--color-text-muted);
+  border-color: var(--color-border);
+  cursor: not-allowed;
+}
+
+.copy-link-button[data-copy-state='failed'] {
+  color: var(--color-destructive);
+  border-color: var(--color-destructive);
+}
+
+/* UI-SPEC E10 error/overflow: the ONE state the permalink is ever rendered inline in at all --
+   a scrollable single-line monospace field, never wrapped or truncated silently. */
+.copy-link-fallback {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-label);
+  color: var(--color-text);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  padding: var(--space-xs) var(--space-sm);
+  overflow-x: auto;
+  white-space: nowrap;
+}

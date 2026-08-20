@@ -1,0 +1,199 @@
+/**
+ * tests/app/tracer.browser.test.ts
+ *
+ * The end-to-end browser regression for Task 3's tracer path: mounts the real app (through
+ * `mountApp`, the same path production's `main.tsx` uses), waits for the bundle to load, and
+ * asserts the default landing run reaches a painted chart with both `app-data-ready` and
+ * `app-interactive` performance marks recorded in order. A second case stubs the manifest fetch
+ * to decode to zero series and asserts the named bundle-load failure line renders instead of a
+ * blank chart or an empty control (DATA-08 empty edge).
+ */
+
+import { afterEach, beforeEach, expect, test, vi } from 'vitest'
+
+import { MANIFEST_PATH } from '../../src/data-bundle.generated.ts'
+import { mountApp } from '../../src/app/main.tsx'
+import { axisSizeForLabels } from '../../src/app/components/ResultColumn/EquityCurveChart.tsx'
+import { currentKernelInputs, currentKernelResult, resetAppState } from '../../src/app/state.ts'
+
+/** uPlot's built-in default `axis.size`. The landing run's equity values are wider than this at
+ * the chart's 12px monospace axis font, which is why the gutter must be measured, not defaulted. */
+const UPLOT_DEFAULT_AXIS_SIZE_PX = 50
+
+function performanceEntries(name: string): PerformanceEntryList {
+  return performance.getEntriesByName(name)
+}
+
+async function waitFor(predicate: () => boolean, timeoutMs = 5000): Promise<void> {
+  const start = performance.now()
+  while (!predicate()) {
+    if (performance.now() - start > timeoutMs) {
+      throw new Error('tracer.browser.test: waitFor timed out waiting for a condition')
+    }
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+  }
+}
+
+let container: HTMLDivElement | undefined
+let disposeApp: (() => void) | undefined
+
+// Plan 04-07: `mountApp` now decodes `window.location.search` as a permalink (D-13). The Vitest
+// browser-mode iframe this file runs in carries its OWN `sessionId`/`iframeId` query params
+// (harness plumbing, unrelated to this app), which `decodeParams` correctly rejects as unknown
+// keys -- this file's tests are about the tracer path, not the permalink feature, so they clear
+// the incidental harness params back to a clean boot before every mount.
+beforeEach(() => {
+  window.history.replaceState(null, '', window.location.pathname)
+})
+
+afterEach(() => {
+  disposeApp?.()
+  disposeApp = undefined
+  container?.remove()
+  container = undefined
+  performance.clearMarks('app-data-ready')
+  performance.clearMarks('app-interactive')
+  performance.clearMeasures('app-recompute')
+  vi.unstubAllGlobals()
+})
+
+test('the default landing run computes and paints a real SPX 3x total-return equity curve', async () => {
+  container = document.createElement('div')
+  document.body.appendChild(container)
+  disposeApp = mountApp(container)
+
+  await waitFor(() => container!.querySelector('[data-testid="equity-curve-chart"] canvas') !== null)
+
+  const canvas = container.querySelector('[data-testid="equity-curve-chart"] canvas')
+  expect(canvas).not.toBeNull()
+
+  await waitFor(() => performanceEntries('app-data-ready').length > 0)
+  await waitFor(() => performanceEntries('app-interactive').length > 0)
+
+  const dataReady = performanceEntries('app-data-ready')
+  const interactive = performanceEntries('app-interactive')
+  expect(dataReady.length).toBe(1)
+  expect(interactive.length).toBe(1)
+  expect(dataReady[0]!.startTime).toBeLessThanOrEqual(interactive[0]!.startTime)
+
+  const manifestResponse = await fetch(MANIFEST_PATH)
+  const manifest = (await manifestResponse.json()) as {
+    series: Array<{ id: string; tiers: { strict: { firstDate: string } | null } }>
+  }
+  const spxTotalReturn = manifest.series.find((s) => s.id === 'SPX/total-return')
+  expect(spxTotalReturn).toBeDefined()
+  expect(spxTotalReturn!.tiers.strict).not.toBeNull()
+
+  const inputs = currentKernelInputs()
+  expect(inputs).not.toBeNull()
+  expect(inputs!.meta.seriesId).toBe('SPX/total-return')
+  expect(inputs!.window.firstDate).toBe(spxTotalReturn!.tiers.strict!.firstDate)
+
+  const result = currentKernelResult()
+  expect(result).not.toBeNull()
+  expect(Number.isFinite(result!.finalValue)).toBe(true)
+  expect(result!.finalValue).toBeGreaterThan(0)
+
+  await waitFor(() => performance.getEntriesByName('app-recompute', 'measure').length >= 1)
+  const recomputeMeasures = performance.getEntriesByName('app-recompute', 'measure')
+  expect(recomputeMeasures.length).toBeGreaterThanOrEqual(1)
+})
+
+test('a manifest that decodes to zero series renders the named failure line, never a blank chart', async () => {
+  const originalFetch = window.fetch.bind(window)
+  vi.stubGlobal('fetch', async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = typeof input === 'string' ? input : input.toString()
+    if (url.endsWith(MANIFEST_PATH)) {
+      const response = await originalFetch(input, init)
+      const manifest = await response.json()
+      manifest.series = []
+      return new Response(JSON.stringify(manifest), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    }
+    return originalFetch(input, init)
+  })
+
+  // `initializeApp` is idempotent and reuses an already-loaded bundle, so an earlier test's
+  // successful load would otherwise make this mount skip the fetch entirely and never see the
+  // stub. Clearing the cached bundle is what makes "load it again" distinguishable from
+  // "you already have it".
+  resetAppState()
+
+  container = document.createElement('div')
+  document.body.appendChild(container)
+  disposeApp = mountApp(container)
+
+  await waitFor(() => container!.querySelector('[data-testid="load-failure"]') !== null)
+
+  const failureEl = container.querySelector('[data-testid="load-failure"]')
+  expect(failureEl).not.toBeNull()
+  expect(failureEl!.textContent).toMatch(/no series named/i)
+
+  expect(container.querySelector('[data-testid="equity-curve-chart"] canvas')).toBeNull()
+  expect(container.querySelector('canvas')).toBeNull()
+})
+
+test('the y-axis gutter is measured from its labels, so wide equity values are not clipped', async () => {
+  container = document.createElement('div')
+  document.body.appendChild(container)
+  disposeApp = mountApp(container)
+
+  await waitFor(() => container!.querySelector('[data-testid="equity-curve-chart"] canvas') !== null)
+
+  // uPlot positions `.u-over` (the plotting area) inset by exactly the axis sizes it allotted,
+  // so its offsetLeft IS the rendered y-axis gutter width in CSS pixels.
+  const over = container.querySelector<HTMLElement>('[data-testid="equity-curve-chart"] .u-over')
+  expect(over).not.toBeNull()
+
+  const gutterPx = over!.offsetLeft
+  expect(gutterPx).toBeGreaterThan(UPLOT_DEFAULT_AXIS_SIZE_PX)
+
+  const labels = Array.from(
+    container.querySelectorAll<HTMLElement>('[data-testid="equity-curve-chart"] .u-legend'),
+  )
+  expect(labels.length).toBeGreaterThan(0) // the chart mounted fully, not just a bare canvas
+})
+
+test('the y-axis gutter is the same width on a 2x display as on a 1x one', async () => {
+  // The reported symptom was a chart whose axis clipped on a Retina laptop panel but rendered
+  // correctly once the same, unresized window was dragged to a 1x external monitor. uPlot
+  // recomputes axis sizes on `dppxchange`, so any device-pixel-ratio factor in the gutter
+  // measurement silently changes the answer when the window moves between displays. The gutter
+  // is specified in CSS pixels, so the correct dependence on the ratio is none at all.
+  async function mountAndMeasureGutter(): Promise<number> {
+    container = document.createElement('div')
+    document.body.appendChild(container)
+    disposeApp = mountApp(container)
+    await waitFor(() => container!.querySelector('[data-testid="equity-curve-chart"] .u-over') !== null)
+    const over = container.querySelector<HTMLElement>('[data-testid="equity-curve-chart"] .u-over')
+    const gutter = over!.offsetLeft
+    disposeApp()
+    disposeApp = undefined
+    container.remove()
+    container = undefined
+    return gutter
+  }
+
+  const atOneX = await mountAndMeasureGutter()
+
+  vi.stubGlobal('devicePixelRatio', 2)
+  const atTwoX = await mountAndMeasureGutter()
+
+  expect(atTwoX).toBe(atOneX)
+  expect(atTwoX).toBeGreaterThan(UPLOT_DEFAULT_AXIS_SIZE_PX)
+})
+
+test('axisSizeForLabels sizes to the widest label plus the tick and gap', () => {
+  // One stub character width, so the expected number is arithmetic rather than font-dependent.
+  const measure = (label: string): number => label.length * 7
+  const size = axisSizeForLabels(measure, ['10', '1,000', '1,000,000'], 10, 5)
+  expect(size).toBe(10 + 5 + '1,000,000'.length * 7)
+
+  // No labels: the gutter still has to hold the tick and gap.
+  expect(axisSizeForLabels(measure, [], 10, 5)).toBe(15)
+
+  // Fractional measurements round up -- a gutter half a pixel short still clips.
+  expect(axisSizeForLabels(() => 20.2, ['x'], 10, 5)).toBe(36)
+})

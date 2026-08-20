@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#2e6bd6" />
+    <title>Leverage Simulator</title>
+    <!--
+      APP-03: this file must reference no external origin -- no font CDN, no analytics tag, no
+      external script. That prohibition is load-bearing (T-04-05) and is gated mechanically in
+      plan 04-08. Everything below resolves to this page's own origin only.
+
+      D-04: manifest.webmanifest and icon.svg are hand-authored static files under public/,
+      referenced by this page's own origin only -- vite-plugin-pwa's own manifest generation is
+      disabled (vite.config.ts's manifest: false) so this is the one manifest dist/ ever ships.
+    -->
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="icon" href="/icon.svg" type="image/svg+xml" />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/app/main.tsx"></script>
+  </body>
+</html>

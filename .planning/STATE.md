@@ -2,18 +2,18 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_phase: 03
-current_phase_name: simulation-kernel-and-the-upro-tqqq-gate
-status: phase-complete
-stopped_at: Phase 03 verified and complete
-last_updated: "2026-08-18T22:03:34.734Z"
-last_activity: 2026-08-18
+current_phase: 04
+current_phase_name: first-defensible-backtest-in-the-browser
+status: verifying
+stopped_at: Phase 04 at verification -- all 8 plans executed, 04-VERIFICATION.md human_needed, its seven human_verification items now closed by tests/app/narrow-viewport.browser.test.ts
+last_updated: "2026-08-20T03:37:00.000Z"
+last_activity: 2026-08-20
+last_activity_desc: "Quick task 260820-4qx: fixed the uPlot log-scale renderer hang and closed phase 04's backstop UAT"
 progress:
-  total_phases: 3
+  total_phases: 8
   completed_phases: 3
-  total_plans: 20
-  completed_plans: 20
-last_activity_desc: Phase 03 shipped as PR #3; Nyquist validation completed for phases 01 and 02
+  total_plans: 28
+  completed_plans: 28
 ---
 
 # Project State
@@ -23,22 +23,33 @@ last_activity_desc: Phase 03 shipped as PR #3; Nyquist validation completed for 
 See: .planning/PROJECT.md (updated 2026-08-16)
 
 **Core value:** Given a symbol, a leverage level, an entry point, and a contribution schedule, produce a defensible outcome and show which mechanism consumed the money, in a form that can be pasted into an argument.
-**Current focus:** Phase 03 — simulation-kernel-and-the-upro-tqqq-gate
+**Current focus:** Phase 04 — first-defensible-backtest-in-the-browser
 
 ## Current Position
 
-Phase: 03 (simulation-kernel-and-the-upro-tqqq-gate) - COMPLETE
-Plan: 6 of 6
-Status: Phase 03 shipped as PR #3, awaiting CI and merge. Next: Phase 4.
-Last activity: 2026-08-18 - Completed quick task 260818-v2d: resolve WINDOWS #2 calibration runner-variance in bench/calibration.ts
+Phase: 04 (first-defensible-backtest-in-the-browser) — VERIFYING
+Plan: 8 of 8 executed
+Status: Phase 04 sits at verification. 04-VERIFICATION.md's status is `human_needed`; its seven
+human_verification items are now closed by tests/app/narrow-viewport.browser.test.ts (see
+04-UAT.md), which was the last gap keeping the phase from a passing verification.
+Last activity: 2026-08-20 — Quick task 260820-4qx (uPlot log-scale renderer hang fix)
 
-Progress: [██████████] 100%
+Progress: [███░░░░░░░] 38%  (3 of 8 roadmap phases complete)
+
+> `total_phases` read 4 here until 2026-08-20 and the bar read 75%. The field had been
+> overwritten with the current phase number on every phase transition since `c5eefa2`
+> (`docs(01): create phase plan`, 2026-08-16), which set it to 1 the commit after the roadmap
+> correctly wrote 8. It tracked phases-started, not phases-in-milestone, so the bar overstated
+> completion for the whole project. ROADMAP.md has listed 8 phases throughout and nothing else
+> consumed the field, so the damage was confined to this percentage. Expect the next phase
+> transition to overwrite it again unless the GSD STATE writer is fixed to read the count from
+> ROADMAP.md.
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 20
+- Total plans completed: 28
 - Average duration: —
 - Total execution time: —
 
@@ -65,6 +76,7 @@ Progress: [██████████] 100%
 | Phase 01 P04 | 35min | 3 tasks | 3 files |
 | Phase 01 P05 | 15min | 2 tasks | 10 files |
 | Phase 01 P06 | 16min | 3 tasks | 23 files |
+| Phase 04 P01 | ~5h (paused for container restart) | 3 tasks | 27 files |
 
 ## Accumulated Context
 
@@ -99,6 +111,9 @@ Recent decisions affecting current work:
 - [PROJECT.md Key Decisions]: 03-06: D-10 AMENDED. The gate's synthetic is built from the TOTAL-return index, not the price-return index. Pairing a financing charge with a dividend-stripped return leg charged for exposure the model never credited, and that asymmetry was the entire Gate 2 residual (UPRO -6.968% to +0.254%, TQQQ -3.860% to +0.399%). A leveraged ETF's swap counterparty delivers the index total return against financing, so the total-return leg is what the financing term already prices. Phase 5's VALID-04 in-app view must render this same amended pairing or it will show users a ~7%/yr phantom gap as if it were real cost
 - [PROJECT.md Key Decisions]: 03-06: TOLERANCE_SAFETY_FACTOR now applies to reasoned mechanism rows only; rows flagged measured:true are added at face value. The factor exists to cover a reasoned estimate being off by half, so scaling a measurement by 1.5x would have set the tolerance at 5.715% instead of 3.955% and let a real regression hide inside the margin
 - [quick-260818-v2d]: WINDOWS.md entry #2 named one problem and there were two. The anchor cannot see parallel width, which is latent and worth up to 6.1x, and was dormant in all 13 recorded CI runs because every one of them drew a 4-core runner. Separately, each workload has its own elasticity to host interference, which is chronic and worth 6.36% residual CV. The first is fixed by measuring PERF-03 at the declared 4-core baseline width on every host and withholding its verdict when the recorded `hardwareConcurrency` differs, provably a no-op on the D-17 baseline, where every recorded run already resolved workerCount 3. The second is documented as a measured band rather than fixed, because more runs is its only remedy: a single run supports a headroom claim only to roughly +/-13%. The ledger's own numeric claim did not survive the larger sample: the three runs it cited included the single most anomalous run of the 13, and that run inflated the single-threaded PERF-02 by the same amount it inflated PERF-03, which a pool-specific mechanism cannot explain. `NOMINAL_REFERENCE_MS` stayed 40 and no budget value moved
+- [Phase ?]: 04-01: Y-axis gutter is measured from the labels uPlot is about to draw (axis.size hook), not left at uPlot's fixed 50px default, and measured on a private CSS-sized canvas context with no devicePixelRatio arithmetic -- closes the plan's backstop must_have with regressions
+- [Phase ?]: 04-01: Package legitimacy gate approved solid-js, vite-plugin-solid, vite despite SUS 'too-new' verdicts (publish-date heuristic); all three resolved to canonical github.com/solidjs and github.com/vitejs repos at millions of weekly downloads
+- [quick-260820-4qx]: uPlot's built-in `logAxisSplits` cannot advance below a roughly 1e-22 log y-scale minimum (the NDX/leverage-10/entry-1999-03-04 permalink hit this and killed the renderer), so the log y axis now supplies its own decade splits (`log-axis-splits.ts`) plus an identity `filter`, chosen over clamping the scale range or truncating the series so the full curve stays visible
 
 ### Pending Todos
 
@@ -148,6 +163,7 @@ Recent decisions affecting current work:
 | 260816-p8z | Make the bench calibration score canonical per run | 2026-08-16 | e345a88 |  | [260816-p8z-make-the-bench-calibration-score-canonic](./quick/260816-p8z-make-the-bench-calibration-score-canonic/) |
 | 260816-qae | Record the D-20 escalation for PERF-03 against the real CI baseline and correct docs citing sandbox figures | 2026-08-16 | 8c5a250 |  | [260816-qae-record-the-d-20-escalation-for-perf-03-a](./quick/260816-qae-record-the-d-20-escalation-for-perf-03-a/) |
 | 260818-v2d | resolve WINDOWS #2 calibration runner-variance in bench/calibration.ts | 2026-08-18 | cc3d715 | Verified | [260818-v2d-resolve-windows-2-calibration-runner-var](./quick/260818-v2d-resolve-windows-2-calibration-runner-var/) |
+| 260820-4qx | Fix uPlot log-scale renderer hang in the equity curve chart; close phase 04's narrow-viewport UAT | 2026-08-20 | a55b611 |  | [260820-4qx-fix-uplot-log-scale-renderer-hang-in-equ](./quick/260820-4qx-fix-uplot-log-scale-renderer-hang-in-equ/) |
 
 ## Deferred Items
 
@@ -159,6 +175,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-08-18T02:06:27.735Z
-Stopped at: Phase 03 verified and complete
-Resume file: .planning/phases/03-simulation-kernel-and-the-upro-tqqq-gate/03-VERIFICATION.md
+Last session: 2026-08-19T19:14:16.025Z
+Stopped at: Completed 04-01-PLAN.md
+Resume file: None
