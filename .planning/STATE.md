@@ -2,11 +2,11 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_phase: 04
-current_phase_name: first-defensible-backtest-in-the-browser
-status: complete
+current_phase: 05
+current_phase_name: attribution-and-the-credibility-surface
+status: executing
 stopped_at: Phase 05 UI-SPEC approved
-last_updated: "2026-08-20T18:54:29.483Z"
+last_updated: "2026-08-20T18:58:38.290Z"
 last_activity: 2026-08-20
 last_activity_desc: "Phase 04 shipped: PR #4 merged to main, CI green"
 progress:
@@ -23,17 +23,17 @@ progress:
 See: .planning/PROJECT.md (updated 2026-08-16)
 
 **Core value:** Given a symbol, a leverage level, an entry point, and a contribution schedule, produce a defensible outcome and show which mechanism consumed the money, in a form that can be pasted into an argument.
-**Current focus:** Phase 05 — attribution-and-the-credibility-surface (not yet started)
+**Current focus:** Phase 05 — attribution-and-the-credibility-surface
 
 ## Current Position
 
-Phase: 04 (first-defensible-backtest-in-the-browser) — COMPLETE, merged to main
-Plan: 8 of 8 executed
-Status: Shipped. PR #4 merged as 029ea10, CI green on the merge commit.
+Phase: 05 (attribution-and-the-credibility-surface) — EXECUTING
+Plan: 1 of 9
+Status: Executing Phase 05
   Verification passed 22/22. Security audit closed 33 of 34 threats, 0 blocking.
   Broken-windows ledger at 0 open.
 Next: Phase 05 (attribution-and-the-credibility-surface). Run /gsd-discuss-phase 05 to begin.
-Last activity: 2026-08-20 — Phase 04 shipped
+Last activity: 2026-08-20 — Phase 05 execution started
 
 Progress: [█████░░░░░] 50%  (4 of 8 roadmap phases complete)
 
