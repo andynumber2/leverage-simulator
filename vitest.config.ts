@@ -438,29 +438,67 @@ export default defineConfig({
                       // First, ONLINE load: registers the service worker and lets it precache the
                       // whole bundled universe (D-04) before the network is ever disabled.
                       await page.goto(origin, { waitUntil: 'load' })
-                      await page.waitForFunction(async () => {
-                        if (navigator.serviceWorker === undefined) return false
-                        const registration = await navigator.serviceWorker.getRegistration()
-                        return registration?.active?.state === 'activated'
+
+                      // The worker must be BOTH active and actually controlling this page before
+                      // the network is cut. This used to be a `waitForFunction` with an `async`
+                      // predicate checking `registration.active.state === 'activated'`, and on the
+                      // GitHub runner it did not hold: the state sampled a few lines below came
+                      // back `active: null` with 17 of the 19 precache entries written, meaning
+                      // the network was disabled while the worker was still installing. The
+                      // offline reload then had no controller and died with
+                      // ERR_INTERNET_DISCONNECTED. It passed locally purely because this machine
+                      // finished precaching inside the `app-interactive` wait that follows.
+                      //
+                      // `navigator.serviceWorker.ready` is the correct condition and is awaited
+                      // inside a single `page.evaluate`, which resolves the promise it returns
+                      // rather than depending on how the polling wrapper treats an async
+                      // predicate. `ready` resolves only once an active worker exists for this
+                      // scope, and a worker cannot activate until its install handler settles,
+                      // which is what writes the precache. Control is then awaited separately:
+                      // `clientsClaim` takes control asynchronously after activation, so an
+                      // activated worker is not yet a controlling one.
+                      await page.evaluate(async () => {
+                        if (navigator.serviceWorker === undefined) {
+                          throw new Error('runOfflineCheck: no navigator.serviceWorker in this context')
+                        }
+                        const withTimeout = async (promise: Promise<unknown>, label: string) => {
+                          let timer: ReturnType<typeof setTimeout> | undefined
+                          const timeout = new Promise((_resolve, reject) => {
+                            timer = setTimeout(() => reject(new Error(`runOfflineCheck: timed out waiting for ${label}`)), 30_000)
+                          })
+                          try {
+                            await Promise.race([promise, timeout])
+                          } finally {
+                            if (timer !== undefined) clearTimeout(timer)
+                          }
+                        }
+
+                        await withTimeout(navigator.serviceWorker.ready, 'the service worker to activate')
+
+                        if (navigator.serviceWorker.controller === null) {
+                          await withTimeout(
+                            new Promise<void>((resolve) => {
+                              navigator.serviceWorker.addEventListener('controllerchange', () => resolve(), { once: true })
+                              // Re-check after registering the listener: control can be taken in
+                              // the gap between the check above and the subscription.
+                              if (navigator.serviceWorker.controller !== null) resolve()
+                            }),
+                            'the service worker to take control of this page',
+                          )
+                        }
                       })
+
                       await page.waitForFunction(
                         () => performance.getEntriesByName('app-interactive').length > 0,
                       )
 
-                      // Second, OFFLINE load: same context (so its service-worker registration and
-                      // cache storage persist), network genuinely disabled at the Playwright layer
-                      // -- not merely a stubbed fetch -- so a route the service worker does NOT
-                      // intercept would surface as a real failed request.
-                      await freshContext.setOffline(true)
-                      failedRequests.length = 0
-                      await page.evaluate(() => performance.clearMarks('app-interactive'))
-
-                      // Diagnostics captured BEFORE the offline reload, so a failure reports why
-                      // rather than only that it happened. The original `catch {}` here swallowed
-                      // the error entirely, which made a CI-only failure undiagnosable from the
-                      // log: the assertion could say `expected false to be true` and nothing else.
-                      // These three fields are what distinguish "the service worker never took
-                      // control" from "it took control but a request escaped the precache".
+                      // Diagnostics sampled while still ONLINE, after the readiness wait above and
+                      // before the network is cut, so a failure reports why rather than only that
+                      // it happened. The reload's `catch` used to swallow its error entirely,
+                      // which left the assertion able to say `expected false to be true` and
+                      // nothing more. These fields are what distinguish "the worker never took
+                      // control" from "it took control but a request escaped the precache", and
+                      // `cachedEntryCount` is what exposed the partial precache on CI.
                       const swState = await page.evaluate(async () => {
                         const registration =
                           navigator.serviceWorker === undefined
@@ -480,6 +518,14 @@ export default defineConfig({
                           cachedEntryCount,
                         }
                       })
+
+                      // Second, OFFLINE load: same context (so its service-worker registration and
+                      // cache storage persist), network genuinely disabled at the Playwright layer
+                      // -- not merely a stubbed fetch -- so a route the service worker does NOT
+                      // intercept would surface as a real failed request.
+                      await freshContext.setOffline(true)
+                      failedRequests.length = 0
+                      await page.evaluate(() => performance.clearMarks('app-interactive'))
 
                       let reachedInteractive = true
                       let offlineFailure: string | null = null
