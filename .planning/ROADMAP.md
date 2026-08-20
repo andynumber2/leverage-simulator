@@ -227,14 +227,37 @@ PERF-08 decisions must be read against that band rather than against a single fi
 **Plans:** 9 plans (8 waves)
 
 Plans:
+**Wave 1**
+
 - [ ] 05-01-PLAN.md — Attribution tracer, Shapley engine and the always-visible panel (ATTR-01, ATTR-02)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
 - [ ] 05-02-PLAN.md — Naive ghost curve on the equity chart (ATTR-03)
 - [ ] 05-03-PLAN.md — Synthetic-versus-real validation view and the helper extraction (VALID-04)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
 - [ ] 05-04-PLAN.md — Manifest-generated provenance strip with the traceability gate (CRED-01)
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
 - [ ] 05-05-PLAN.md — History tier selector wired through bounds and permalink (APP-02)
+
+**Wave 5** *(blocked on Wave 4 completion)*
+
 - [ ] 05-06-PLAN.md — Measured extended-tier bias figure and its warning banner (CRED-02, CRED-03)
+
+**Wave 6** *(blocked on Wave 5 completion)*
+
 - [ ] 05-07-PLAN.md — Methodology overlay generated from the code's own registries (CRED-04)
+
+**Wave 7** *(blocked on Wave 6 completion)*
+
 - [ ] 05-08-PLAN.md — Defaults labelled and resettable across every parameter (CRED-05)
+
+**Wave 8** *(blocked on Wave 7 completion)*
+
 - [ ] 05-09-PLAN.md — PERF-07b re-measured with attribution live, and the sweep-cost finding
 
 **UI hint**: yes

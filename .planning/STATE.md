@@ -5,14 +5,14 @@ milestone_name: milestone
 current_phase: 04
 current_phase_name: first-defensible-backtest-in-the-browser
 status: complete
-stopped_at: Phase 05 context gathered
-last_updated: "2026-08-20T17:34:18.133Z"
+stopped_at: Phase 05 UI-SPEC approved
+last_updated: "2026-08-20T18:54:29.483Z"
 last_activity: 2026-08-20
 last_activity_desc: "Phase 04 shipped: PR #4 merged to main, CI green"
 progress:
   total_phases: 5
   completed_phases: 4
-  total_plans: 28
+  total_plans: 37
   completed_plans: 28
 ---
 
@@ -176,6 +176,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-08-20T17:34:18.111Z
-Stopped at: Phase 05 context gathered
-Resume file: .planning/phases/05-attribution-and-the-credibility-surface/05-CONTEXT.md
+Last session: 2026-08-20T18:11:56.652Z
+Stopped at: Phase 05 UI-SPEC approved
+Resume file: .planning/phases/05-attribution-and-the-credibility-surface/05-UI-SPEC.md
