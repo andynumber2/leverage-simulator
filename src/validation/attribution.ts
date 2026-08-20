@@ -86,6 +86,24 @@ export interface AttributionResult {
 }
 
 /**
+ * D-02: the running cumulative index return from bar 0 through each bar `i` --
+ * `product_{j=1}^{i} (1 + returns[j]) - 1` (bar 0 itself carries no return of its own, D-03, so
+ * `cumulative[0]` is exactly 0). Exported so `naive-series.ts`'s per-bar ghost curve (05-02-PLAN
+ * Task 1) and this module's own final-bar naive value walk the identical return recurrence --
+ * never two independently hand-rolled cumulative-product loops that could silently drift apart.
+ */
+export function computeCumulativeIndexReturns(returns: Float64Array): Float64Array {
+  const barCount = returns.length
+  const cumulative = new Float64Array(barCount)
+  let product = 1
+  for (let i = 1; i < barCount; i++) {
+    product *= 1 + (returns[i] ?? 0)
+    cumulative[i] = product - 1
+  }
+  return cumulative
+}
+
+/**
  * D-02/D-05: computes the naive final value as a sum over cash flows. `suffixProduct[j]` is
  * `product_{i=j+1}^{barCount-1} (1 + returns[i])`, i.e. the cumulative index return realized from
  * bar `j` through the end of the run -- computed once, backward, so every cash flow's own
