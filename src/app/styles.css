@@ -569,3 +569,55 @@ body {
   font-weight: 600;
   margin: 0;
 }
+
+/* D-12/F6 overflow: the widest tabular content in the app so far (regime label, tracking error,
+   return drift). Each row stacks its label above two label/value figure pairs at every width --
+   no <table> element and no fixed-column grid to clip, so narrow viewports degrade to a taller
+   stacked block per row rather than clipping a column (never a horizontal-scroll table, since a
+   stacked block is simpler and reads better at the app's own two-column-collapses-to-one
+   breakpoint, 04-UI-SPEC.md D-17). */
+.sub-window-table {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.sub-window-table__heading {
+  font-size: var(--font-size-body);
+  font-weight: 600;
+  color: var(--color-text);
+  margin: 0;
+}
+
+/* T-05-07: every row shares this exact class list -- no conditional class, colour or ordering
+   keyed on how unfavourable a row's own figures are. */
+.sub-window-row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  padding: var(--space-sm) 0;
+  border-top: 1px solid var(--color-border);
+}
+
+.sub-window-row__label {
+  color: var(--color-text);
+  font-size: var(--font-size-label);
+  font-weight: 600;
+}
+
+.sub-window-row__figure {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: var(--space-xs) var(--space-sm);
+  font-size: var(--font-size-label);
+}
+
+.sub-window-row__figure-label {
+  color: var(--color-text-muted);
+}
+
+.sub-window-row__figure-value {
+  font-family: var(--font-mono);
+  color: var(--color-text);
+}

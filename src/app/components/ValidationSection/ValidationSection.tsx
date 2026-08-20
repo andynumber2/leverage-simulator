@@ -38,6 +38,7 @@ import { createMemo, createSignal, Show } from 'solid-js'
 import { buildKernelInputs, type BacktestRequest } from '../../../data/kernel-inputs.ts'
 import { runBacktest } from '../../../kernel/backtest.ts'
 import {
+  buildRateRegimeWindows,
   deriveReturns,
   readSeriesLevels,
   resolveOverlapWindow,
@@ -47,6 +48,7 @@ import {
 import { computeTrackingError, type TrackingErrorResult, type TrackingErrorWindow } from '../../../validation/tracking-error.ts'
 import { backtestRequest, loadedBundle, loadStatus } from '../../state.ts'
 import { FundSelector, type Fund } from './FundSelector.tsx'
+import { SubWindowTable } from './SubWindowTable.tsx'
 import { TrackingErrorSummary } from './TrackingErrorSummary.tsx'
 
 interface ValidationFundConfig {
@@ -85,6 +87,11 @@ export interface ValidationInsufficientOverlap {
 export interface ValidationComputed {
   ok: true
   headline: TrackingErrorResult
+  /** D-13: the rate-regime sub-window breakdown, reported alongside the headline figures --
+   * never gated, and always computed and rendered together with `headline` from this same
+   * result object, so no partial state (some figures reflecting one fund, others another) can
+   * exist (D-09's atomicity requirement). */
+  subWindows: TrackingErrorResult[]
 }
 
 export type ValidationComputation = ValidationInsufficientOverlap | ValidationComputed
@@ -144,7 +151,14 @@ function computeValidation(fund: Fund): ValidationComputation | null {
 
   const headline = computeTrackingError(syntheticValues, fundValues, syntheticReturns, fundReturns, fullWindow)
 
-  return { ok: true, headline }
+  // D-13: the same regime-window enumeration the CI gate test uses, so the in-app table and the
+  // gate enumerate identical regimes from one definition.
+  const regimeWindows = buildRateRegimeWindows(bundle.calendar, inputs.window.entryIndex, inputs.window.barCount, fund)
+  const subWindows = regimeWindows.map((window) =>
+    computeTrackingError(syntheticValues, fundValues, syntheticReturns, fundReturns, window),
+  )
+
+  return { ok: true, headline, subWindows }
 }
 
 export function ValidationSection() {
@@ -174,6 +188,7 @@ export function ValidationSection() {
             }
           >
             <TrackingErrorSummary headline={(computation() as ValidationComputed).headline} />
+            <SubWindowTable rows={(computation() as ValidationComputed).subWindows} />
           </Show>
         </Show>
       </Show>
