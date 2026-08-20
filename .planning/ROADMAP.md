@@ -224,7 +224,19 @@ PERF-08 decisions must be read against that band rather than against a single fi
   4. The extended tier carries a prominent warning naming the direction of its bias: interpolated monthly data smooths daily volatility and therefore understates volatility drag, making leverage look better than it was in exactly the pre-1954 era the tier exists to reach. The magnitude is quantified by downsampling a known-good daily era to monthly, interpolating it back and measuring the resulting gap, and that figure is printed next to the warning.
   5. Every default parameter is labelled as a default and is editable in place, and a methodology page stating the full cost model, day-count conventions, data sources and known limitations is reachable in one click from any result. Attribution's extra kernel calls keep a single-run parameter change inside the 16ms budget, measured, not assumed.
 
-**Plans**: TBD
+**Plans:** 9 plans (8 waves)
+
+Plans:
+- [ ] 05-01-PLAN.md — Attribution tracer, Shapley engine and the always-visible panel (ATTR-01, ATTR-02)
+- [ ] 05-02-PLAN.md — Naive ghost curve on the equity chart (ATTR-03)
+- [ ] 05-03-PLAN.md — Synthetic-versus-real validation view and the helper extraction (VALID-04)
+- [ ] 05-04-PLAN.md — Manifest-generated provenance strip with the traceability gate (CRED-01)
+- [ ] 05-05-PLAN.md — History tier selector wired through bounds and permalink (APP-02)
+- [ ] 05-06-PLAN.md — Measured extended-tier bias figure and its warning banner (CRED-02, CRED-03)
+- [ ] 05-07-PLAN.md — Methodology overlay generated from the code's own registries (CRED-04)
+- [ ] 05-08-PLAN.md — Defaults labelled and resettable across every parameter (CRED-05)
+- [ ] 05-09-PLAN.md — PERF-07b re-measured with attribution live, and the sweep-cost finding
+
 **UI hint**: yes
 
 ### Phase 6: Heatmap Design Pass

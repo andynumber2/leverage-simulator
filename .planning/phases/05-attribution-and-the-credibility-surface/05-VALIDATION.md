@@ -45,18 +45,24 @@ created: 2026-08-20
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| TBD | TBD | TBD | ATTR-01, ATTR-02 | — | N/A | unit + property (fast-check) | `vitest run tests/attribution/*.test.ts` | ❌ W0 | ⬜ pending |
-| TBD | TBD | TBD | ATTR-01, ATTR-02 | — | N/A | unit | `vitest run tests/attribution/*.test.ts` | ❌ W0 | ⬜ pending |
-| TBD | TBD | TBD | ATTR-03 | — | N/A | unit | `vitest run tests/app/*.test.ts` | ❌ W0 | ⬜ pending |
-| TBD | TBD | TBD | VALID-04 | — | N/A | unit (regression vs existing gate test) | `vitest run tests/validation/*.test.ts` | ✅ existing gate test is oracle | ⬜ pending |
-| TBD | TBD | TBD | VALID-04 | — | N/A | app/browser | `npm run test:app` | ❌ W0 | ⬜ pending |
-| TBD | TBD | TBD | CRED-01 | — | N/A | unit | `vitest run tests/app/*.test.ts` | ❌ W0 | ⬜ pending |
-| TBD | TBD | TBD | CRED-02 | — | N/A | app/browser | `npm run test:app` | ❌ W0 | ⬜ pending |
-| TBD | TBD | TBD | CRED-03 | — | N/A | unit (pinning test) | `vitest run tests/validation/*.test.ts` | ❌ W0 | ⬜ pending |
-| TBD | TBD | TBD | CRED-04 | — | N/A | app/browser | `npm run test:app` | ❌ W0 | ⬜ pending |
-| TBD | TBD | TBD | CRED-05 | — | N/A | app/browser | `npm run test:app` | ❌ W0 | ⬜ pending |
-| TBD | TBD | TBD | APP-02 | — | N/A | app/browser | `npm run test:app` | ❌ W0 | ⬜ pending |
-| TBD | TBD | TBD | PERF-07b (re-measure) | — | N/A | bench (Playwright-backed) | `npm run bench` | ✅ `bench/perf-07.bench.test.ts` | ⬜ pending |
+| T2 | 05-01 | 1 | ATTR-01, ATTR-02 | T-05-02 | Non-finite arm renders the undefined placeholder | unit + property (fast-check) | `npx vitest run --project unit tests/attribution/shapley.test.ts` | ❌ created by T2 | ⬜ pending |
+| T1, T3 | 05-01 | 1 | ATTR-01, ATTR-02 | T-05-01 | Attribution inside the existing coalesced pass | app/browser | `npx vitest run --project app tests/app/attribution.browser.test.ts` | ❌ created by T1 | ⬜ pending |
+| T3 | 05-01 | 1 | ATTR-02 | — | N/A | unit | `npx vitest run --project unit tests/metrics/format.test.ts` | ✅ existing | ⬜ pending |
+| T1 | 05-02 | 2 | ATTR-03 | T-05-03 | Null-gap before the log renderer | unit | `npx vitest run --project unit tests/app/naive-ghost-series.test.ts` | ❌ created by T1 | ⬜ pending |
+| T2 | 05-02 | 2 | ATTR-03 | T-05-03 | Deep-drawdown log-scale regression guard | app/browser | `npx vitest run --project app tests/app/naive-ghost-series.browser.test.ts` | ❌ created by T2 | ⬜ pending |
+| T1 | 05-03 | 2 | VALID-04 | T-05-06 | No-fitting protocol survives the extraction | unit (regression vs existing gate test) | `npx vitest run --project unit tests/validation/upro-tqqq-gate.test.ts tests/validation/synthetic-comparison.test.ts` | ✅ gate test is oracle | ⬜ pending |
+| T2, T3 | 05-03 | 2 | VALID-04 | T-05-05, T-05-07 | Total-return leg pinned; identical row markup | app/browser | `npx vitest run --project app tests/app/validation-section.browser.test.ts` | ❌ created by T3 | ⬜ pending |
+| T1, T3 | 05-04 | 3 | CRED-01 | T-05-09, T-05-10 | Manifest traceability fails the build | unit | `npx vitest run --project unit tests/app/provenance-strip.test.ts` | ❌ created by T1 | ⬜ pending |
+| T2, T3 | 05-04 | 3 | CRED-01 | T-05-08 | Source anchors scheme-checked | app/browser | `npx vitest run --project app tests/app/provenance-strip.browser.test.ts` | ❌ created by T3 | ⬜ pending |
+| T1 | 05-05 | 4 | APP-02 | T-05-11 | Tier decode unchanged; permalink.ts untouched | unit | `npx vitest run --project unit tests/app/permalink.test.ts` | ✅ existing | ⬜ pending |
+| T2, T3 | 05-05 | 4 | APP-02 | T-05-12, T-05-13 | Bounds and citation follow one tier signal | app/browser | `npx vitest run --project app tests/app/entry-date-tier.browser.test.ts` | ❌ created by T3 | ⬜ pending |
+| T1, T2 | 05-06 | 5 | CRED-03 | T-05-14, T-05-15 | Pinning test; compiler's own interpolation | unit (pinning test) | `npx vitest run --project unit tests/validation/extended-tier-bias.test.ts` | ❌ created by T2 | ⬜ pending |
+| T3 | 05-06 | 5 | CRED-02 | T-05-16 | No dismiss or acknowledgment path | app/browser | `npx vitest run --project app tests/app/extended-tier-warning.browser.test.ts` | ❌ created by T3 | ⬜ pending |
+| T1 | 05-07 | 6 | CRED-04 | T-05-17, T-05-18, T-05-20 | Flag stripped before decode; decode still governs | unit | `npx vitest run --project unit tests/app/permalink-methodology.test.ts` | ❌ created by T1 | ⬜ pending |
+| T2, T3 | 05-07 | 6 | CRED-04 | T-05-19 | Page values read from registries, not literals | app/browser | `npx vitest run --project app tests/app/methodology-overlay.browser.test.ts` | ❌ created by T3 | ⬜ pending |
+| T1 | 05-08 | 7 | CRED-05 | T-05-23 | One registry for badge and reset | unit | `npx vitest run --project unit tests/app/parameter-defaults.test.ts` | ❌ created by T1 | ⬜ pending |
+| T2, T3 | 05-08 | 7 | CRED-05 | T-05-21, T-05-22 | Reset writes through validated setters | app/browser | `npx vitest run --project app tests/app/parameter-defaults.browser.test.ts` | ❌ created by T3 | ⬜ pending |
+| T1 | 05-09 | 8 | PERF-07b (re-measure), ATTR-01 | T-05-24, T-05-25 | Budgets unchanged; escalation recorded | bench (Playwright-backed) | `npm run bench` | ✅ `bench/perf-07.bench.test.ts` | ⬜ pending |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
