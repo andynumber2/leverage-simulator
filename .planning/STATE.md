@@ -4,16 +4,16 @@ milestone: v1.0
 milestone_name: milestone
 current_phase: 04
 current_phase_name: first-defensible-backtest-in-the-browser
-status: executing
-stopped_at: Completed 04-01-PLAN.md
-last_updated: "2026-08-19T19:14:16.042Z"
-last_activity: 2026-08-19
-last_activity_desc: Phase 04 execution started
+status: verifying
+stopped_at: Phase 04 at verification -- all 8 plans executed, 04-VERIFICATION.md human_needed, its seven human_verification items now closed by tests/app/narrow-viewport.browser.test.ts
+last_updated: "2026-08-20T03:37:00.000Z"
+last_activity: 2026-08-20
+last_activity_desc: "Quick task 260820-4qx: fixed the uPlot log-scale renderer hang and closed phase 04's backstop UAT"
 progress:
   total_phases: 4
   completed_phases: 3
   total_plans: 28
-  completed_plans: 21
+  completed_plans: 28
 ---
 
 # Project State
@@ -27,10 +27,12 @@ See: .planning/PROJECT.md (updated 2026-08-16)
 
 ## Current Position
 
-Phase: 04 (first-defensible-backtest-in-the-browser) — EXECUTING
-Plan: 2 of 8
-Status: Ready to execute
-Last activity: 2026-08-19 — Phase 04 execution started
+Phase: 04 (first-defensible-backtest-in-the-browser) — VERIFYING
+Plan: 8 of 8 executed
+Status: Phase 04 sits at verification. 04-VERIFICATION.md's status is `human_needed`; its seven
+human_verification items are now closed by tests/app/narrow-viewport.browser.test.ts (see
+04-UAT.md), which was the last gap keeping the phase from a passing verification.
+Last activity: 2026-08-20 — Quick task 260820-4qx (uPlot log-scale renderer hang fix)
 
 Progress: [████████░░] 75%
 
@@ -102,6 +104,7 @@ Recent decisions affecting current work:
 - [quick-260818-v2d]: WINDOWS.md entry #2 named one problem and there were two. The anchor cannot see parallel width, which is latent and worth up to 6.1x, and was dormant in all 13 recorded CI runs because every one of them drew a 4-core runner. Separately, each workload has its own elasticity to host interference, which is chronic and worth 6.36% residual CV. The first is fixed by measuring PERF-03 at the declared 4-core baseline width on every host and withholding its verdict when the recorded `hardwareConcurrency` differs, provably a no-op on the D-17 baseline, where every recorded run already resolved workerCount 3. The second is documented as a measured band rather than fixed, because more runs is its only remedy: a single run supports a headroom claim only to roughly +/-13%. The ledger's own numeric claim did not survive the larger sample: the three runs it cited included the single most anomalous run of the 13, and that run inflated the single-threaded PERF-02 by the same amount it inflated PERF-03, which a pool-specific mechanism cannot explain. `NOMINAL_REFERENCE_MS` stayed 40 and no budget value moved
 - [Phase ?]: 04-01: Y-axis gutter is measured from the labels uPlot is about to draw (axis.size hook), not left at uPlot's fixed 50px default, and measured on a private CSS-sized canvas context with no devicePixelRatio arithmetic -- closes the plan's backstop must_have with regressions
 - [Phase ?]: 04-01: Package legitimacy gate approved solid-js, vite-plugin-solid, vite despite SUS 'too-new' verdicts (publish-date heuristic); all three resolved to canonical github.com/solidjs and github.com/vitejs repos at millions of weekly downloads
+- [quick-260820-4qx]: uPlot's built-in `logAxisSplits` cannot advance below a roughly 1e-22 log y-scale minimum (the NDX/leverage-10/entry-1999-03-04 permalink hit this and killed the renderer), so the log y axis now supplies its own decade splits (`log-axis-splits.ts`) plus an identity `filter`, chosen over clamping the scale range or truncating the series so the full curve stays visible
 
 ### Pending Todos
 
@@ -151,6 +154,7 @@ Recent decisions affecting current work:
 | 260816-p8z | Make the bench calibration score canonical per run | 2026-08-16 | e345a88 |  | [260816-p8z-make-the-bench-calibration-score-canonic](./quick/260816-p8z-make-the-bench-calibration-score-canonic/) |
 | 260816-qae | Record the D-20 escalation for PERF-03 against the real CI baseline and correct docs citing sandbox figures | 2026-08-16 | 8c5a250 |  | [260816-qae-record-the-d-20-escalation-for-perf-03-a](./quick/260816-qae-record-the-d-20-escalation-for-perf-03-a/) |
 | 260818-v2d | resolve WINDOWS #2 calibration runner-variance in bench/calibration.ts | 2026-08-18 | cc3d715 | Verified | [260818-v2d-resolve-windows-2-calibration-runner-var](./quick/260818-v2d-resolve-windows-2-calibration-runner-var/) |
+| 260820-4qx | Fix uPlot log-scale renderer hang in the equity curve chart; close phase 04's narrow-viewport UAT | 2026-08-20 | a55b611 |  | [260820-4qx-fix-uplot-log-scale-renderer-hang-in-equ](./quick/260820-4qx-fix-uplot-log-scale-renderer-hang-in-equ/) |
 
 ## Deferred Items
 
