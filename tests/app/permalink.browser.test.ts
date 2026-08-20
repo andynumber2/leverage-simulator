@@ -3,20 +3,28 @@
  *
  * 04-07-PLAN.md Task 3's full case list, mounted against the real app: a golden permalink URL
  * loaded fresh reproduces the same rendered metric strings as driving the controls to the same
- * parameters; scrubbing the leverage slider updates the URL's `leverage` param without growing
- * `window.history.length` (D-03: `replaceState`, never `pushState`); a `bundleVersion` mismatch
- * renders the D-15 banner naming both versions while the chart and metrics still render; a URL
- * missing a required key renders the named decode explanation and no chart; the Copy link button
- * is disabled while the load status is `loading`; and, with clipboard permission denied, the
- * button shows its failure label and the permalink appears as selectable text.
+ * parameters; scrubbing the leverage slider updates the URL's `leverage` param, once flushed,
+ * without growing `window.history.length` (D-03: `replaceState`, never `pushState`); a
+ * `bundleVersion` mismatch renders the D-15 banner naming both versions while the chart and
+ * metrics still render; a URL missing a required key renders the named decode explanation and no
+ * chart; the Copy link button is disabled while the load status is `loading`; and, with clipboard
+ * permission denied, the button shows its failure label and the permalink appears as selectable
+ * text.
+ *
+ * Gap-closure fix (post-04-07, PERF-07 regression): the permalink write is now trailing-edge
+ * debounced (`src/app/state.ts`'s `schedulePermalinkSync`/`flushPermalinkUrl`), not synchronous
+ * with every coalesced recompute. Tests that assert URL state now call the exported
+ * `flushPermalinkUrl()` explicitly rather than waiting extra animation frames, and one test below
+ * asserts the coalescing directly: several recomputes across one scrub produce exactly one
+ * `replaceState` call once flushed, not one per recompute.
  */
 
-import { afterEach, beforeEach, expect, test } from 'vitest'
+import { afterEach, beforeEach, expect, test, vi } from 'vitest'
 
 import { BUNDLE_VERSION } from '../../src/data-bundle.generated.ts'
 import { mountApp } from '../../src/app/main.tsx'
 import { encodeParams, type PermalinkParams } from '../../src/app/permalink.ts'
-import { backtestRequest, currentKernelResult, resetAppState } from '../../src/app/state.ts'
+import { backtestRequest, currentKernelResult, flushPermalinkUrl, resetAppState } from '../../src/app/state.ts'
 
 async function waitFor(predicate: () => boolean, timeoutMs = 5000): Promise<void> {
   const start = performance.now()
@@ -178,7 +186,7 @@ test('a golden permalink URL loaded fresh reproduces the same rendered metric st
   expect(goldenMetrics.irr).not.toBeNull()
 })
 
-test('the URL after a slider scrub carries the scrubbed leverage and window.history.length is unchanged across the scrub', async () => {
+test('once flushed, the URL after a slider scrub carries the scrubbed leverage and window.history.length is unchanged across the scrub', async () => {
   const el = await mountAndWaitForResult('')
   const historyLengthBefore = window.history.length
 
@@ -195,10 +203,48 @@ test('the URL after a slider scrub carries the scrubbed leverage and window.hist
   await nextFrame()
   await nextFrame()
 
+  // Gap-closure fix: the write is trailing-edge debounced, not synchronous with the recompute --
+  // this asserts the CONTRACT (the URL is correct once flushed), not the timing of the debounce
+  // itself, which the coalescing test below covers directly.
+  flushPermalinkUrl()
+
   expect(window.history.length).toBe(historyLengthBefore)
 
   const currentUrl = new URL(window.location.href)
   expect(currentUrl.searchParams.get('leverage')).toBe(Number(finalValue).toFixed(2))
+})
+
+test('a burst of updates spanning several coalesced recomputes produces exactly one replaceState call once flushed', async () => {
+  const el = await mountAndWaitForResult('')
+  // Clears any write pending from the initial default-landing-run recompute above, so the spy
+  // below observes only what this test does.
+  flushPermalinkUrl()
+
+  const replaceStateSpy = vi.spyOn(window.history, 'replaceState')
+
+  const slider = el.querySelector<HTMLInputElement>('[data-testid="leverage-slider"]')!
+  const BURST_COUNT = 6
+  for (let burst = 0; burst < BURST_COUNT; burst++) {
+    const value = (0.5 + burst * 0.3).toFixed(2)
+    slider.value = value
+    slider.dispatchEvent(new Event('input', { bubbles: true }))
+    // Lets THIS burst's rAF-coalesced recompute complete before the next burst fires, so the
+    // sequence produces BURST_COUNT separate `storeSuccessfulRun` calls -- the same shape (many
+    // recomputes across one continuous drag) that produced one `replaceState` call per recompute
+    // before this fix (PERF-07a/07b: ~285 calls across a 300-step drag).
+    // eslint-disable-next-line no-await-in-loop
+    await nextFrame()
+  }
+
+  // Not yet flushed: each recompute above pushed the trailing-edge timer back out, so nothing has
+  // been written to the address bar yet despite BURST_COUNT completed recomputes.
+  expect(replaceStateSpy).not.toHaveBeenCalled()
+
+  flushPermalinkUrl()
+
+  expect(replaceStateSpy).toHaveBeenCalledTimes(1)
+
+  replaceStateSpy.mockRestore()
 })
 
 test('a bundleVersion mismatch renders the D-15 banner naming both versions while the chart and metrics still render', async () => {
