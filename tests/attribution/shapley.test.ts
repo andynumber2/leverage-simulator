@@ -74,8 +74,10 @@ test('zero financing spread, zero short rate and zero expense ratio: financing a
   const { inputs, actualResult } = buildInputsAndResult(params, series)
   const attribution = computeAttribution(inputs, actualResult)
 
-  expect(attribution.financingCost).toBe(0)
-  expect(attribution.expenseRatio).toBe(0)
+  // Object.is-based toBe(0) would reject a legitimate -0 (the Shapley negation of an exact 0
+  // contribution); Math.abs treats -0 and +0 as the same "exactly zero" fact this test asserts.
+  expect(Math.abs(attribution.financingCost)).toBe(0)
+  expect(Math.abs(attribution.expenseRatio)).toBe(0)
   expect(Math.abs(attribution.volatilityDrag - attribution.totalGap)).toBeLessThan(reconciliationTolerance(attribution.totalGap))
 })
 
@@ -97,7 +99,7 @@ test('at leverage exactly 1, the financing component is exactly 0 regardless of 
   const { inputs, actualResult } = buildInputsAndResult(params, series)
   const attribution = computeAttribution(inputs, actualResult)
 
-  expect(attribution.financingCost).toBe(0)
+  expect(Math.abs(attribution.financingCost)).toBe(0)
 })
 
 test('at leverage 1.01 with financingSpread 0 and a positive short rate on one bar, the financing component is strictly non-zero (proves financing-off zeroes the short-rate array, not only the spread)', () => {
