@@ -3,11 +3,13 @@
  *
  * SHARE-01/UI-SPEC E10: the phase's one explicit action -- there is no "Run" or "Submit" button,
  * since parameter changes compute live (D-03). Disabled until a completed result exists, so there
- * is never a window where it copies a link to nothing. `src/app/state.ts`'s `storeSuccessfulRun`
- * already keeps `window.location.href` in sync with the current parameters through
- * `history.replaceState` after every completed run, so this component copies that URL directly
- * rather than re-deriving the same encoding a second time (Pitfall 5: one canonical format, one
- * call site).
+ * is never a window where it copies a link to nothing. `src/app/state.ts` keeps
+ * `window.location.href` in sync with the current parameters through a trailing-edge-debounced
+ * `history.replaceState` (gap-closure fix, post-04-07: writing on every completed run stalled the
+ * main thread during a scrub), so `handleClick` calls the exported `flushPermalinkUrl()` FIRST,
+ * synchronously, before reading `window.location.href` -- the one call site that guarantees a
+ * copy issued during or immediately after a drag can never yield a stale link, rather than
+ * re-deriving the same encoding a second time (Pitfall 5: one canonical format, one call site).
  *
  * Three label states -- default, a transient confirmation, and a clipboard-failure fallback --
  * rendered at a fixed CSS width (`.copy-link-button`'s `min-width`) so the button never resizes on
@@ -20,7 +22,7 @@
 
 import { createSignal, Show } from 'solid-js'
 
-import { currentKernelResult } from '../../state.ts'
+import { currentKernelResult, flushPermalinkUrl } from '../../state.ts'
 
 type CopyState = 'idle' | 'confirmed' | 'failed'
 
@@ -45,6 +47,10 @@ export function CopyLinkButton() {
   }
 
   async function handleClick(): Promise<void> {
+    // Correctness point of the gap-closure fix: forces any pending permalink write to happen
+    // synchronously, right now, before the URL below is read -- without this, copying during or
+    // immediately after a drag could hand back a URL from before the drag settled.
+    flushPermalinkUrl()
     const url = window.location.href
     try {
       if (navigator.clipboard === undefined) {

@@ -42,11 +42,22 @@
  * `applyLoadedBundle`'s own entry-date default only fires when `request.entryDate` is still `''`
  * (see the comment above it), so a permalink-supplied entry date must already be in the store
  * before that check runs, or it would be silently clobbered back to the series' first date on
- * every load. `storeSuccessfulRun` re-serializes the just-completed run through `encodeParams`
- * into `history.replaceState` -- an entry-replacing write, never a new-entry-appending one (D-03's
- * rAF coalescing already fires on every slider-drag frame, and a new-entry-appending write there
- * would fill the back button with thousands of entries in a single scrub) -- so `CopyLinkButton`
- * can simply copy `window.location.href` rather than re-deriving the same encoding a second time.
+ * every load.
+ *
+ * Gap-closure fix (post-04-07, PERF-07 regression): `storeSuccessfulRun` used to call
+ * `history.replaceState` synchronously on every completed run. D-03's rAF coalescing bounds that
+ * to once per animation frame, not once per input event, but a continuous slider drag still
+ * completes a run on nearly every frame -- PERF-07a/07b measured this as ~285 `replaceState`
+ * calls across a 300-step drag, each one a real main-thread cost `history.replaceState` imposes
+ * at animation frequency (and browsers additionally rate-limit it). `storeSuccessfulRun` now only
+ * marks the permalink dirty (`schedulePermalinkSync`); the actual `encodeParams` +
+ * `history.replaceState` write happens on a trailing-edge timer that a further recompute within
+ * the delay window keeps pushing out, so a whole scrub produces exactly one write once it
+ * settles. `flushPermalinkUrl` (exported) performs that pending write synchronously and is the
+ * correctness backstop: `CopyLinkButton` calls it before reading `window.location.href`, and it
+ * also runs on `visibilitychange`/`pagehide`, so a copy or a tab close mid-drag never observes a
+ * stale URL. `resetAppState` clears any pending flush so a reset cannot strand a stale scheduled
+ * write behind it.
  */
 
 import { createSignal } from 'solid-js'
@@ -211,11 +222,11 @@ export function currentCaveatMessage(): string | null {
 const HOLDING_PERIOD_OVERRUN_PATTERN = 'runs past the last supported bar'
 
 /**
- * D-13 through D-15: re-serializes the just-completed run through `encodeParams` and writes it
+ * D-13 through D-15: re-serializes `inputs`' completed run through `encodeParams` and writes it
  * into the address bar with `history.replaceState` -- an entry-replacing write, never a
- * new-entry-appending one (D-03: the rAF-coalesced recompute fires on every slider-drag frame; a
- * new-entry-appending write there would put thousands of entries behind the back button in a
- * single scrub). `holdMode`/`holdingPeriodBars` are derived from
+ * new-entry-appending one (D-03: the rAF-coalesced recompute can fire on nearly every
+ * slider-drag frame; a new-entry-appending write there would put thousands of entries behind the
+ * back button in a single scrub). `holdMode`/`holdingPeriodBars` are derived from
  * `request.holdingPeriodBars` (D-13's "every parameter, always" applies to what was actually
  * asked for, not a resolved fallback: a fixed period that overran and was retried still encodes
  * as `holdMode=fixed` with the ORIGINAL requested bar count, so reopening the link reproduces the
@@ -226,8 +237,15 @@ const HOLDING_PERIOD_OVERRUN_PATTERN = 'runs past the last supported bar'
  * pins it for the whole of Phase 4) and `bundleVersion` is the imported `BUNDLE_VERSION` (D-15:
  * the currently deployed bundle -- the only one this build can address, per `MANIFEST_PATH`
  * pointing at exactly one manifest).
+ *
+ * Reads `request`/`scale()` at call time rather than at the moment the write was scheduled --
+ * safe because the only way either changes is through `updateBacktestRequest`/`setScaleMode`,
+ * both of which call `scheduleRun()` and so produce a further `storeSuccessfulRun` call that
+ * reschedules the pending write with fresh `inputs` before this one would have fired (see
+ * `schedulePermalinkSync` below). This function performs the actual write; callers never call it
+ * directly -- `schedulePermalinkSync` and `flushPermalinkUrl` are the two entry points.
  */
-function syncPermalinkUrl(inputs: KernelInputs): void {
+function writePermalinkUrl(inputs: KernelInputs): void {
   const params: PermalinkParams = {
     symbol: request.symbol,
     dividendReinvest: request.dividendReinvest,
@@ -250,6 +268,67 @@ function syncPermalinkUrl(inputs: KernelInputs): void {
   window.history.replaceState(null, '', newUrl)
 }
 
+/** Gap-closure fix: how long a trailing-edge write waits for the drag/scrub to settle before
+ * actually touching the address bar. `requestIdleCallback` was considered and rejected -- it is
+ * not implemented in every target browser (notably Safari, as of this writing), and this project
+ * ships no polyfill; a plain trailing `setTimeout` is simpler, universally supported, and the
+ * delay only needs to comfortably exceed one animation frame (~16.67ms) so consecutive
+ * rAF-coalesced recomputes during a drag keep pushing the write out rather than each firing one.
+ * 200ms is well past that floor while still being unnoticeable as "the link updates after I stop
+ * moving the slider." */
+const PERMALINK_FLUSH_DELAY_MS = 200
+
+let permalinkFlushTimer: ReturnType<typeof setTimeout> | undefined
+let pendingPermalinkInputs: KernelInputs | null = null
+
+/** Marks the permalink dirty and (re)schedules the trailing-edge flush, called once per completed
+ * run instead of writing immediately. Any further call before the timer fires -- i.e. another
+ * frame of the same drag completing -- clears and restarts it, so a continuous scrub produces
+ * exactly one `history.replaceState` call once it settles, not one per coalesced recompute. */
+function schedulePermalinkSync(inputs: KernelInputs): void {
+  pendingPermalinkInputs = inputs
+  if (permalinkFlushTimer !== undefined) clearTimeout(permalinkFlushTimer)
+  permalinkFlushTimer = setTimeout(() => {
+    permalinkFlushTimer = undefined
+    flushPermalinkUrl()
+  }, PERMALINK_FLUSH_DELAY_MS)
+}
+
+/** Performs any pending permalink write synchronously, right now, and cancels the trailing-edge
+ * timer that would otherwise have done it later. This is the correctness guarantee the trailing
+ * edge alone cannot provide: `CopyLinkButton` calls this before reading `window.location.href`,
+ * so a copy issued during or immediately after a drag can never yield a stale link, and the
+ * module-level `visibilitychange`/`pagehide` listeners below call it so a tab backgrounded or
+ * closed mid-drag still leaves a correct URL behind. A no-op when nothing is pending. */
+export function flushPermalinkUrl(): void {
+  if (permalinkFlushTimer !== undefined) {
+    clearTimeout(permalinkFlushTimer)
+    permalinkFlushTimer = undefined
+  }
+  if (pendingPermalinkInputs === null) return
+  const inputs = pendingPermalinkInputs
+  pendingPermalinkInputs = null
+  writePermalinkUrl(inputs)
+}
+
+/** Idempotent registration guard, same pattern as `theme.ts`'s `changeListenerAttached` --
+ * `visibilitychange`/`pagehide` are page-lifetime events, not tied to a particular loaded bundle,
+ * so this is attached once per module lifetime and never torn down by `resetAppState`. */
+let flushListenersAttached = false
+
+/** D-13 gap closure: flush on `visibilitychange` (covers the tab being backgrounded) and
+ * `pagehide` (covers navigation/close, and is the documented reliable replacement for `unload` on
+ * mobile Safari/bfcache-participating browsers) -- both cheap, both a no-op when nothing is
+ * pending, both closing the same window a bare trailing-edge timer alone would leave open: a user
+ * who scrubs and immediately switches tabs or closes the page before the timer fires. */
+function attachPermalinkFlushListeners(): void {
+  if (flushListenersAttached) return
+  flushListenersAttached = true
+  // `visibilitychange` is dispatched on `document`, never `window` -- `pagehide` is the reverse.
+  document.addEventListener('visibilitychange', () => flushPermalinkUrl())
+  window.addEventListener('pagehide', () => flushPermalinkUrl())
+}
+
 /** Stores a completed run plus its already-resolved caveat state (D-10), shared by the normal path
  * and the D-10 retry path below so both write through the same three signals in the same order.
  * `caveat` is supplied by the caller rather than re-derived here: the two success paths compute it
@@ -266,7 +345,7 @@ function storeSuccessfulRun(
   setDerivedMetrics(computeDerivedMetrics(currentBundle, inputs, result))
   setValidationError(null)
   setCaveatMessage(caveat)
-  syncPermalinkUrl(inputs)
+  schedulePermalinkSync(inputs)
 }
 
 /* D-29's rate-coverage truncation deliberately produces NO caveat in the open-ended mode.
@@ -376,11 +455,21 @@ let permalinkDecodeFailedAtBoot = false
  * against a different `window.location.search`, or a future in-app bundle swap -- has to clear
  * that cache explicitly, because "load it again" is otherwise indistinguishable from "you
  * already have it".
+ *
+ * Gap-closure fix: also cancels any pending trailing-edge permalink write and discards the
+ * `KernelInputs` it would have written, rather than letting it fire later against whatever the
+ * next `initializeApp` puts in the store -- a scheduled write must not survive the state it was
+ * scheduled from.
  */
 export function resetAppState(): void {
   loadInFlight = null
   permalinkApplied = false
   permalinkDecodeFailedAtBoot = false
+  if (permalinkFlushTimer !== undefined) {
+    clearTimeout(permalinkFlushTimer)
+    permalinkFlushTimer = undefined
+  }
+  pendingPermalinkInputs = null
   setBundle(null)
   setStatus('loading')
   setLoadErrorMessage(null)
@@ -453,6 +542,7 @@ function applyPermalinkFromLocation(): void {
  * bundle is null and no load is in flight, so it always performs a genuine retry.
  */
 export async function initializeApp(): Promise<void> {
+  attachPermalinkFlushListeners()
   applyPermalinkFromLocation()
 
   const cached = bundle()
