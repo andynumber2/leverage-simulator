@@ -10,7 +10,7 @@ last_updated: "2026-08-20T03:37:00.000Z"
 last_activity: 2026-08-20
 last_activity_desc: "Quick task 260820-4qx: fixed the uPlot log-scale renderer hang and closed phase 04's backstop UAT"
 progress:
-  total_phases: 4
+  total_phases: 8
   completed_phases: 3
   total_plans: 28
   completed_plans: 28
@@ -34,13 +34,22 @@ human_verification items are now closed by tests/app/narrow-viewport.browser.tes
 04-UAT.md), which was the last gap keeping the phase from a passing verification.
 Last activity: 2026-08-20 — Quick task 260820-4qx (uPlot log-scale renderer hang fix)
 
-Progress: [████████░░] 75%
+Progress: [███░░░░░░░] 38%  (3 of 8 roadmap phases complete)
+
+> `total_phases` read 4 here until 2026-08-20 and the bar read 75%. The field had been
+> overwritten with the current phase number on every phase transition since `c5eefa2`
+> (`docs(01): create phase plan`, 2026-08-16), which set it to 1 the commit after the roadmap
+> correctly wrote 8. It tracked phases-started, not phases-in-milestone, so the bar overstated
+> completion for the whole project. ROADMAP.md has listed 8 phases throughout and nothing else
+> consumed the field, so the damage was confined to this percentage. Expect the next phase
+> transition to overwrite it again unless the GSD STATE writer is fixed to read the count from
+> ROADMAP.md.
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 20
+- Total plans completed: 28
 - Average duration: —
 - Total execution time: —
 

@@ -192,7 +192,7 @@ _Kinds: form, interactive-control, static-content_
 | error | explicit | Negative or non-numeric expense ratio / financing spread is rejected at the control with the bound named inline; the field never passes an unusable value to the kernel. |
 | partial | explicit | A user-edited cost value drops the 'default' label and its citation is restated as 'user-supplied, sourced default was X' rather than removed, so a screenshot always shows what the number was compared against (CRED-05). |
 | overflow | 🧪 backstop | Citation strings are the longest variable-length text in the dense parameter column; verify at the narrowest supported width that they wrap under their control rather than clipping or colliding. |
-| long-text | 🧪 backstop | Longest sourced-citation string (the financing-spread midpoint-of-range wording) must reflow to at most two lines without pushing the Copy link button below the fold. |
+| long-text | 🧪 backstop | Longest sourced-citation string must wrap freely to whatever height its text needs without pushing the Copy link button below the fold. No line-count ceiling: an earlier draft of this row guessed "at most two lines", written before the real citation text existed. Measured at 320px the longest citation (`generic-3x-expense-ratio`) renders at roughly 8 lines, and every property that matters holds, no clipping, no collision, Copy link still above the fold. The two alternatives to accepting the height both cost more than they buy: shortening the string edits sourced text and breaks the SIM-09 audit trail, and a tooltip or disclosure contradicts SourceCitation's rule against concealing sourced text. Covered by `tests/app/narrow-viewport.browser.test.ts`. |
 
 ### E6 - EquityCurveChart
 

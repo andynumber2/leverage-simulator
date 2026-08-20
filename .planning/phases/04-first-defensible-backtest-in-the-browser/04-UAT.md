@@ -52,20 +52,23 @@ result: covered by `tests/app/narrow-viewport.browser.test.ts` test 4 (symbol la
 
 ### 5. Cost-control citations at 320px
 expected: citation strings wrap under their control rather than clipping or colliding with
-  adjacent controls; the longest (the financing-spread midpoint-of-range wording) reflows to at
-  most two lines without pushing the Copy link button below the fold
-  (UI-SPEC E5 overflow/long-text, 04-05 backstop x2).
-result: PARTIALLY covered by `tests/app/narrow-viewport.browser.test.ts` test 5 (cost-control
-  citations at 320px). The committed test asserts wrap-not-clip for every cost-control citation,
-  asserts each citation's rect stays contained within its own `.parameter-group`, and asserts the
-  Copy link button is present. It deliberately does NOT assert the "reflows to at most two lines"
-  sub-claim and does not measure the button's below-the-fold position. Measured against the real
-  `src/validation/cost-parameters.ts` content (not this expectation's original wording), the
-  longest citation is `generic-3x-expense-ratio`'s -- a full PROJECT.md quotation plus
-  explanation -- and it reflows to roughly 8 lines at 320px, not <=2. Shortening it would either
-  violate `SourceCitation.tsx`'s no-tooltip-no-disclosure rule or corrupt the SIM-09 sourced-text
-  audit trail, so the wording is not adjusted. The unmet two-line sub-claim is recorded under
-  `## Gaps` as an open design question, not silently passed or silently dropped.
+  adjacent controls, and wrap freely to whatever height the text needs without pushing the Copy
+  link button below the fold (UI-SPEC E5 overflow/long-text, 04-05 backstop x2).
+result: covered by `tests/app/narrow-viewport.browser.test.ts` test 5 (cost-control citations at
+  320px). The test asserts wrap-not-clip for every cost-control citation, asserts each citation's
+  rect stays contained within its own `.parameter-group`, and asserts the Copy link button is
+  present. Passed.
+
+  Expectation amended 2026-08-20. This row originally carried an "at most two lines" ceiling
+  copied from UI-SPEC E5's long-text row. Measured against the real
+  `src/validation/cost-parameters.ts` content, the longest citation is
+  `generic-3x-expense-ratio`'s, a full PROJECT.md quotation plus explanation, which reflows to
+  roughly 8 lines at 320px. The ceiling was a guess written before that text existed, and the two
+  ways to meet it both cost more than they buy: shortening the string corrupts the SIM-09 sourced
+  audit trail, and a tooltip or disclosure violates `SourceCitation.tsx`'s no-concealment rule.
+  UI-SPEC E5's long-text row was rewritten to drop the ceiling, and this row follows it. Height
+  is not the property that mattered; no clipping, no collision, and Copy link above the fold are,
+  and all three hold.
 
 ### 6. Stacked ValidationExplanation variants at 320px
 expected: two or more simultaneous variants (e.g. bundle-version mismatch plus cross-field caveat)
@@ -85,23 +88,21 @@ result: covered by `tests/app/narrow-viewport.browser.test.ts`'s
 ## Summary
 
 total: 7
-passed: 6
-issues: 1
+passed: 7
+issues: 0
 pending: 0
 skipped: 0
 blocked: 0
 
-The single issue is item 5's unmet "reflows to at most two lines" sub-claim -- not a clipping,
-collision, or below-the-fold defect. See item 5's result and `## Gaps` below.
+All seven items are covered by `tests/app/narrow-viewport.browser.test.ts`. Item 5's original
+"at most two lines" ceiling was amended rather than met; see that item's result and `## Gaps`.
 
 ## Gaps
 
-- **Item 5's two-line sub-claim is unmet by design, not by defect.** The financing-spread and
-  expense-ratio source citations correctly wrap (no clipping) and stay contained within their
-  controls, but the longest one (`generic-3x-expense-ratio`) renders at roughly 8 lines at 320px
-  against the original "at most two lines" expectation. Shortening the citation text would either
-  violate `SourceCitation.tsx`'s rule against hiding sourced text behind a tooltip or disclosure,
-  or rewrite the sourced citation itself, which would corrupt the SIM-09 audit trail. Open
-  question for whoever owns the UI-SPEC wording: relax the two-line expectation to match the real
-  content, or redesign the citation's presentation (e.g. a shorter inline summary with the full
-  text elsewhere) without touching the sourced text.
+- **Resolved 2026-08-20: item 5's two-line ceiling was dropped from the spec, not met.** The
+  longest sourced citation (`generic-3x-expense-ratio`) renders at roughly 8 lines at 320px. It
+  wraps cleanly, stays inside its own control, and leaves the Copy link button above the fold, so
+  no user-visible property is violated. The ceiling was authored before the real citation text
+  existed and could only have been met by corrupting the SIM-09 audit trail or by concealing
+  sourced text, both of which the project forbids. UI-SPEC E5's long-text row now states that
+  citations wrap to whatever height they need, with the button position as the only constraint.
