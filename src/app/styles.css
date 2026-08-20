@@ -273,6 +273,27 @@ body {
   font-weight: 600;
 }
 
+/* D-20: the screenshot region has no styling of its own beyond what its children already
+   contribute -- it exists as a DOM boundary (the data-testid the screenshot-region test asserts
+   containment against), not a second visual card nested inside .result-column. */
+.screenshot-region {
+  display: flex;
+  flex-direction: column;
+}
+
+/* D-20: symbol, effective date range and bundle version -- the facts a screenshot needs beyond
+   the chart and metrics to be self-contained. Muted, Label-sized text: informational, never
+   competing with the chart or the headline metric for first read. */
+.result-summary-header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-sm);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-label);
+  font-family: var(--font-mono);
+}
+
 .equity-curve-chart {
   width: 100%;
 }

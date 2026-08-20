@@ -21,6 +21,7 @@ import { bundleVersionMismatchVariant } from './components/ResultColumn/BundleVe
 import { EquityCurveChart } from './components/ResultColumn/EquityCurveChart.tsx'
 import { LogScaleToggle } from './components/ResultColumn/LogScaleToggle.tsx'
 import { MetricsPanel } from './components/ResultColumn/MetricsPanel.tsx'
+import { ResultSummaryHeader } from './components/ResultColumn/ResultSummaryHeader.tsx'
 import { RuinBanner } from './components/ResultColumn/RuinBanner.tsx'
 import { ValidationExplanation, type ExplanationVariant } from './components/ResultColumn/ValidationExplanation.tsx'
 import { ThemeToggle } from './components/ThemeToggle.tsx'
@@ -108,29 +109,40 @@ export function App() {
                 when={plottableBarCount() > 0}
                 fallback={<p class="empty-run-notice">This run has no plottable bars.</p>}
               >
-                <div class="chart-scale-row">
-                  <LogScaleToggle scale={scaleMode()} onChange={setScaleMode} />
-                  <ThemeToggle />
-                </div>
-                <EquityCurveChart
-                  inputs={currentKernelInputs()!}
-                  result={currentKernelResult()!}
-                  calendar={loadedBundle()!.calendar}
-                  scale={scaleMode()}
-                />
+                {/* D-20: one rectangle containing the symbol, the effective date range, the
+                    bundle version, the chart, the metrics and the ruin banner when present, so a
+                    manual screenshot is self-contained. The parameter column stays OUTSIDE this
+                    element -- D-17 already keeps every parameter visible beside the number it
+                    produced; D-20 only requires the result side be self-contained enough to
+                    paste. Phase 8's SHARE-04 captures this exact element; no capture code ships
+                    this phase (tests/app/static-build.test.ts asserts that). */}
+                <div class="screenshot-region" data-testid="screenshot-region">
+                  <ResultSummaryHeader inputs={currentKernelInputs()!} />
 
-                {/* D-07: metrics and the ruin banner appear only alongside a completed run
-                    (E7 empty); the banner sits above the metrics it makes subordinate. */}
-                <Show when={currentDerivedMetrics() !== null}>
-                  <Show when={currentKernelResult()!.ruined && currentDerivedMetrics()!.ruinDate !== null}>
-                    <RuinBanner ruinDate={currentDerivedMetrics()!.ruinDate!} />
-                  </Show>
-                  <MetricsPanel
+                  <div class="chart-scale-row">
+                    <LogScaleToggle scale={scaleMode()} onChange={setScaleMode} />
+                    <ThemeToggle />
+                  </div>
+                  <EquityCurveChart
+                    inputs={currentKernelInputs()!}
                     result={currentKernelResult()!}
-                    metrics={currentDerivedMetrics()!}
-                    contributionAmount={backtestRequest().contributionAmount}
+                    calendar={loadedBundle()!.calendar}
+                    scale={scaleMode()}
                   />
-                </Show>
+
+                  {/* D-07: metrics and the ruin banner appear only alongside a completed run
+                      (E7 empty); the banner sits above the metrics it makes subordinate. */}
+                  <Show when={currentDerivedMetrics() !== null}>
+                    <Show when={currentKernelResult()!.ruined && currentDerivedMetrics()!.ruinDate !== null}>
+                      <RuinBanner ruinDate={currentDerivedMetrics()!.ruinDate!} />
+                    </Show>
+                    <MetricsPanel
+                      result={currentKernelResult()!}
+                      metrics={currentDerivedMetrics()!}
+                      contributionAmount={backtestRequest().contributionAmount}
+                    />
+                  </Show>
+                </div>
               </Show>
             </Show>
           </Show>
