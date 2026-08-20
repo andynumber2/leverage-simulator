@@ -282,17 +282,73 @@ body {
   flex-direction: column;
 }
 
-/* D-20: symbol, effective date range and bundle version -- the facts a screenshot needs beyond
-   the chart and metrics to be self-contained. Muted, Label-sized text: informational, never
-   competing with the chart or the headline metric for first read. */
-.result-summary-header {
+/* D-13: tier, effective date range, sources, the seams the run crossed and the bundle version --
+   the facts a screenshot needs beyond the chart and metrics to be self-contained, plus the
+   seam-disclosure and methodology-link affordances. Dense, muted, Label-sized: informational chrome
+   at the same recessive weight the parameter column carries (05-UI-SPEC.md "Spacing Scale"), never
+   competing with the chart or the headline metric for first read. Same blanket monospace treatment
+   the header this strip replaces used for all its fields, kept for visual continuity. */
+.provenance-strip {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-sm);
+  align-items: baseline;
+  gap: var(--space-xs) var(--space-sm);
   margin-bottom: var(--space-sm);
   color: var(--color-text-muted);
   font-size: var(--font-size-label);
   font-family: var(--font-mono);
+}
+
+.provenance-field {
+  display: inline;
+}
+
+.provenance-field-label {
+  color: var(--color-text-muted);
+}
+
+.provenance-field-value {
+  color: var(--color-text-muted);
+}
+
+.provenance-field a {
+  color: var(--color-text-muted);
+}
+
+/* D-14: the "Show all seams" disclosure -- a local expand/collapse, never a URL param or an
+   overlay. Styled as inline muted chrome, matching the strip's own weight rather than the accent
+   color reserved for the Copy Link button and the equity-curve stroke. */
+.provenance-seam-disclosure {
+  border: none;
+  background: transparent;
+  padding: 0;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-label);
+  font-family: var(--font-mono);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.provenance-all-seams {
+  flex-basis: 100%;
+  margin: 0;
+  padding-left: var(--space-md);
+  list-style: disc;
+}
+
+/* D-17: reachable from any result in one click, never accent-colored (accent stays reserved for
+   the equity-curve stroke, the active log/linear toggle state, focus outlines and the Copy link
+   button, per 05-UI-SPEC.md's Color table). */
+.provenance-methodology-link {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-label);
+  font-family: var(--font-ui);
+  text-decoration: none;
+}
+
+.provenance-methodology-link:hover,
+.provenance-methodology-link:focus {
+  text-decoration: underline;
 }
 
 .equity-curve-chart {
