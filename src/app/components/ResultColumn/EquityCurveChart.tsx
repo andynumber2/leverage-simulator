@@ -37,6 +37,30 @@ import type { KernelInputs } from '../../../data/kernel-inputs.ts'
 import type { KernelResult } from '../../../kernel/backtest.types.ts'
 import { onThemeChange } from '../../theme.ts'
 import type { ScaleMode } from '../../state.ts'
+import { logDecadeSplits } from './log-axis-splits.ts'
+
+/** A log-axis tick value's base-10 exponent at or below this is formatted with
+ * `toExponential(0)` rather than `toLocaleString()` -- uPlot's default `numAxisVals` formatter
+ * goes through `Intl.NumberFormat` with 3 maximum fraction digits, which renders every value
+ * below 1e-4 as the identical string "0" (a real failure mode on the NDX 10x repro, whose
+ * plotted equity bottoms out below 1e-22). This threshold, and the +13 threshold below, are
+ * chosen so the landing run's ordinary equity magnitudes keep their existing grouped-decimal
+ * labels, which is what keeps the gutter tracer.browser.test.ts measures wider than uPlot's
+ * 50px default. */
+const LOG_AXIS_EXPONENTIAL_LOWER_EXPONENT = -4
+const LOG_AXIS_EXPONENTIAL_UPPER_EXPONENT = 13
+
+/** Formats one log-axis split value: DELIBERATE ADDITION beyond the locked custom-splits fix,
+ * needed because uPlot's default formatter collapses every sub-1e-4 decade to the string "0"
+ * (see the constants above). Ordinary equity magnitudes keep their existing grouped-decimal
+ * form; only the extreme decades this bug fix newly reaches switch to exponential notation. */
+export function formatLogAxisValue(value: number): string {
+  const exponent = Math.log10(Math.abs(value))
+  if (exponent <= LOG_AXIS_EXPONENTIAL_LOWER_EXPONENT || exponent >= LOG_AXIS_EXPONENTIAL_UPPER_EXPONENT) {
+    return value.toExponential(0)
+  }
+  return value.toLocaleString()
+}
 
 const AXIS_FONT = '12px ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace'
 const CHART_HEIGHT_PX = 360
@@ -185,18 +209,30 @@ export function EquityCurveChart(props: EquityCurveChartProps) {
     const series: uPlot.Series[] = terminatorData !== undefined ? [{}, equitySeries, ruinSeries] : [{}, equitySeries]
     const data: uPlot.AlignedData = terminatorData !== undefined ? [xs, ys, terminatorData] : [xs, ys]
 
+    const isLog = props.scale === 'log'
+
+    // The log branch gets its own loop-safe decade splits plus an identity filter -- uPlot
+    // installs `log10AxisValsFilt` by default for a distr-3/log-10 scale (uPlot.esm.js:3777),
+    // which blanks any split that is not a 1eN value at the granularity it expects, so an
+    // identity filter is required, not optional, for the generated splits to survive to the
+    // canvas. The linear branch stays exactly as it was, with none of these three keys, so it
+    // keeps uPlot's own splits/filter/values defaults untouched.
+    const yAxis: uPlot.Axis = { stroke: textMuted, font: AXIS_FONT, size: sizeYAxis }
+    if (isLog) {
+      yAxis.splits = (_self, _axisIdx, scaleMin, scaleMax) => logDecadeSplits(scaleMin, scaleMax)
+      yAxis.filter = (_self, splits) => splits
+      yAxis.values = (_self, splits) => splits.map(formatLogAxisValue)
+    }
+
     const options: uPlot.Options = {
       width: containerEl.clientWidth || 800,
       height: CHART_HEIGHT_PX,
       scales: {
         x: { time: true },
-        y: { distr: props.scale === 'log' ? 3 : 1 },
+        y: { distr: isLog ? 3 : 1 },
       },
       series,
-      axes: [
-        { stroke: textMuted, font: AXIS_FONT },
-        { stroke: textMuted, font: AXIS_FONT, size: sizeYAxis },
-      ],
+      axes: [{ stroke: textMuted, font: AXIS_FONT }, yAxis],
     }
 
     chart = new uPlot(options, data, containerEl)
