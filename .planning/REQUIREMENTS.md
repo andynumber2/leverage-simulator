@@ -157,7 +157,7 @@ measured in CI, not an aspiration.
 - [ ] **ATTR-02**: The decomposition is reported in both dollar and percentage terms, and the
       components reconcile to the total gap without an unexplained residual
 
-- [ ] **ATTR-03**: A zero-cost comparison mode shows the naive result alongside the real one, so a
+- [x] **ATTR-03**: A zero-cost comparison mode shows the naive result alongside the real one, so a
       user's own assumption can be displayed next to what actually happens
 
 ### Visualization
@@ -318,7 +318,7 @@ measured in CI, not an aspiration.
 | METR-06 | Phase 7 | Pending |
 | ATTR-01 | Phase 5 | Pending |
 | ATTR-02 | Phase 5 | Pending |
-| ATTR-03 | Phase 5 | Pending |
+| ATTR-03 | Phase 5 | Complete |
 | VIZ-01 | Phase 7 | Pending |
 | VIZ-02 | Phase 7 | Pending |
 | VIZ-03 | Phase 7 | Pending |
