@@ -455,15 +455,43 @@ export default defineConfig({
                       failedRequests.length = 0
                       await page.evaluate(() => performance.clearMarks('app-interactive'))
 
+                      // Diagnostics captured BEFORE the offline reload, so a failure reports why
+                      // rather than only that it happened. The original `catch {}` here swallowed
+                      // the error entirely, which made a CI-only failure undiagnosable from the
+                      // log: the assertion could say `expected false to be true` and nothing else.
+                      // These three fields are what distinguish "the service worker never took
+                      // control" from "it took control but a request escaped the precache".
+                      const swState = await page.evaluate(async () => {
+                        const registration =
+                          navigator.serviceWorker === undefined
+                            ? undefined
+                            : await navigator.serviceWorker.getRegistration()
+                        const cacheNames = 'caches' in self ? await caches.keys() : []
+                        let cachedEntryCount = 0
+                        for (const name of cacheNames) {
+                          const cache = await caches.open(name)
+                          cachedEntryCount += (await cache.keys()).length
+                        }
+                        return {
+                          controlled: navigator.serviceWorker?.controller != null,
+                          scope: registration?.scope ?? null,
+                          activeState: registration?.active?.state ?? null,
+                          cacheNames,
+                          cachedEntryCount,
+                        }
+                      })
+
                       let reachedInteractive = true
+                      let offlineFailure: string | null = null
                       try {
                         await page.reload({ waitUntil: 'load', timeout: 10_000 })
                         await page.waitForFunction(
                           () => performance.getEntriesByName('app-interactive').length > 0,
                           { timeout: 5_000 },
                         )
-                      } catch {
+                      } catch (err) {
                         reachedInteractive = false
+                        offlineFailure = err instanceof Error ? err.message : String(err)
                       }
 
                       // DATA-08 adjacency: a symbol OTHER than the default landing run's can be
@@ -511,6 +539,8 @@ export default defineConfig({
 
                       return {
                         reachedInteractive,
+                        offlineFailure,
+                        swState,
                         failedRequestCount: failedRequests.length,
                         failedRequests: failedRequests.slice(0, 10),
                         nonDefaultSymbolComputed,

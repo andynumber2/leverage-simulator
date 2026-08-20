@@ -17,7 +17,17 @@ import { expect, test } from 'vitest'
 test('the offline reload reaches app-interactive with zero failed requests, and a non-default symbol computes offline', async () => {
   const result = await commands.runOfflineCheck()
 
-  expect(result.reachedInteractive, `offline reload did not reach app-interactive`).toBe(true)
+  // The diagnostics are interpolated into the message rather than asserted separately: when this
+  // fails, the log has to say WHY without a second CI cycle to find out. `controlled: false` means
+  // the service worker never took control, so the offline navigation went to the network and died
+  // there; `controlled: true` with a non-zero failedRequestCount means it took control but
+  // something escaped the precache.
+  expect(
+    result.reachedInteractive,
+    `offline reload did not reach app-interactive: ${result.offlineFailure ?? 'no error captured'}` +
+      ` | sw: ${JSON.stringify(result.swState)}` +
+      ` | failed requests: ${result.failedRequestCount} ${result.failedRequests.join(', ')}`,
+  ).toBe(true)
   expect(
     result.failedRequestCount,
     `offline reload had ${result.failedRequestCount} failed request(s): ${result.failedRequests.join(', ')}`,

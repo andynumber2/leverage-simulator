@@ -79,6 +79,20 @@ export interface AppLoadTimingReport {
 export interface OfflineCheckReport {
   /** Whether the second, offline navigation reached the `app-interactive` mark. */
   reachedInteractive: boolean
+  /** The error message the offline reload threw, or `null` when it succeeded. The reload path
+   * used to swallow this in a bare `catch {}`, which made a CI-only failure undiagnosable: the
+   * assertion could report `expected false to be true` and nothing more. */
+  offlineFailure: string | null
+  /** Service-worker and cache-storage state sampled immediately BEFORE the network is disabled.
+   * `controlled: false` means the worker never took control, so the offline navigation went to
+   * the network and died there rather than being served from the precache. */
+  swState: {
+    controlled: boolean
+    scope: string | null
+    activeState: string | null
+    cacheNames: string[]
+    cachedEntryCount: number
+  }
   /** The count of requests that failed during the offline navigation -- 0 is the passing
    * outcome; a route the service worker did not precache surfaces here as a real failure. */
   failedRequestCount: number
