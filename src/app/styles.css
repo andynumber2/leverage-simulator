@@ -22,6 +22,7 @@
   --space-md: 16px;
   --space-lg: 24px;
   --space-xl: 32px;
+  --space-2xl: 48px;
 
   --font-size-label: 12px;
   --font-size-body: 14px;
@@ -491,4 +492,80 @@ body {
   padding: var(--space-xs) var(--space-sm);
   overflow-x: auto;
   white-space: nowrap;
+}
+
+/* D-09/F6: the standalone validation section, full width, below the two-column run layout and
+   OUTSIDE the D-20 screenshot region -- --space-2xl (48px) separates it from the run layout
+   above, per the UI-SPEC's Spacing Scale table ("between the two-column run layout and the
+   standalone validation section below it"). Same surface/border treatment as the parameter and
+   result columns, never a second visual weight class competing with the chart or headline metric
+   (Visual hierarchy rank 7). */
+.validation-section {
+  margin: var(--space-2xl) var(--space-md) 0;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  padding: var(--space-lg);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.validation-heading {
+  font-size: var(--font-size-body);
+  font-weight: 600;
+  color: var(--color-text);
+  margin: 0;
+}
+
+.validation-subheading {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-label);
+  margin: 0;
+}
+
+.fund-selector {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.fund-selector__choice {
+  display: flex;
+  gap: var(--space-sm);
+  font-size: var(--font-size-body);
+}
+
+.fund-selector__option {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+/* D-11: the two headline gate figures, same Label + secondary-metric-size value pattern
+   MetricsPanel's own rows use. */
+.tracking-error-summary {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.tracking-error-summary__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-xs) var(--space-sm);
+}
+
+.validation-cost-note {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-label);
+  margin: 0;
+}
+
+.validation-insufficient-overlap {
+  color: var(--color-destructive);
+  font-size: var(--font-size-body);
+  font-weight: 600;
+  margin: 0;
 }
