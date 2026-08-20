@@ -407,6 +407,122 @@ export default defineConfig({
             provider: playwright({ contextOptions: { locale: 'en-US' } }),
             headless: true,
             instances: [{ browser: 'chromium' }],
+            commands: {
+              // Task 2 (04-08, DATA-08): the offline-after-first-load proof. Same
+              // withPreviewServer + fresh-BrowserContext pattern the bench project's
+              // measureAppLoadTiming/measureInteractionTiming commands already use (a
+              // Vitest-browser-mode test body has no direct access to Playwright's page/context,
+              // so a Node-side custom command is the only way to navigate a FRESH page, disable
+              // its network, and reload it). Run against a fresh page rather than the test
+              // runner's own: taking the runner's own page offline would sever its connection to
+              // the Vitest dev server and fail the test for the wrong reason.
+              runOfflineCheck: async (context) =>
+                withPreviewServer(async (origin) => {
+                  const browser = context.context.browser()
+                  if (browser === null) {
+                    throw new Error(
+                      'runOfflineCheck: no Browser handle reachable from ' +
+                        'context.context.browser() -- see bench/vitest.config.ts probeBrowserContext ' +
+                        'for the same requirement this command relies on',
+                    )
+                  }
+                  const freshContext = await browser.newContext({ locale: 'en-US' })
+                  try {
+                    const page = await freshContext.newPage()
+                    try {
+                      const failedRequests: string[] = []
+                      page.on('requestfailed', (request) => {
+                        failedRequests.push(`${request.method()} ${request.url()}`)
+                      })
+
+                      // First, ONLINE load: registers the service worker and lets it precache the
+                      // whole bundled universe (D-04) before the network is ever disabled.
+                      await page.goto(origin, { waitUntil: 'load' })
+                      await page.waitForFunction(async () => {
+                        if (navigator.serviceWorker === undefined) return false
+                        const registration = await navigator.serviceWorker.getRegistration()
+                        return registration?.active?.state === 'activated'
+                      })
+                      await page.waitForFunction(
+                        () => performance.getEntriesByName('app-interactive').length > 0,
+                      )
+
+                      // Second, OFFLINE load: same context (so its service-worker registration and
+                      // cache storage persist), network genuinely disabled at the Playwright layer
+                      // -- not merely a stubbed fetch -- so a route the service worker does NOT
+                      // intercept would surface as a real failed request.
+                      await freshContext.setOffline(true)
+                      failedRequests.length = 0
+                      await page.evaluate(() => performance.clearMarks('app-interactive'))
+
+                      let reachedInteractive = true
+                      try {
+                        await page.reload({ waitUntil: 'load', timeout: 10_000 })
+                        await page.waitForFunction(
+                          () => performance.getEntriesByName('app-interactive').length > 0,
+                          { timeout: 5_000 },
+                        )
+                      } catch {
+                        reachedInteractive = false
+                      }
+
+                      // DATA-08 adjacency: a symbol OTHER than the default landing run's can be
+                      // selected and computed while offline -- what distinguishes precaching the
+                      // whole universe (D-04) from precaching only the symbol already opened.
+                      // loadBundleFromSource (src/data/bundle-source.ts) already fetches every
+                      // manifest.assets[] entry on the one initial load regardless of which
+                      // symbol is selected, so switching symbols offline is a pure client-side
+                      // recompute over data already in memory -- no further network request at
+                      // all, let alone one the service worker would need to have precached.
+                      //
+                      // The default landing run's entry date is SPX's own earliest strict-tier
+                      // date, which predates every OTHER bundled symbol's own strict tier -- so a
+                      // bare symbol switch alone reliably hits D-12's eviction path (the entry
+                      // date falls outside the new symbol's range) rather than a computed run.
+                      // 2015-01-02 postdates every bundled symbol's strict-tier first date
+                      // (latest is TQQQ/total-return at 2010-02-11), so setting it after the
+                      // switch is what actually proves a fresh compute, not an evicted one.
+                      let nonDefaultSymbolComputed = false
+                      if (reachedInteractive) {
+                        const select = page.locator('[data-testid="symbol-select"]')
+                        const options = await select.locator('option').allTextContents()
+                        const currentValue = await select.inputValue()
+                        const nonDefault = options.find((option) => option !== currentValue)
+                        if (nonDefault !== undefined) {
+                          await select.selectOption(nonDefault)
+                          try {
+                            await page.waitForFunction(
+                              (expected) => {
+                                const el = document.querySelector('[data-testid="symbol-select"]')
+                                return el instanceof HTMLSelectElement && el.value === expected
+                              },
+                              nonDefault,
+                              { timeout: 2_000 },
+                            )
+                            await page.locator('[data-testid="entry-date-input"]').fill('2015-01-02')
+                            await page.locator('[data-testid="entry-date-input"]').dispatchEvent('change')
+                            await page.waitForSelector('[data-testid="metrics-panel"]', { timeout: 5_000 })
+                            nonDefaultSymbolComputed = true
+                          } catch {
+                            nonDefaultSymbolComputed = false
+                          }
+                        }
+                      }
+
+                      return {
+                        reachedInteractive,
+                        failedRequestCount: failedRequests.length,
+                        failedRequests: failedRequests.slice(0, 10),
+                        nonDefaultSymbolComputed,
+                      }
+                    } finally {
+                      await page.close()
+                    }
+                  } finally {
+                    await freshContext.close()
+                  }
+                }),
+            },
           },
         },
       },

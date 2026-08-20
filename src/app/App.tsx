@@ -7,6 +7,11 @@
  * entry date) and wires D-11/D-12's clear-and-explain path; plan 04-05 adds the remaining
  * controls. The result column is a single slot (D-21) so Phase 7's heatmap replaces its content
  * rather than rearranging the application.
+ *
+ * Plan 04-08: `initTheme()` runs alongside `initializeApp()` in `onMount`, unconditionally and
+ * idempotently (same pattern `initializeApp` itself already uses) -- it resolves
+ * `prefers-color-scheme` (or a still-active manual override) and writes `data-theme` before the
+ * parameter and result columns below ever read the CSS custom properties it selects between.
  */
 
 import { onMount, Show } from 'solid-js'
@@ -16,8 +21,10 @@ import { bundleVersionMismatchVariant } from './components/ResultColumn/BundleVe
 import { EquityCurveChart } from './components/ResultColumn/EquityCurveChart.tsx'
 import { LogScaleToggle } from './components/ResultColumn/LogScaleToggle.tsx'
 import { MetricsPanel } from './components/ResultColumn/MetricsPanel.tsx'
+import { ResultSummaryHeader } from './components/ResultColumn/ResultSummaryHeader.tsx'
 import { RuinBanner } from './components/ResultColumn/RuinBanner.tsx'
 import { ValidationExplanation, type ExplanationVariant } from './components/ResultColumn/ValidationExplanation.tsx'
+import { ThemeToggle } from './components/ThemeToggle.tsx'
 import { BUNDLE_VERSION } from '../data-bundle.generated.ts'
 import {
   backtestRequest,
@@ -34,6 +41,7 @@ import {
   scaleMode,
   setScaleMode,
 } from './state.ts'
+import { initTheme } from './theme.ts'
 
 /** D-10/D-11/D-15/UI-SPEC E9: the current set of explanation variants, in whatever order they
  * were found -- `ValidationExplanation` owns the stacking order, not this function. Plan 04-07
@@ -61,6 +69,7 @@ function plottableBarCount(): number {
 
 export function App() {
   onMount(() => {
+    initTheme()
     void initializeApp()
   })
 
@@ -100,28 +109,40 @@ export function App() {
                 when={plottableBarCount() > 0}
                 fallback={<p class="empty-run-notice">This run has no plottable bars.</p>}
               >
-                <div class="chart-scale-row">
-                  <LogScaleToggle scale={scaleMode()} onChange={setScaleMode} />
-                </div>
-                <EquityCurveChart
-                  inputs={currentKernelInputs()!}
-                  result={currentKernelResult()!}
-                  calendar={loadedBundle()!.calendar}
-                  scale={scaleMode()}
-                />
+                {/* D-20: one rectangle containing the symbol, the effective date range, the
+                    bundle version, the chart, the metrics and the ruin banner when present, so a
+                    manual screenshot is self-contained. The parameter column stays OUTSIDE this
+                    element -- D-17 already keeps every parameter visible beside the number it
+                    produced; D-20 only requires the result side be self-contained enough to
+                    paste. Phase 8's SHARE-04 captures this exact element; no capture code ships
+                    this phase (tests/app/static-build.test.ts asserts that). */}
+                <div class="screenshot-region" data-testid="screenshot-region">
+                  <ResultSummaryHeader inputs={currentKernelInputs()!} />
 
-                {/* D-07: metrics and the ruin banner appear only alongside a completed run
-                    (E7 empty); the banner sits above the metrics it makes subordinate. */}
-                <Show when={currentDerivedMetrics() !== null}>
-                  <Show when={currentKernelResult()!.ruined && currentDerivedMetrics()!.ruinDate !== null}>
-                    <RuinBanner ruinDate={currentDerivedMetrics()!.ruinDate!} />
-                  </Show>
-                  <MetricsPanel
+                  <div class="chart-scale-row">
+                    <LogScaleToggle scale={scaleMode()} onChange={setScaleMode} />
+                    <ThemeToggle />
+                  </div>
+                  <EquityCurveChart
+                    inputs={currentKernelInputs()!}
                     result={currentKernelResult()!}
-                    metrics={currentDerivedMetrics()!}
-                    contributionAmount={backtestRequest().contributionAmount}
+                    calendar={loadedBundle()!.calendar}
+                    scale={scaleMode()}
                   />
-                </Show>
+
+                  {/* D-07: metrics and the ruin banner appear only alongside a completed run
+                      (E7 empty); the banner sits above the metrics it makes subordinate. */}
+                  <Show when={currentDerivedMetrics() !== null}>
+                    <Show when={currentKernelResult()!.ruined && currentDerivedMetrics()!.ruinDate !== null}>
+                      <RuinBanner ruinDate={currentDerivedMetrics()!.ruinDate!} />
+                    </Show>
+                    <MetricsPanel
+                      result={currentKernelResult()!}
+                      metrics={currentDerivedMetrics()!}
+                      contributionAmount={backtestRequest().contributionAmount}
+                    />
+                  </Show>
+                </div>
               </Show>
             </Show>
           </Show>
