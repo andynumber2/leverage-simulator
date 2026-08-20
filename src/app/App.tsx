@@ -26,6 +26,7 @@ import { ResultSummaryHeader } from './components/ResultColumn/ResultSummaryHead
 import { RuinBanner } from './components/ResultColumn/RuinBanner.tsx'
 import { ValidationExplanation, type ExplanationVariant } from './components/ResultColumn/ValidationExplanation.tsx'
 import { ThemeToggle } from './components/ThemeToggle.tsx'
+import { ValidationSection } from './components/ValidationSection/ValidationSection.tsx'
 import { BUNDLE_VERSION } from '../data-bundle.generated.ts'
 import {
   backtestRequest,
@@ -76,6 +77,7 @@ export function App() {
   })
 
   return (
+    <>
     <div class="app-layout">
       <ParameterColumn />
       <main class="result-column" data-testid="result-slot">
@@ -158,5 +160,10 @@ export function App() {
         </Show>
       </main>
     </div>
+    {/* D-09: its own always-reachable section, own canonical parameters, rendered below the
+        two-column run layout and OUTSIDE the D-20 screenshot region -- independent of whatever
+        run is currently on screen. */}
+    <ValidationSection />
+    </>
   )
 }
