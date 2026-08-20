@@ -56,14 +56,25 @@ jobs:
 
       - run: npm run typecheck
 
-      - run: npm test
-
-      - run: npm run test:app
-
       # 04-03: builds the real production dist/ output PERF-08's preview-server harness measures
       # against. Without this step the preview server has nothing to serve, and every PERF-08 row
       # would fail on a missing dist/ -- a correct but useless failure mode to discover only here.
+      #
+      # T-04-05 (2026-08-20): this step used to sit AFTER `npm test`, which made the static-build
+      # gate unrunnable in CI. `tests/app/static-build.test.ts` throws in `beforeAll` when `dist/`
+      # is missing, `dist/` is gitignored, and CI checks out clean, so `npm test` died at that
+      # throw before the build ever ran. The gate that is supposed to prove the emitted bundle
+      # contacts no external origin therefore never executed against a real build in CI, and
+      # locally it scanned whatever stale `dist/` happened to be on disk. Building first is what
+      # gives every dist-dependent gate below a real, fresh artifact to inspect.
+      #
+      # Ordering constraint: `tests/ci-workflow.test.ts` pins `npm run build` before
+      # `npm run bench` positionally. Moving the build earlier keeps that pin satisfied.
       - run: npm run build
+
+      - run: npm test
+
+      - run: npm run test:app
 
       - run: npm run bench
 
