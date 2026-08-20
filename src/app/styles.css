@@ -404,6 +404,42 @@ body {
   flex-basis: 100%;
 }
 
+/* D-08: "Where the money went" -- naive/actual pair plus (05-01 Task 3) three signed cost
+   components and the reconciliation row. Same dense-chrome discipline as .metrics-panel: xs/sm
+   internally, no colour role other than text-primary (D-04: cost rows never use destructive
+   colour, distinguished only by their +/- prefix and suffix text). */
+.attribution-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  margin-top: var(--space-md);
+}
+
+.attribution-heading {
+  font-size: var(--font-size-body);
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.attribution-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-xs) var(--space-sm);
+}
+
+.attribution-label {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-label);
+}
+
+.attribution-value {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  font-size: var(--font-size-secondary-metric);
+  color: var(--color-text);
+}
+
 /* SHARE-01/UI-SPEC E10: the phase's one explicit CTA, accent-colored per the Color table's
    "Copy Link button" row. Fixed min-width across all three label states (idle/confirmed/failed)
    is what actually keeps the button from resizing on state change -- verified by
