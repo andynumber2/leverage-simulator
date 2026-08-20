@@ -5,12 +5,12 @@ milestone_name: milestone
 current_phase: 04
 current_phase_name: first-defensible-backtest-in-the-browser
 status: complete
-stopped_at: Phase 04 shipped and merged to main as 029ea10 (PR #4)
-last_updated: "2026-08-20T16:10:00.000Z"
+stopped_at: Phase 05 context gathered
+last_updated: "2026-08-20T17:34:18.133Z"
 last_activity: 2026-08-20
 last_activity_desc: "Phase 04 shipped: PR #4 merged to main, CI green"
 progress:
-  total_phases: 8
+  total_phases: 5
   completed_phases: 4
   total_plans: 28
   completed_plans: 28
@@ -176,6 +176,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-08-19T19:14:16.025Z
-Stopped at: Completed 04-01-PLAN.md
-Resume file: None
+Last session: 2026-08-20T17:34:18.111Z
+Stopped at: Phase 05 context gathered
+Resume file: .planning/phases/05-attribution-and-the-credibility-surface/05-CONTEXT.md
