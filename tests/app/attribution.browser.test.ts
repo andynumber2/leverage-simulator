@@ -101,3 +101,37 @@ test('changing leverage through the existing control changes both rendered attri
   const metricsPanel = el.querySelector('[data-testid="metrics-panel"]')
   expect(metricsPanel).not.toBeNull()
 })
+
+test('all six rows render for a default run: heading, naive, actual, the three signed components and the reconciliation row', async () => {
+  const el = await mountAndWaitForResult()
+
+  const panel = el.querySelector('[data-testid="attribution-panel"]')
+  expect(panel).not.toBeNull()
+
+  // querySelectorAll searches descendants only, not the panel element itself.
+  const testIds = Array.from(panel!.querySelectorAll('[data-testid]')).map((node) => (node as HTMLElement).dataset.testid)
+  expect(testIds).toEqual([
+    'attribution-heading',
+    'attribution-naive',
+    'attribution-actual',
+    'attribution-volatility-drag',
+    'attribution-financing-cost',
+    'attribution-expense-ratio',
+    'attribution-reconciliation',
+  ])
+
+  const drag = el.querySelector('[data-testid="attribution-volatility-drag"] .attribution-value')
+  const financing = el.querySelector('[data-testid="attribution-financing-cost"] .attribution-value')
+  const expense = el.querySelector('[data-testid="attribution-expense-ratio"] .attribution-value')
+  expect(drag?.textContent).toMatch(/of gap/)
+  expect(financing?.textContent).toMatch(/of gap/)
+  expect(expense?.textContent).toMatch(/of gap/)
+})
+
+test('the reconciliation row reads a percentage that is exactly 100.00% on a default run', async () => {
+  const el = await mountAndWaitForResult()
+
+  const reconciliation = el.querySelector('[data-testid="attribution-reconciliation"] .attribution-value')
+  expect(reconciliation).not.toBeNull()
+  expect(reconciliation!.textContent).toBe('100.00%')
+})
