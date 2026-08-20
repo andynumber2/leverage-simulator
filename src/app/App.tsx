@@ -22,7 +22,7 @@ import { bundleVersionMismatchVariant } from './components/ResultColumn/BundleVe
 import { EquityCurveChart } from './components/ResultColumn/EquityCurveChart.tsx'
 import { LogScaleToggle } from './components/ResultColumn/LogScaleToggle.tsx'
 import { MetricsPanel } from './components/ResultColumn/MetricsPanel.tsx'
-import { ResultSummaryHeader } from './components/ResultColumn/ResultSummaryHeader.tsx'
+import { ProvenanceStrip } from './components/ResultColumn/ProvenanceStrip.tsx'
 import { RuinBanner } from './components/ResultColumn/RuinBanner.tsx'
 import { ValidationExplanation, type ExplanationVariant } from './components/ResultColumn/ValidationExplanation.tsx'
 import { ThemeToggle } from './components/ThemeToggle.tsx'
@@ -121,7 +121,7 @@ export function App() {
                     paste. Phase 8's SHARE-04 captures this exact element; no capture code ships
                     this phase (tests/app/static-build.test.ts asserts that). */}
                 <div class="screenshot-region" data-testid="screenshot-region">
-                  <ResultSummaryHeader inputs={currentKernelInputs()!} />
+                  <ProvenanceStrip inputs={currentKernelInputs()!} />
 
                   <div class="chart-scale-row">
                     <LogScaleToggle scale={scaleMode()} onChange={setScaleMode} />

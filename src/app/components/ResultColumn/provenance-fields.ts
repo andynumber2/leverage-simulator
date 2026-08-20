@@ -172,10 +172,11 @@ export function buildProvenanceFields(
   })
 
   // Date range: the run's EFFECTIVE window (D-13), not the series' full declared range -- matching
-  // `ResultSummaryHeader`'s prior behaviour. `manifestPath` names the series' own `firstDate` as the
-  // value's conceptual origin (a run's window is always bounded by it); the two coincide exactly
-  // when `window` covers the series' own full range, which is how the D-16 real-bundle test in
-  // `tests/app/provenance-strip.test.ts` deliberately invokes this function for every series.
+  // the prior single-purpose summary header this strip replaces. `manifestPath` names the series'
+  // own `firstDate` as the value's conceptual origin (a run's window is always bounded by it); the
+  // two coincide exactly when `window` covers the series' own full range, which is how the D-16
+  // real-bundle test in `tests/app/provenance-strip.test.ts` deliberately invokes this function for
+  // every series.
   fields.push({
     id: 'date-range',
     label: 'Data',

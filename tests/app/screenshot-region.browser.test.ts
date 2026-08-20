@@ -2,12 +2,20 @@
  * tests/app/screenshot-region.browser.test.ts
  *
  * D-20: proves the `[data-testid="screenshot-region"]` element's bounding rectangle fully
- * contains the bounding rectangles of the symbol label, the effective date range, the bundle
- * version, the chart canvas and the metrics panel (plus the ruin banner, when present) -- in both
- * the normal and the ruined states, at both the widest and the narrowest supported viewport
- * widths. `page.viewport` (from `@vitest/browser/context`) resizes the real test iframe, so
- * `.app-layout`'s `@media (min-width: 900px)` breakpoint (D-17) genuinely engages or doesn't,
- * unlike resizing a container element which CSS media queries do not respond to.
+ * contains the bounding rectangles of the D-13 provenance strip's tier/date-range/sources/
+ * bundle-version fields, the chart canvas and the metrics panel (plus the ruin banner, when
+ * present) -- in both the normal and the ruined states, at both the widest and the narrowest
+ * supported viewport widths. `page.viewport` (from `@vitest/browser/context`) resizes the real
+ * test iframe, so `.app-layout`'s `@media (min-width: 900px)` breakpoint (D-17) genuinely engages
+ * or doesn't, unlike resizing a container element which CSS media queries do not respond to.
+ *
+ * Plan 05-04: the symbol/date-range/bundle-version fields this test checked pre-Phase-5
+ * (`result-summary-symbol`/`result-summary-date-range`/`result-summary-bundle-version`) belonged
+ * to the single-purpose summary header this strip replaces; that component is deleted and its
+ * facts now render through `ProvenanceStrip` under `provenance-tier`/`provenance-date-range`/
+ * `provenance-sources`/`provenance-bundle-version` (`provenance-fields.ts`'s field `id`s). The
+ * default landing run crosses zero seams (D-14), so `provenance-seams-crossed` is asserted absent,
+ * not contained -- consistent with D-14's own "omitted entirely when empty" rule.
  *
  * 320px (a common smallest-supported mobile width) is the narrowest viewport; 1440px (a common
  * desktop width) is the widest -- 04-UI-SPEC.md names no exact pixel values, only "narrowest/
@@ -93,9 +101,13 @@ function assertRegionIsSelfContained(el: HTMLDivElement, expectRuinBanner: boole
   expect(region, 'screenshot-region not found').not.toBeNull()
   const regionRect = region!.getBoundingClientRect()
 
-  assertContained(regionRect, el.querySelector('[data-testid="result-summary-symbol"]'), 'the symbol label')
-  assertContained(regionRect, el.querySelector('[data-testid="result-summary-date-range"]'), 'the effective date range')
-  assertContained(regionRect, el.querySelector('[data-testid="result-summary-bundle-version"]'), 'the bundle version')
+  assertContained(regionRect, el.querySelector('[data-testid="provenance-tier"]'), 'the provenance tier field')
+  assertContained(regionRect, el.querySelector('[data-testid="provenance-date-range"]'), 'the provenance date-range field')
+  assertContained(regionRect, el.querySelector('[data-testid="provenance-sources"]'), 'the provenance sources field')
+  assertContained(regionRect, el.querySelector('[data-testid="provenance-bundle-version"]'), 'the provenance bundle-version field')
+  // D-14: the default landing run crosses zero seams, so this field is omitted entirely rather
+  // than rendered empty -- asserted absent, not asserted contained.
+  expect(el.querySelector('[data-testid="provenance-seams-crossed"]'), 'the seams-crossed field should be absent on the default landing run').toBeNull()
   assertContained(regionRect, el.querySelector('[data-testid="equity-curve-chart"] canvas'), 'the chart canvas')
   assertContained(regionRect, el.querySelector('[data-testid="metrics-panel"]'), 'the metrics panel')
 
