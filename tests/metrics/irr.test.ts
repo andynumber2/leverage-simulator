@@ -3,9 +3,14 @@
  *
  * Every case in 04-02-PLAN.md Task 2's `<behavior>` block for `solveIrr`, `buildCashFlows` and
  * `solveCagr`: single-cash-flow agreement with the closed-form CAGR, a monthly-contribution
- * schedule solving below the naive ratio return, the total-loss boundary, the undefined-bracket
+ * schedule solving ABOVE the naive ratio return, the total-loss boundary, the undefined-bracket
  * null, D-21's post-ruin contribution exclusion, and a fast-check property over the
  * single-outflow-single-inflow case.
+ *
+ * The plan wrote "below" for the monthly-contribution case and was wrong: later contributions
+ * compound for less time, so the money-weighted rate must exceed the time-blind ratio. The test
+ * at the bottom of this file asserts the correct direction; this header used to repeat the
+ * plan's error. Recorded as broken window #4.
  */
 
 import fc from 'fast-check'
