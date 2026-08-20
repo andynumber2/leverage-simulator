@@ -1,7 +1,7 @@
 ---
 phase: 05
 slug: attribution-and-the-credibility-surface
-status: draft
+status: approved
 shadcn_initialized: false
 preset: none
 created: 2026-08-20
@@ -191,11 +191,15 @@ unchanged and not repeated here.
 
 ## UI Considerations
 
-State coverage for Phase 5's new surfaces, following the identical shape-rooted method Phase 4's
-UI-SPEC used (`ui-consideration-probe.cjs` taxonomy: empty / loading / error / populated / partial
-/ overflow / zero-one-many / long-text). Phase 4's own ten elements (E1–E10) are unchanged and not
-repeated. Applicable state considerations resolved: **8 new surfaces, 41 applicable, 41 resolved
-(31 explicit, 10 backstop), 0 unresolved.**
+State coverage for Phase 5's new surfaces, produced by the shape-rooted UI-consideration probe
+(`ui-consideration-probe.cjs`: empty / loading / error / populated / partial / overflow /
+zero-one-many / long-text). Element kinds below are the confirmed classification (heuristic
+detection reviewed and corrected per element), and the categories raised are exactly those the
+taxonomy's relevance filter admits for those kinds. Phase 4's own ten elements (E1-E10) are
+unchanged and not repeated. Empty-state and error-state **copy** lives in `## Copywriting Contract`
+above; this section covers state *coverage* and references that copy rather than restating it.
+
+**Coverage: 55 applicable, 55 resolved (47 explicit, 8 backstop), 0 unresolved.**
 
 ### F1 — AttributionPanel
 
@@ -203,103 +207,116 @@ _Kinds: list-collection, static-content_
 
 | Category | Verification | Resolution |
 |----------|--------------|------------|
-| empty | explicit | Never empty when a result exists: the four rows (naive, actual, three components, reconciliation) always compute together from the same result — attribution has no independent empty state. When D-11 clears the result column entirely, the attribution panel disappears with it, same rule as MetricsPanel. |
-| loading | explicit | No independent loading state — attribution's four extra kernel-scale evaluations ride inside the same coalesced rAF pass as the main result (PERF-07b), so the panel updates synchronously with the chart and metrics, never showing a stale value while the rest of the screen has updated. |
-| error | explicit | If a counterfactual arm cannot produce a finite value (a pathological parameter combination), the affected row prints "n/a" (the existing `format.ts` undefined placeholder) rather than a stale or zero figure, and the reconciliation row is suppressed for that run rather than shown falsely balancing. |
-| populated | explicit | Fixed five-row layout: naive, actual, three signed components, reconciliation — row identity and order never vary with the result, matching MetricsPanel's own fixed-row discipline. |
-| partial | explicit | With contributions on (D-05), the naive/actual rows still render as single figures (the per-cash-flow sum), not as one row per contribution — the panel never grows with the number of contributions in the schedule. |
-| overflow | 🧪 backstop | The longest signed-component string ("Financing cost: -$1,234,567 (140.00% of gap) — compounding helped" in an extreme scientific-notation case) must wrap under its label rather than overflow the fixed-width result column at the narrowest supported viewport. |
-| long-text | 🧪 backstop | The D-04 gain-case suffix ("— compounding helped") is the one variable-length addition to an otherwise fixed-format row; verify it wraps onto its own line rather than forcing horizontal scroll on narrow viewports. |
+| empty | explicit | Never empty when a result exists: the rows (naive, actual, three components, reconciliation) always compute together from the same result, so attribution has no independent empty state. When D-11 clears the result column entirely, the attribution panel disappears with it, same rule as MetricsPanel. |
+| loading | explicit | No independent loading state: attribution's extra kernel-scale evaluations ride inside the same coalesced rAF pass as the main result (PERF-07b), so the panel updates synchronously with the chart and metrics and never shows a stale value while the rest of the screen has updated. |
+| error | explicit | If a counterfactual arm cannot produce a finite value (a pathological parameter combination), the affected row prints "n/a" (the existing format.ts undefined placeholder) rather than a stale or zero figure, and the reconciliation row is suppressed for that run rather than shown falsely balancing. |
+| populated | explicit | Fixed five-row layout: naive, actual, three signed components, reconciliation. Row identity and order never vary with the result, matching MetricsPanel's fixed-row discipline. |
+| partial | explicit | With contributions on (D-05) the naive/actual rows still render as single figures (the per-cash-flow sum), not one row per contribution: the panel never grows with the number of contributions in the schedule. |
+| overflow | 🧪 backstop | The longest signed-component string ("Financing cost: -$1,234,567 (140.00% of gap) - compounding helped" in an extreme case) must wrap under its label rather than overflow the fixed-width result column at the narrowest supported viewport. |
+| zero-one-many | explicit | The row count is fixed at five and never varies with data volume, so there is no singular/plural copy or spacing variance to design for. Row labels are fixed strings; the only variable content is the numeric interpolation inside each row. |
+| long-text | 🧪 backstop | The D-04 gain-case suffix ("- compounding helped") is the one variable-length addition to an otherwise fixed-format row; verify it wraps onto its own line rather than forcing horizontal scroll on narrow viewports. |
 
 ### F2 — NaiveGhostSeries (EquityCurveChart extension)
 
-_Kinds: media_
+_Kinds: list-collection, media_
 
 | Category | Verification | Resolution |
 |----------|--------------|------------|
 | empty | explicit | Inherits E6's existing rule: a run with zero plottable bars never reaches the chart at all (D-11 clear-and-explain), so the ghost series has no independent empty case. |
-| error | explicit | F-02's negative-value case on a log axis: the ghost series uses `null` at every bar where the naive value is `<=0` (the existing `buildTerminatorData` null-gap idiom, reused for a different fill pattern) — producing a visible gap in the dashed line, not a dropped series, a clipped render, or a renderer crash. The real (accent) series is unaffected and continues to render normally through the same window. |
+| loading | explicit | No independent loading state: the ghost series is computed in the same coalesced rAF pass as the real series and handed to uPlot in the same setData call, so the chart never renders the real curve with a stale or absent ghost beside it. |
+| error | explicit | F-02's negative-value case on a log axis: the ghost series uses null at every bar where the naive value is <= 0 (the existing buildTerminatorData null-gap idiom, reused for a different fill pattern), producing a visible gap in the dashed line rather than a dropped series, a clipped render or a renderer crash. The real (accent) series is unaffected and continues to render normally through the same window. |
 | populated | explicit | Typical volume matches the real series: ~25,000 daily bars, dashed muted stroke behind the solid accent stroke, always on (never behind a toggle, D-07). |
-| long-text | 🧪 backstop | The chart legend now carries two entries (real, ghost) instead of one; verify the added legend text does not crowd the log/linear toggle or the theme control at the narrowest supported viewport (both already 44×44px touch targets that must not shrink). |
+| partial | explicit | A partially-defined ghost series (some bars null per the error row above) renders as visible dashed gaps with the surrounding segments intact: uPlot must not interpolate a straight line across the gap, and the legend entry stays present rather than disappearing for the partial run. |
+| overflow | 🧪 backstop | Two concerns a rendered pixel must answer: (a) at ~25,000 bars compressed into the chart width, the 4px/3px dash pattern must stay visually distinguishable from the solid accent stroke rather than degrading into a near-solid line; (b) the legend now carries two entries instead of one, which must not crowd the log/linear toggle or the theme control at the narrowest supported viewport (both already 44x44px touch targets that must not shrink). |
+| zero-one-many | explicit | The series count is fixed at design time (real, ghost, plus the conditional ruin terminator) and never varies with data, so legend layout and its copy are authored once rather than pluralized. There is no zero-series or many-series case. |
 
 ### F3 — ProvenanceStrip
 
-_Kinds: static-content, list-collection_
+_Kinds: form, list-collection, static-content_
 
 | Category | Verification | Resolution |
 |----------|--------------|------------|
-| empty | explicit | Never empty while a bundle is loaded: tier, date range and bundle version are always known the moment a result exists. The seams-crossed field is the one genuinely optional field (omitted, not blanked, when the window crosses zero seams — see Copywriting Contract). |
-| loading | explicit | Hidden during cold load, same as the rest of the result column's `LoadingNotice` state (E6/E9) — the strip has nothing true to say about a bundle that has not decoded yet. |
+| empty | explicit | Never empty while a bundle is loaded: tier, date range and bundle version are always known the moment a result exists. The seams-crossed field is the one genuinely optional field, omitted rather than blanked when the window crosses zero seams. |
+| loading | explicit | Hidden during cold load, same as the rest of the result column's LoadingNotice state (E6/E9): the strip has nothing true to say about a bundle that has not decoded yet. |
 | error | explicit | If the manifest fails to decode, the whole result column already routes to Phase 4's load-failure state (E1); the strip does not attempt a partial render from a partially-loaded manifest. |
-| populated | explicit | A single dense horizontal row of 4–5 fields (tier, date range, sources, seams-crossed when present, bundle version), Label size, monospace for dates/versions, sans for field names — matches the existing `.result-summary-header` visual weight, extended with two new fields rather than replaced. |
-| partial | explicit | Every field D-16's test requires traces to a manifest field; there is no "some fields present, others missing" partial state by design — a missing manifest field is a build-time data bug (caught by D-16's test), never a rendering decision. |
+| populated | explicit | A single dense horizontal row of 4-5 fields (tier, date range, sources, seams-crossed when present, bundle version), Label size, monospace for dates/versions, sans for field names, matching the existing .result-summary-header visual weight extended with two new fields rather than replaced. |
+| partial | explicit | Every field D-16's test requires traces to a manifest field; there is no "some fields present, others missing" partial state by design. A missing manifest field is a build-time data bug caught by D-16's test, never a rendering decision. |
 | overflow | 🧪 backstop | The sources field (multiple names, each a link) is the field most likely to overflow a narrow viewport; verify it wraps to a second line within the strip rather than pushing the strip's height unpredictably or clipping a source name. |
-| long-text | explicit | The seams-crossed summary is bounded by D-14's own scope rule (only seams the active window crosses, in full — not every seam for the series), so its length is bounded by how many seams a single run window can realistically cross, not by the series' total seam count. |
+| zero-one-many | explicit | Two variable-length fields, both with authored zero/one/many copy. Sources: zero is impossible (a bundled series always cites at least one source, enforced by D-16's manifest test), one renders bare, many render comma-separated. Seams: zero omits the field entirely rather than rendering "0 seams", one renders singular "1 seam in this run", many render the plural form (Copywriting Contract). |
+| long-text | explicit | The seams-crossed summary is bounded by D-14's own scope rule (only seams the active window crosses, not every seam for the series), so its length is bounded by how many seams a single run window can realistically cross rather than by the series' total seam count. The full list lives behind the "Show all seams" affordance. |
 
 ### F4 — TierControl
 
-_Kinds: form, interactive-control_
+_Kinds: form, interactive-control, list-collection_
 
 | Category | Verification | Resolution |
 |----------|--------------|------------|
-| empty | explicit | Never empty: tier defaults to Strict (D-23's landing-run rule pins the default *landing* run to strict regardless of what a user later selects) and always holds one of exactly two values. |
-| loading | explicit | Disabled with the rest of the parameter column until the manifest decodes — its options and their meaning-on-screen copy come from `Manifest.series[].tiers`, unavailable before decode. |
-| error | explicit | Selecting Extended for a symbol whose manifest carries no extended-tier range (`tiers.extended === null`) disables that option with the reason stated inline (matches E1's existing "disabled with reason" pattern for a symbol missing a series), rather than allowing a selection that resolves to nothing. |
+| empty | explicit | Never empty: tier defaults to Strict (D-23's landing-run rule pins the default landing run to strict regardless of what a user later selects) and always holds one of exactly two values. |
+| loading | explicit | Disabled with the rest of the parameter column until the manifest decodes: its options and their meaning-on-screen copy come from Manifest.series[].tiers, unavailable before decode. |
+| error | explicit | Selecting Extended for a symbol whose manifest carries no extended-tier range (tiers.extended === null) disables that option with the reason stated inline (matching E1's existing disabled-with-reason pattern for a symbol missing a series), rather than allowing a selection that resolves to nothing. |
 | populated | explicit | Exactly two radio-style options, both always visible with their meaning stated inline (APP-02), never a dropdown that hides the second option's text until opened. |
-| long-text | explicit | Both option labels are fixed strings (Copywriting Contract above); no variable-length content in this control. |
+| partial | explicit | No partially-entered state exists: a radio selection is either Strict or Extended and applies immediately. Unlike the numeric controls (E2-E5) there is no unparseable intermediate value to guard against, so the control never suppresses recompute waiting for an edit to resolve. |
+| overflow | 🧪 backstop | The Extended option's meaning-on-screen copy ("Extended - deep history, monthly rate/dividend data interpolated to daily") is the longest label in the parameter column, and APP-02 forbids relocating it to a tooltip; verify it wraps within the column at the narrowest supported viewport without pushing the column wider or clipping. |
+| zero-one-many | explicit | Always exactly two options, never a variable count. A symbol lacking an extended range still renders both options with Extended disabled and its reason stated, rather than collapsing to a single-option control that would read as no choice at all. |
+| long-text | explicit | Both option labels are fixed strings authored in the Copywriting Contract; no variable-length or data-derived content renders in this control. |
 
 ### F5 — ExtendedTierWarning
 
-_Kinds: static-content_
+_Kinds: media, interactive-control, static-content_
 
 | Category | Verification | Resolution |
 |----------|--------------|------------|
-| empty | explicit | Absent by default (Strict tier, the landing state) — no placeholder or reserved empty slot, matching Phase 4's E9 rule that conditional chrome has no residual footprint on the happy path. |
-| error | explicit | This element is itself effectively a standing disclosure, not an error state — it renders identically on every Extended-tier result (D-20: "no gate... every extended result carries the warning"), never conditionally suppressed by a dismiss/acknowledge gesture (explicitly rejected by D-20, since acknowledgment state is not in the URL). |
+| empty | explicit | Absent by default (Strict tier, the landing state): no placeholder and no reserved empty slot, matching Phase 4's E9 rule that conditional chrome has no residual footprint on the happy path. |
+| loading | explicit | Never renders during load: the banner is conditional on a decoded manifest's active tier, and the result column shows LoadingNotice until decode completes. It appears in the same frame as the first extended-tier result, never before, so a reader never sees a bias warning attached to nothing. |
+| error | explicit | This element is itself a standing disclosure, not an error state: it renders identically on every Extended-tier result (D-20: no gate, every extended result carries the warning) and is never conditionally suppressed by a dismiss/acknowledge gesture, explicitly rejected by D-20 since acknowledgment state is not in the URL. |
+| populated | explicit | Single fixed composition at every volume: warning triangle icon, heading, one body paragraph carrying the interpolated D-21 magnitude figure. The banner looks identical on every extended-tier run apart from that one numeric interpolation, so there is no typical-volume variance to design for. |
 | overflow | 🧪 backstop | The CRED-03 magnitude sentence is the longest single sentence introduced by this phase; verify it wraps within the warning banner without truncation at the narrowest supported viewport, and that the banner does not push the chart out of the D-20 screenshot region (E9's existing overflow concern, now with one more contributor). |
-| long-text | explicit | Body copy is a fixed template with one bounded numeric interpolation ({CRED-03 magnitude}), not open-ended; length is known and bounded at design time. |
+| long-text | explicit | Body copy is a fixed template with one bounded numeric interpolation (the D-21 magnitude), not open-ended; length is known and bounded at design time. |
 
 ### F6 — ValidationSection (fund selector, comparison, sub-window table)
 
-_Kinds: form, media, list-collection_
+_Kinds: form, list-collection, interactive-control, media_
 
 | Category | Verification | Resolution |
 |----------|--------------|------------|
-| empty | explicit | Never empty: the section renders with a fixed default fund (UPRO) the moment the bundle is loaded, independent of whatever run is currently on screen (D-09) — there is no "select a fund to begin" empty state. |
-| loading | explicit | Section shows the same `LoadingNotice` treatment as the main result until the bundle decodes; its own computation (`computeTrackingError` over the pinned canonical config) has no additional network dependency once the bundle is resident. |
+| empty | explicit | Never empty: the section renders with a fixed default fund (UPRO) the moment the bundle is loaded, independent of whatever run is currently on screen (D-09). There is no "select a fund to begin" empty state. |
+| loading | explicit | Section shows the same LoadingNotice treatment as the main result until the bundle decodes; its own computation (computeTrackingError over the pinned canonical config) has no additional network dependency once the bundle is resident. |
 | error | explicit | If the resolved overlap window between synthetic and real is too short to compute a meaningful figure for some future symbol pairing, the section states that explicitly ("insufficient overlap to compare") rather than rendering a misleadingly small-sample tracking-error number. |
-| populated | explicit | Fixed structure: fund selector (2 options), headline tracking-error and return-drift figures, then the full rate-regime sub-window table (D-12) — including the post-2022 high-rate rows, rendered with no visual distinction singling them out as worse (they read as ordinary rows in an ordinary table, per D-12's "publishing the unflattering sub-window is the most credible thing on the page"). |
-| partial | explicit | Switching the fund selector recomputes and replaces the whole section's figures together (window, tracking error, drift, sub-window table) — never a state where some figures reflect UPRO and others still reflect TQQQ. |
-| zero-one-many | explicit | The fund selector is a fixed 2-item set (UPRO, TQQQ) — no variable-length list, no plural-copy concern. |
-| overflow | 🧪 backstop | The sub-window table is the widest tabular content in the app so far (regime label, tracking error, return drift, per fund); verify it degrades to a stacked/scrollable layout rather than clipping columns at the narrowest supported viewport. |
-| long-text | explicit | All table cells are bounded-format numbers (percentages, dates) routed through `format.ts`; no open-ended text in this table. |
+| populated | explicit | Fixed structure: fund selector (2 options), headline tracking-error and return-drift figures, then the full rate-regime sub-window table (D-12) including the post-2022 high-rate rows, rendered with no visual distinction singling them out as worse (D-12: they read as ordinary rows in an ordinary table). |
+| partial | explicit | Switching the fund selector recomputes and replaces the whole section's figures together (window, tracking error, drift, sub-window table): never a state where some figures reflect UPRO and others still reflect TQQQ. |
+| overflow | 🧪 backstop | The sub-window table is the widest tabular content in the app so far (regime label, tracking error, return drift, per fund); verify it degrades to a stacked or horizontally-scrollable layout rather than clipping columns at the narrowest supported viewport. |
+| zero-one-many | explicit | The fund selector is a fixed 2-item set (UPRO, TQQQ) and the rate-regime table's row set is fixed by the regime registry, so neither is a variable-length list and no plural-copy or spacing variance arises. |
+| long-text | explicit | All table cells are bounded-format numbers (percentages, dates) routed through format.ts; no open-ended text renders in this table. |
 
 ### F7 — MethodologyOverlay
 
-_Kinds: nav, static-content_
+_Kinds: nav, interactive-control, static-content_
 
 | Category | Verification | Resolution |
 |----------|--------------|------------|
-| loading | explicit | Every value the overlay renders (cost parameters, day-count constants, manifest sources/seams, D-21's generated bias figure) is already resident in memory or a build-time constant by the time the overlay can be opened (it requires an existing result to link from) — there is no independent loading state for the overlay itself. |
-| error | explicit | Opening `?methodology=1` alongside a run that fails permalink decode (Pitfall 2, RESEARCH.md) must not evict the overlay along with the run — the overlay is read and stripped from the URL before `decodeParams` runs, so a malformed run still shows its existing D-11 error state with the methodology link still functional beside it. |
-| overflow | explicit | Full-screen overlay, its own internal scroll (the underlying single-run screen does not scroll behind it); each of the four sections (cost model, day-count, sources, limitations) is a normal scrolling block, no fixed-height clipping. |
-| long-text | explicit | Section content is generated from registries with bounded per-entry text (a citation string, a confidence tier, a numeric constant); only the four limitation paragraphs (D-19) are free-standing prose, and each is a fixed, pre-written sentence (Copywriting Contract above), not user- or data-length-variable. |
+| loading | explicit | Every value the overlay renders (cost parameters, day-count constants, manifest sources/seams, D-21's generated bias figure) is already resident in memory or a build-time constant by the time the overlay can be opened (it requires an existing result to link from), so there is no independent loading state for the overlay itself. |
+| error | explicit | Opening ?methodology=1 alongside a run that fails permalink decode (Pitfall 2, RESEARCH.md) must not evict the overlay along with the run: the overlay flag is read and stripped from the URL before decodeParams runs, so a malformed run still shows its D-11 error state with the methodology link functional beside it. |
+| overflow | explicit | Full-screen overlay with its own internal scroll (the underlying single-run screen does not scroll behind it); each of the four sections is a normal scrolling block with no fixed-height clipping. |
+| long-text | explicit | Section content is generated from registries with bounded per-entry text (a citation string, a confidence tier, a numeric constant); only the four limitation paragraphs (D-19) are free-standing prose, and each is a fixed pre-written sentence in the Copywriting Contract, not user- or data-length-variable. |
 
 ### F8 — DefaultBadge + ResetButton (generalized across every parameter control)
 
-_Kinds: interactive-control, static-content_
+_Kinds: form, interactive-control, static-content_
 
 | Category | Verification | Resolution |
 |----------|--------------|------------|
-| empty | explicit | Every parameter named in D-22 always has a value (never a genuinely empty field — this is the existing rule from Phase 4's E1–E5, now applied uniformly), so the badge always resolves to either "default" or a Reset affordance, never a third "no value" state. |
-| loading | explicit | Disabled with the rest of the parameter column until the manifest decodes, same as every other control (unchanged rule, now stated once for all eight controls rather than per-control). |
-| partial | explicit | A control mid-edit (not yet a valid parseable value) does not yet know whether it will land on-default or off-default; the badge/reset affordance updates only once the edit resolves to a valid value, matching each control's existing partial-input rule (E2–E5) of not recomputing on unparseable input. |
-| overflow | 🧪 backstop | Adding a "Reset" affordance beside six more controls (leverage, entry date, holding mode, initial investment, contribution amount/frequency, tier, dividend mode) than Phase 4 shipped increases the parameter column's vertical density; verify at the narrowest supported viewport that no control's label, value and reset affordance collide or wrap unpredictably against each other. |
-| long-text | explicit | The badge/reset copy is two fixed short strings ("default", "Reset") reused identically across all eight controls — no per-control text-length variance to account for. |
+| empty | explicit | Every parameter named in D-22 always has a value (never a genuinely empty field, the existing rule from Phase 4's E1-E5 now applied uniformly), so the affordance always resolves to either the "default" badge or a Reset button, never a third "no value" state. |
+| loading | explicit | Disabled with the rest of the parameter column until the manifest decodes, same as every other control: one rule stated once for all eight controls rather than per-control. |
+| error | explicit | Reset cannot itself fail: it writes the shipped default constant through the control's existing validated setter, the same path an edit-to-default takes, so it can never produce an invalid value. When a control is currently in an invalid state, Reset stays enabled and clears it, acting as the recovery affordance rather than another way to trigger an error. |
+| partial | explicit | A control mid-edit (not yet a valid parseable value) does not yet know whether it will land on-default or off-default; the badge/reset affordance updates only once the edit resolves to a valid value, matching each control's existing partial-input rule (E2-E5) of not recomputing on unparseable input. |
+| overflow | 🧪 backstop | Adding a Reset affordance beside six more controls than Phase 4 shipped increases the parameter column's vertical density; verify at the narrowest supported viewport that no control's label, value and reset affordance collide or wrap unpredictably against each other. |
+| long-text | explicit | The badge and reset copy are two fixed short strings ("default", "Reset") reused identically across all eight controls: no per-control text-length variance to account for. |
 
 Rows marked 🧪 backstop are, as in Phase 4, questions only a rendered pixel can answer (wrapping,
-collision, density at extremes) — each is discharged by a held-out visual UI-state check during
-execution, not asserted in prose.
+collision, dash-pattern legibility, density at extremes). Each lifts into the plan's must-have truths
+and is discharged by a held-out visual UI-state check during execution, not asserted in prose: at
+verify time a backstop row with no wired evidence routes to `insufficient_spec → human_needed`
+rather than passing silently.
 
 ---
 
@@ -432,11 +449,11 @@ CSS custom properties, consistent with the project's stated minimal-dependency s
 
 ## Checker Sign-Off
 
-- [ ] Dimension 1 Copywriting: PASS
-- [ ] Dimension 2 Visuals: PASS
-- [ ] Dimension 3 Color: PASS
-- [ ] Dimension 4 Typography: PASS
-- [ ] Dimension 5 Spacing: PASS
-- [ ] Dimension 6 Registry Safety: PASS
+- [x] Dimension 1 Copywriting: PASS
+- [x] Dimension 2 Visuals: PASS
+- [x] Dimension 3 Color: PASS
+- [x] Dimension 4 Typography: PASS
+- [x] Dimension 5 Spacing: PASS
+- [x] Dimension 6 Registry Safety: PASS
 
-**Approval:** pending
+**Approval:** APPROVED by gsd-ui-checker 2026-08-20 — 6/6 dimensions PASS, 0 BLOCK, 0 FLAG
