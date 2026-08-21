@@ -3,7 +3,7 @@
  *
  * D-03/D-08/D-09/D-10/D-11: the offline sweep that produces the committed Phase 6 design-pass
  * fixture. Runs the real Phase 3 kernel over a 200 (entry date) by 50 (leverage) grid of SPX
- * total-return, fixed 20-year holding period, and serializes the result through
+ * total-return, fixed 10-year holding period, and serializes the result through
  * `src/data/sweep-fixture-format.ts` to
  * `.planning/phases/06-heatmap-design-pass/mockups/sweep-fixture.bin`.
  *
@@ -41,8 +41,11 @@ const LEVERAGE_ROWS = 50
 /** D-08: leverage runs 1.00x to 5.00x inclusive over the 50 rows, ~0.0816x steps. */
 const LEVERAGE_MIN = 1
 const LEVERAGE_MAX = 5
-/** D-10/D-11: a fixed 20-year holding period, never hold-to-today. */
-const HOLDING_YEARS = 20
+/** D-10/D-11: a fixed holding period, never hold-to-today. Owner-directed post-comparison-page
+ * revision of D-11's own 20-year figure to 10 years (deliberate override of D-11's explicit
+ * rejection of 10 years -- see the mockup-refresh dispatch that ordered this change), so far
+ * fewer of the 200 entry columns fall past the strict-tier calendar's last usable exit date. */
+const HOLDING_YEARS = 10
 /** D-11. */
 const SWEEP_SYMBOL = 'SPX'
 const SWEEP_SERIES_ID = 'SPX/total-return'
@@ -173,7 +176,7 @@ async function main(): Promise<void> {
       const exitAbsIndex = lowerBoundFullCalendar(bundle.calendar, exitDays)
 
       if (exitAbsIndex >= bundle.calendar.length) {
-        // D-19: the target 20-year exit date falls after the calendar's last bar. Flag
+        // D-19: the target HOLDING_YEARS exit date falls after the calendar's last bar. Flag
         // incomplete, write 0 into both metric arrays, and never call the kernel for this cell
         // (D-20: an incomplete cell can never carry a partial value).
         flags[cellIndex] = CELL_FLAG_INCOMPLETE
