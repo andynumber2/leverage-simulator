@@ -20,6 +20,7 @@ import { ParameterColumn } from './components/ParameterColumn/ParameterColumn.ts
 import { AttributionPanel } from './components/ResultColumn/AttributionPanel.tsx'
 import { bundleVersionMismatchVariant } from './components/ResultColumn/BundleVersionBanner.tsx'
 import { EquityCurveChart } from './components/ResultColumn/EquityCurveChart.tsx'
+import { ExtendedTierWarning } from './components/ResultColumn/ExtendedTierWarning.tsx'
 import { LogScaleToggle } from './components/ResultColumn/LogScaleToggle.tsx'
 import { MetricsPanel } from './components/ResultColumn/MetricsPanel.tsx'
 import { ProvenanceStrip } from './components/ResultColumn/ProvenanceStrip.tsx'
@@ -29,6 +30,7 @@ import { ThemeToggle } from './components/ThemeToggle.tsx'
 import { ValidationSection } from './components/ValidationSection/ValidationSection.tsx'
 import { BUNDLE_VERSION } from '../data-bundle.generated.ts'
 import {
+  activeTier,
   backtestRequest,
   currentAttribution,
   currentCaveatMessage,
@@ -139,6 +141,13 @@ export function App() {
                   <Show when={currentDerivedMetrics() !== null}>
                     <Show when={currentKernelResult()!.ruined && currentDerivedMetrics()!.ruinDate !== null}>
                       <RuinBanner ruinDate={currentDerivedMetrics()!.ruinDate!} />
+                    </Show>
+                    {/* CRED-02/D-20: unconditional on every extended-tier result, under the same
+                        result-exists guard as the ruin banner so it never renders during load or
+                        attached to no result; ranks below ruin, above the metrics panel
+                        (05-UI-SPEC.md Visual hierarchy rank 4). */}
+                    <Show when={activeTier() === 'extended'}>
+                      <ExtendedTierWarning />
                     </Show>
                     <MetricsPanel
                       result={currentKernelResult()!}

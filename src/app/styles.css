@@ -16,6 +16,7 @@
   --color-text-muted: #5b6169;
   --color-accent: #2e6bd6;
   --color-destructive: #c4341f;
+  --color-warning: #9a5b00;
 
   --space-xs: 4px;
   --space-sm: 8px;
@@ -41,6 +42,7 @@
   --color-text-muted: #9aa0a8;
   --color-accent: #5b9bf0;
   --color-destructive: #e2604b;
+  --color-warning: #d99a3e;
 }
 
 *,
@@ -458,6 +460,49 @@ body {
   padding: var(--space-sm) var(--space-md);
   color: var(--color-destructive);
   font-weight: 600;
+}
+
+/* CRED-02/D-20: the only element in Phase 5 permitted to use a colour other than muted/text-
+   primary (05-UI-SPEC.md Visual hierarchy rank 4) -- unconditional on every extended-tier result,
+   no dismiss/collapse affordance, so its footprint is either fully present or fully absent. */
+.extended-tier-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-sm);
+  margin-top: var(--space-md);
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--color-warning);
+  border-radius: 4px;
+  color: var(--color-warning);
+}
+
+.extended-tier-warning-icon {
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  margin-top: 2px;
+}
+
+.extended-tier-warning-text {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  min-width: 0;
+}
+
+.extended-tier-warning-heading {
+  margin: 0;
+  font-size: var(--font-size-body);
+  font-weight: 600;
+  color: var(--color-warning);
+}
+
+.extended-tier-warning-body {
+  margin: 0;
+  font-size: var(--font-size-body);
+  line-height: 1.5;
+  color: var(--color-warning);
+  overflow-wrap: break-word;
 }
 
 /* METR-01 through METR-04: five fixed rows, the headline (row 1) at 28px monospace, the only
