@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
+    <title>Phase 6 mockup: D-05 comparison</title>
+  </head>
+  <body>
+    <!--
+      D-05: mounts comparison.tsx, the one hand-rolled Solid.js page in this phase
+      (06-UI-SPEC.md's Design System row). Solid transforms comparison.tsx itself imports
+      src/app/styles.css so both palettes are available before the first paint. No inline copy
+      of any mockup logic here (D-28) -- this file only mounts the component.
+    -->
+    <div id="comparison-root"></div>
+    <script type="module" src="./comparison.tsx"></script>
+  </body>
+</html>
