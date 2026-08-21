@@ -58,6 +58,19 @@
  * also runs on `visibilitychange`/`pagehide`, so a copy or a tab close mid-drag never observes a
  * stale URL. `resetAppState` clears any pending flush so a reset cannot strand a stale scheduled
  * write behind it.
+ *
+ * Plan 05-07 (CRED-04): the `methodology` URL flag is read and stripped from a COPY of
+ * `window.location.search` before `decodeParams` ever sees it (`applyPermalinkFromLocation`
+ * below) -- `methodology` is deliberately never added to `PERMALINK_KEYS`, so leaving it in would
+ * make the allow-list's required-key sweep reject every permalink carrying it, and its
+ * required-key sweep would in turn demand it on every permalink generated before this phase. The
+ * decode's own pass/fail result still governs whether a run renders; the overlay opens
+ * independent of that outcome (T-05-18). `openMethodologyOverlay`/`closeMethodologyOverlay` write
+ * only that one key through `window.history.replaceState`, following the same entry-replacing
+ * discipline as `writePermalinkUrl`, and flush any pending trailing-edge permalink write first
+ * (T-05-20) so a queued run-parameter write cannot fire moments later and silently drop the flag
+ * -- `writePermalinkUrl` itself also re-adds the flag when the overlay is currently open, so a
+ * run-parameter change made while the overlay is open cannot strip it either.
  */
 
 import { createSignal } from 'solid-js'
@@ -106,6 +119,11 @@ const [scale, setScaleSignal] = createSignal<ScaleMode>('log')
  * identically to Phase 4's fixed tier. Bounds the entry date and selects which manifest tier range
  * the UI reads; it does not enter `BacktestRequest` or the kernel (see `activeTier`'s doc comment). */
 const [tier, setTierSignal] = createSignal<Tier>('strict')
+/** 05-07/D-17: whether the full-screen methodology overlay is currently open. Never enters
+ * `BacktestRequest`/`PermalinkParams` -- it is UI chrome, not a run parameter -- but it does
+ * gate one key on the URL (`methodology`), read/written outside the strict permalink codec (see
+ * this module's header comment). */
+const [methodologyOverlayOpenSignal, setMethodologyOverlayOpenSignal] = createSignal<boolean>(false)
 const [status, setStatus] = createSignal<LoadStatus>('loading')
 const [loadErrorMessage, setLoadErrorMessage] = createSignal<string | null>(null)
 const [bundle, setBundle] = createSignal<LoadedBundle | null>(null)
@@ -210,6 +228,47 @@ export function setActiveTier(newTier: Tier): void {
   scheduleRun()
 }
 
+/** 05-07/D-17: whether the methodology overlay is open. */
+export function methodologyOverlayOpen(): boolean {
+  return methodologyOverlayOpenSignal()
+}
+
+/** T-05-20: adds or removes exactly the `methodology` key on the current address bar, through
+ * the same entry-replacing `window.history.replaceState` discipline `writePermalinkUrl` already
+ * uses -- never a navigation, never touching any other query parameter or the hash. Flushes any
+ * pending trailing-edge permalink write first: `writePermalinkUrl` rebuilds the query string from
+ * `PERMALINK_KEYS` alone (it does not know about this key on its own), so a write that fired a
+ * moment after this function's own `replaceState` call would otherwise silently drop the flag it
+ * just wrote. Callers set `methodologyOverlayOpenSignal` before calling this, so a flush
+ * triggered from inside this function already sees the correct open/closed state and (via
+ * `writePermalinkUrl`'s own check) writes the flag consistently on its own. */
+function writeMethodologyFlagToUrl(present: boolean): void {
+  flushPermalinkUrl()
+  const params = new URLSearchParams(window.location.search)
+  if (present) {
+    params.set('methodology', '1')
+  } else {
+    params.delete('methodology')
+  }
+  const newUrl = `${window.location.pathname}?${params.toString()}${window.location.hash}`
+  window.history.replaceState(null, '', newUrl)
+}
+
+/** 05-07/D-17: opens the full-screen methodology overlay over whatever run is currently on
+ * screen, leaving every run parameter untouched. */
+export function openMethodologyOverlay(): void {
+  setMethodologyOverlayOpenSignal(true)
+  writeMethodologyFlagToUrl(true)
+}
+
+/** 05-07/D-17: closes the overlay, returning to the exact run underneath it -- removes only the
+ * `methodology` key, leaving every other query parameter and the browser history entry count
+ * unchanged. */
+export function closeMethodologyOverlay(): void {
+  setMethodologyOverlayOpenSignal(false)
+  writeMethodologyFlagToUrl(false)
+}
+
 export function loadStatus(): LoadStatus {
   return status()
 }
@@ -298,6 +357,12 @@ function writePermalinkUrl(inputs: KernelInputs): void {
     bundleVersion: BUNDLE_VERSION,
   }
   const qs = encodeParams(params)
+  // T-05-20: re-adds the methodology flag when the overlay is currently open -- this is the
+  // OTHER half of the race `writeMethodologyFlagToUrl` guards against: a run-parameter change
+  // made WHILE the overlay is open reaches this function through the normal
+  // `schedulePermalinkSync`/`flushPermalinkUrl` path, which knows nothing about `methodology` on
+  // its own (it is deliberately outside `PERMALINK_KEYS`, see this module's header comment).
+  if (methodologyOverlayOpenSignal()) qs.set('methodology', '1')
   const newUrl = `${window.location.pathname}?${qs.toString()}${window.location.hash}`
   window.history.replaceState(null, '', newUrl)
 }
@@ -519,6 +584,7 @@ export function resetAppState(): void {
   setCaveatMessage(null)
   setLinkBundleVersion(null)
   setTierSignal('strict')
+  setMethodologyOverlayOpenSignal(false)
 }
 
 /**
@@ -537,12 +603,25 @@ export function resetAppState(): void {
  * `permalinkDecodeFailedAtBoot`'s doc comment -- and raises the explanation through the same
  * D-11/D-12 surface a live single-field eviction uses, naming the offending key verbatim from
  * `decodeParams`' own error message.
+ *
+ * Plan 05-07/T-05-17: the `methodology` key is read off a COPY of `window.location.search` and
+ * deleted from that copy before `decodeParams` ever sees it -- by its own literal name, through
+ * an explicit `.has`/`.delete` call, never a dynamic property read. `methodology` is not a
+ * `PermalinkKey`, so leaving it in would make `decodeParams`'s allow-list reject the whole
+ * permalink as an unknown key. T-05-18: the overlay opens whenever the flag was present,
+ * regardless of whether the decode below succeeds, fails or is empty -- a flagged permalink
+ * carrying an invalid run still shows its own D-11/D-12 eviction explanation, with the flag never
+ * masking or bypassing that validation.
  */
 function applyPermalinkFromLocation(): void {
   if (permalinkApplied) return
   permalinkApplied = true
 
-  const decoded = decodeParams(new URLSearchParams(window.location.search))
+  const rawParams = new URLSearchParams(window.location.search)
+  const methodologyRequested = rawParams.has('methodology')
+  rawParams.delete('methodology')
+
+  const decoded = decodeParams(rawParams)
   if (decoded.status === 'ok') {
     const { params } = decoded
     setLinkBundleVersion(params.bundleVersion)
@@ -565,6 +644,13 @@ function applyPermalinkFromLocation(): void {
     clearForEviction(decoded.error)
   }
   // decoded.status === 'empty': nothing to seed -- DEFAULT_REQUEST is already in place.
+
+  // T-05-18: independent of the decode outcome above -- the URL already carries the flag, so this
+  // only needs to set the in-memory signal, never `openMethodologyOverlay`'s own URL-rewriting
+  // path (that would perform a needless `replaceState` at boot for a URL that is already correct).
+  if (methodologyRequested) {
+    setMethodologyOverlayOpenSignal(true)
+  }
 }
 
 /**
