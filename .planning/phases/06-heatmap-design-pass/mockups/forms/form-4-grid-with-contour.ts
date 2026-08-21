@@ -2,7 +2,7 @@
  * .planning/phases/06-heatmap-design-pass/mockups/forms/form-4-grid-with-contour.ts
  *
  * D-02 form 4: the hybrid position -- the same dense 10,000-cell grid form 1 paints, with exactly
- * TWO iso-lines stroked on top as a sparse annotation, rather than form 2's ten filled bands.
+ * TWO iso-lines stroked on top as a sparse annotation, rather than form 2's own filled bands.
  * Form 4's whole question is whether a contour reads better as an ANNOTATION over the dense grid
  * than as the primary mark; it deliberately reuses form 1's base layer verbatim (`paintDenseGrid`,
  * imported, not copied) so the comparison against form 1 measures the annotation's own value, not
@@ -14,7 +14,6 @@
 import type { SweepFixture } from '../../../../../src/data/sweep-fixture-format.ts'
 import { rampPositionFor } from '../../../../../src/colorscale/value-to-color.ts'
 import type { MockupGeometry } from '../shared/mockup-runtime.ts'
-import { BAND_LEVELS } from '../shared/field-sampler.ts'
 import { marchingSquaresSegments } from '../shared/iso-lines.ts'
 import { fieldRect, paintDenseGrid, type FieldRect, type Metric } from './form-1-dense-grid.ts'
 
@@ -38,14 +37,13 @@ export const FORM_4_GEOMETRY: MockupGeometry = {
  * text colour (D-13), matching form 2's own emphasis. */
 const BREAKEVEN_LEVEL = rampPositionFor(1.0)
 
-/** "The boundary of the ruin-adjacent region at the lowest band edge": `BAND_LEVELS[1]`, the
- * boundary separating the single lowest band (the near-total-loss region actually adjacent to
- * ruin) from every band above it -- not `BAND_LEVELS[0]` (`= 0`), the domain's own floor, which
- * only a clamped-to-minimum cell would ever cross and is not "of" the lowest band in any
- * meaningful sense. Stroked in `var(--color-destructive)`, distinct from every other boundary, so
- * the reader can find the edge of the worst-outcome region without it being confused for a
- * routine band edge. */
-const RUIN_ADJACENT_LEVEL = BAND_LEVELS[1]!
+/** The ruin-adjacent region's own boundary: `rampPositionFor(0.05)`, "you kept 5% of capital" --
+ * chosen on its OWN merits (the lowest labelled band edge `field-sampler.ts`'s `BAND_MULTIPLES`
+ * declares) rather than inherited from `BAND_LEVELS[1]`'s array position, which would silently
+ * track whatever `field-sampler.ts` happens to put second in that array. Stroked in
+ * `var(--color-destructive)`, distinct from every other boundary, so the reader can find the edge
+ * of the worst-outcome region without it being confused for a routine band edge. */
+const RUIN_ADJACENT_LEVEL = rampPositionFor(0.05)
 
 function getCssVar(name: string, fallback: string): string {
   const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim()
@@ -121,8 +119,8 @@ function strokeLevel(
  * base cells, the D-18 ruin hatch, and axis labels all come from that single call), then strokes
  * exactly TWO iso-lines on top as a sparse annotation: the breakeven boundary
  * (`BREAKEVEN_LEVEL`, 2px, `var(--color-text)`) and the ruin-adjacent region's boundary
- * (`RUIN_ADJACENT_LEVEL`, 1.5px, `var(--color-destructive)`). Two lines, not ten (form 2's
- * count), because form 4's own position is that a contour is worth having as a sparse annotation
+ * (`RUIN_ADJACENT_LEVEL`, 1.5px, `var(--color-destructive)`). Two lines, not `BAND_LEVELS.length`
+ * (form 2's count), because form 4's own position is that a contour is worth having as a sparse annotation
  * -- drawing every band boundary here would make it form 2 with extra steps and would not test
  * the position D-02 wants tested.
  */

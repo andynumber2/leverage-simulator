@@ -298,6 +298,57 @@ export function renderLegend(container: HTMLElement, width: number): void {
   container.appendChild(legend)
 }
 
+/**
+ * The fractional fixture row (0 at `leverages[0]`, `leverages.length - 1` at the last entry)
+ * whose value equals `target`, via linear interpolation between the two entries bracketing it.
+ * Assumes `leverages` is monotonically ascending (D-08's fixture construction), but does NOT
+ * assume EVEN spacing between rows -- this still works if a future fixture's leverage axis is
+ * not evenly stepped. Out-of-range `target` clamps to the nearest end index rather than
+ * extrapolating.
+ */
+export function fixtureRowForLeverage(leverages: readonly number[], target: number): number {
+  const n = leverages.length
+  if (n === 0) return 0
+  const first = leverages[0]!
+  const last = leverages[n - 1]!
+  if (target <= first) return 0
+  if (target >= last) return n - 1
+  for (let i = 0; i < n - 1; i++) {
+    const a = leverages[i]!
+    const b = leverages[i + 1]!
+    if (target >= a && target <= b) {
+      const span = b - a
+      const t = span === 0 ? 0 : (target - a) / span
+      return i + t
+    }
+  }
+  return n - 1
+}
+
+/**
+ * Integer leverage values spanning `leverages`' own actual range (`Math.ceil` of the minimum to
+ * `Math.floor` of the maximum, inclusive), each paired with its fractional fixture row position
+ * via `fixtureRowForLeverage`. D-08 fixes 50 rows over 1x-5x, but this derives the label set and
+ * placement from the fixture's own meta rather than hardcoding either the row count or the 1/5
+ * bounds, so it stays correct if D-08's own range is ever revisited. Integer leverages do NOT, in
+ * general, land on exact row indices (1x-5x over 50 rows steps by 4/49), so callers place each
+ * label by interpolating its VALUE to a pixel position, never by picking a nearest row.
+ */
+export function integerLeverageTicks(
+  leverages: readonly number[],
+): ReadonlyArray<{ leverage: number; rowF: number }> {
+  if (leverages.length === 0) return []
+  const first = leverages[0]!
+  const last = leverages[leverages.length - 1]!
+  const start = Math.ceil(first)
+  const end = Math.floor(last)
+  const ticks: Array<{ leverage: number; rowF: number }> = []
+  for (let leverage = start; leverage <= end; leverage++) {
+    ticks.push({ leverage, rowF: fixtureRowForLeverage(leverages, leverage) })
+  }
+  return ticks
+}
+
 /** A form's own display geometry (D-12): pixel size of its canvas and the logical cell grid it
  * represents. `widthPx`/`heightPx` are the canvas's CSS (display) pixel dimensions, not
  * necessarily `cols * cellSizePx` for every form -- forms whose geometry is not a uniform grid

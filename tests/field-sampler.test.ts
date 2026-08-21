@@ -53,39 +53,68 @@ function makeFixture(
 }
 
 describe('BAND_LEVELS', () => {
-  test('is eleven evenly spaced boundaries across [0, 1], giving ten bands', () => {
-    expect(BAND_LEVELS.length).toBe(11)
+  test('starts at 0 and ends at 1, and is strictly ascending throughout', () => {
     expect(BAND_LEVELS[0]).toBe(0)
     expect(BAND_LEVELS[BAND_LEVELS.length - 1]).toBe(1)
+    for (let i = 1; i < BAND_LEVELS.length; i++) {
+      expect(BAND_LEVELS[i]!, `BAND_LEVELS[${i}] must exceed BAND_LEVELS[${i - 1}]`).toBeGreaterThan(
+        BAND_LEVELS[i - 1]!,
+      )
+    }
   })
 
-  test('contains the value 0.5, so breakeven is always a band edge', () => {
+  test('is NOT evenly spaced in ramp position -- levels are round numbers in MULTIPLE space, converted', () => {
+    // Even spacing in t would make every consecutive gap identical. BAND_MULTIPLES' round-number
+    // construction (0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10, 25, 50) does not produce even ramp-position
+    // gaps once converted through the symlog transform, so at least one pair of adjacent gaps must
+    // differ measurably -- this is the property that replaced the old even-spacing construction.
+    const gaps: number[] = []
+    for (let i = 1; i < BAND_LEVELS.length; i++) {
+      gaps.push(BAND_LEVELS[i]! - BAND_LEVELS[i - 1]!)
+    }
+    const allEqual = gaps.every((gap) => Math.abs(gap - gaps[0]!) < 1e-9)
+    expect(allEqual, `expected non-uniform gaps, got ${JSON.stringify(gaps)}`).toBe(false)
+  })
+
+  test('contains exactly one boundary at 0.5, so breakeven (rampPositionFor(1.0)) is always a band edge', () => {
     expect(BAND_LEVELS).toContain(0.5)
+    expect(BAND_LEVELS.filter((level) => Math.abs(level - 0.5) < 1e-9)).toHaveLength(1)
   })
 })
 
 describe('bandIndexFor', () => {
-  test('places a value exactly equal to a band boundary in the UPPER band', () => {
-    // BAND_LEVELS[4] = 0.4 is the boundary between band 3 ([0.3, 0.4)) and band 4 ([0.4, 0.5)).
-    expect(bandIndexFor(0.4)).toBe(4)
-    // The breakeven boundary itself, 0.5, is the boundary between band 4 and band 5.
-    expect(bandIndexFor(0.5)).toBe(5)
+  // Derived from BAND_LEVELS' own length rather than a hardcoded band count, so this stays
+  // correct if BAND_MULTIPLES' entry count ever changes.
+  const lastBandIndex = BAND_LEVELS.length - 2
+
+  test('places a value exactly equal to an interior band boundary in the UPPER band', () => {
+    // BAND_LEVELS[1] is an interior boundary (index 0 is the domain floor, not a real boundary
+    // between two bands).
+    const boundary = BAND_LEVELS[1]!
+    expect(bandIndexFor(boundary)).toBe(1)
+  })
+
+  test('breakeven (0.5) resolves to the band whose lower edge is exactly 0.5', () => {
+    const breakevenIndex = BAND_LEVELS.indexOf(0.5)
+    expect(breakevenIndex).toBeGreaterThan(0)
+    expect(bandIndexFor(0.5)).toBe(breakevenIndex)
   })
 
   test('a value strictly inside a band stays in that band', () => {
-    expect(bandIndexFor(0.05)).toBe(0)
-    expect(bandIndexFor(0.45)).toBe(4)
-    expect(bandIndexFor(0.95)).toBe(9)
+    const midOfFirstBand = (BAND_LEVELS[0]! + BAND_LEVELS[1]!) / 2
+    expect(bandIndexFor(midOfFirstBand)).toBe(0)
+    const midOfLastBand = (BAND_LEVELS[lastBandIndex]! + BAND_LEVELS[lastBandIndex + 1]!) / 2
+    expect(bandIndexFor(midOfLastBand)).toBe(lastBandIndex)
   })
 
   test('t = 0 resolves to the first band, t = 1 resolves to the last band (inclusive top)', () => {
     expect(bandIndexFor(0)).toBe(0)
-    expect(bandIndexFor(1)).toBe(9)
+    expect(bandIndexFor(1)).toBe(lastBandIndex)
   })
 
   test('clamps out-of-range input rather than throwing or returning an out-of-range index', () => {
     expect(bandIndexFor(-5)).toBe(0)
-    expect(bandIndexFor(5)).toBe(9)
+    expect(bandIndexFor(5)).toBe(lastBandIndex)
   })
 })
 

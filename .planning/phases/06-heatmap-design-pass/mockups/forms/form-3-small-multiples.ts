@@ -31,7 +31,7 @@ import {
   type SweepFixture,
 } from '../../../../../src/data/sweep-fixture-format.ts'
 import { RUIN_BASE_RGBA, valueToColor } from '../../../../../src/colorscale/value-to-color.ts'
-import { makeHatchPattern, type MockupGeometry } from '../shared/mockup-runtime.ts'
+import { integerLeverageTicks, makeHatchPattern, type MockupGeometry } from '../shared/mockup-runtime.ts'
 
 export type Metric = 'multiple' | 'drawdown'
 
@@ -189,10 +189,13 @@ function getCssVar(name: string, fallback: string): string {
 }
 
 /**
- * Draws leverage row labels (every 5th fixture row) into the left gutter and entry-year column
+ * Draws integer leverage row labels (1x, 2x, 3x ...) into the left gutter and entry-year column
  * labels (every 20th fixture column) into the bottom gutter, in `var(--font-mono)` at
  * `var(--font-size-label)`. Both gutters are outside the field rectangle, so this never overdraws
- * a data cell -- mirrors `form-1-dense-grid.ts`'s `drawAxisLabels`.
+ * a data cell -- mirrors `form-1-dense-grid.ts`'s `drawAxisLabels`. Integer leverages do not, in
+ * general, land on an exact strip's own row, so each label's Y position is interpolated from its
+ * VALUE (`integerLeverageTicks`) into a fractional position along `stripLayout`'s periodic strip
+ * spacing, never picked by nearest strip.
  */
 function drawAxisLabels(
   ctx: CanvasRenderingContext2D,
@@ -208,13 +211,15 @@ function drawAxisLabels(
   ctx.font = `${fontSizeLabel} ${fontMono}`
   ctx.fillStyle = textColor
 
-  // Leverage row labels, every 5th fixture row, in the left gutter (x < field.x).
+  // Leverage row labels, one per integer leverage in the fixture's own range, in the left gutter
+  // (x < field.x). A-E5: fixture row 0 (1.00x) paints at the BOTTOM of the field.
+  const layout = stripLayout(canvasWidthPx, canvasHeightPx, fixture.rows)
   ctx.textBaseline = 'middle'
   ctx.textAlign = 'left'
-  for (let row = 0; row < fixture.rows; row += 5) {
-    const strip = stripRect(fixture, row, canvasWidthPx, canvasHeightPx)
-    const label = `${(fixture.meta.leverages[row] ?? 0).toFixed(2)}x`
-    ctx.fillText(label, 2, strip.y + strip.height / 2)
+  for (const tick of integerLeverageTicks(fixture.meta.leverages)) {
+    const imgRowF = fixture.rows - 1 - tick.rowF
+    const y = layout.field.y + imgRowF * layout.periodPx + layout.stripHeightPx / 2
+    ctx.fillText(`${tick.leverage}x`, 2, y)
   }
 
   // Entry-year column labels, every 20th fixture column, in the bottom gutter. Column 0 (the
