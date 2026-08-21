@@ -14,6 +14,13 @@
  * PERF-07b's measuredMs is the maximum `app-recompute` duration observed during the drag -- the
  * coalesced run-and-repaint D-03 says the 16ms frame budget applies to, not a raw frame delta
  * that would also count browser compositing the app does not control.
+ *
+ * 05-09: `storeSuccessfulRun` (src/app/state.ts) calls `computeAttribution` inside the same
+ * `recompute-start`/`recompute-end` mark pair `scheduleRun` already wraps every recompute in, so
+ * this test's existing `app-recompute` measurement window covers attribution's extra kernel calls
+ * without a second bench file or a second mark pair. `ATTRIBUTION_COUNTERFACTUAL_ARM_COUNT` below
+ * names how many of those extra kernel calls attribution performs per recompute, so the PERF-07b
+ * info line states the workload the measured figure represents.
  */
 
 import { commands } from 'vitest/browser'
@@ -41,6 +48,17 @@ import {
 function selectMaxLongTaskDuration(longTaskDurations: readonly number[]): number {
   return longTaskDurations.length > 0 ? Math.max(...longTaskDurations) : 0
 }
+
+/**
+ * 05-09: the number of extra `runBacktest` calls `computeAttribution`'s Shapley decomposition
+ * performs per recompute (`src/validation/attribution.ts`'s `buildSubsetValues`), beyond the one
+ * `runBacktest` call `scheduleRun` itself already makes for the actual run. Of the eight subsets
+ * `buildSubsetValues` evaluates, four contain the `compounding` factor and require a real kernel
+ * call; one of those four (financing-on, expense-on) reuses `actualResult.finalValue` rather than
+ * re-running the kernel, leaving three real counterfactual `runCounterfactualArm` calls. Named
+ * here, not re-derived, so this figure and attribution.ts's own module comment cannot drift.
+ */
+const ATTRIBUTION_COUNTERFACTUAL_ARM_COUNT = 3
 
 test('PERF-07a measuredMs selector picks the maximum of a known list, never the sum', () => {
   const durations = [5, 12, 47, 3]
@@ -135,7 +153,11 @@ test('PERF-07a/07b: max long task and max coalesced recompute during a real leve
     `PERF-07b: rawMs=${timing.maxRecomputeDurationMs.toFixed(4)} ` +
       `normalizedMs=${normalized07b.toFixed(4)} calibrationScore=${score} ` +
       `stepCount=${timing.stepCount} recomputeCount=${timing.recomputeCount} ` +
-      `hardwareConcurrency=${timing.hardwareConcurrency}`,
+      `hardwareConcurrency=${timing.hardwareConcurrency} ` +
+      `attributionLive=true attributionCounterfactualArmCount=${ATTRIBUTION_COUNTERFACTUAL_ARM_COUNT} ` +
+      '(each recompute measured here includes computeAttribution\'s ' +
+      `${ATTRIBUTION_COUNTERFACTUAL_ARM_COUNT} extra runBacktest calls, run inside the same ` +
+      'recompute-start/recompute-end mark pair scheduleRun already wraps every recompute in)',
   )
 
   // D-20: a figure at or above 70% of its own budget escalates deliberately rather than the

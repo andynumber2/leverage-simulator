@@ -16,8 +16,10 @@ import { CopyLinkButton } from './CopyLinkButton.tsx'
 import { CostControls } from './CostControls.tsx'
 import { EntryDateControl } from './EntryDateControl.tsx'
 import { HoldingModeControl } from './HoldingModeControl.tsx'
+import { InitialInvestmentControl } from './InitialInvestmentControl.tsx'
 import { LeverageControl } from './LeverageControl.tsx'
 import { SymbolControl } from './SymbolControl.tsx'
+import { TierControl } from './TierControl.tsx'
 
 export function ParameterColumn() {
   const disabled = () => loadStatus() !== 'ready'
@@ -30,9 +32,11 @@ export function ParameterColumn() {
         </p>
       </Show>
       <SymbolControl disabled={disabled()} />
+      <TierControl disabled={disabled()} />
       <LeverageControl disabled={disabled()} />
       <EntryDateControl disabled={disabled()} />
       <HoldingModeControl disabled={disabled()} />
+      <InitialInvestmentControl disabled={disabled()} />
       <ContributionControl disabled={disabled()} />
       <CostControls disabled={disabled()} />
       <CopyLinkButton />

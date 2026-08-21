@@ -3,42 +3,49 @@
  *
  * D-18/CRED-05: both cost parameters, editable in place, each seeded from
  * `src/validation/cost-parameters.ts`'s sourced defaults and cited inline through
- * `SourceCitation`. Percent-to-fraction conversion happens exactly once per field, here, at seed
- * time (`GENERIC_3X_EXPENSE_RATIO` and `FINANCING_SPREAD_DEFAULT` are FRACTIONS;
- * `BacktestRequest.expenseRatioPercent`/`financingSpreadPercent` are PERCENTAGES, D-09).
+ * `SourceCitation`. Percent-to-fraction conversion happens exactly once per field, at
+ * `src/app/state.ts`'s `DEFAULT_REQUEST` seed (`GENERIC_3X_EXPENSE_RATIO` and
+ * `FINANCING_SPREAD_DEFAULT` are FRACTIONS; `BacktestRequest.expenseRatioPercent`/
+ * `financingSpreadPercent` are PERCENTAGES, D-09) -- this file reads that seeded percentage back
+ * off `DEFAULT_REQUEST` rather than re-declaring its own converted literal.
  * `buildKernelInputs` owns the only other conversion, back to a fraction on the way into the
  * kernel (`src/data/kernel-inputs.ts`) -- a value crosses this percent/fraction boundary exactly
  * twice, never a third time; every other percent figure in this file (the range bounds, the
  * "sourced default was X%" wording) is formatted through `formatPercent`, which does its own
  * internal fraction-to-percent conversion in `src/metrics/format.ts`, not here.
  *
- * Clearing either field restores the sourced default and its citation returns; editing either
- * field drops the "default" label and restates the citation as user-supplied, naming the sourced
- * default it replaced, so a screenshot always shows what the number was compared against. Both
- * fields render their `COST_PARAMETERS` confidence tag as visible text (CITED for the expense
- * ratio, ASSUMED for both financing-spread bounds), per PITFALLS G3.
+ * CRED-05/D-22 (05-08-PLAN.md Task 3): both fields now carry the shared `DefaultBadge`/
+ * `ResetButton` pair, driven by `PARAMETER_DEFAULTS.expenseRatio`/`PARAMETER_DEFAULTS
+ * .financingSpread`, replacing this file's own local `isDefault` predicates and default-value
+ * constants -- the registry is the one place either default is declared. Clearing either field
+ * restores the sourced default through the same registry `reset()` an edit-to-that-value would
+ * also produce, and its citation returns; editing either field drops the "default" badge in favor
+ * of Reset and restates the citation as user-supplied, naming the sourced default it replaced, so
+ * a screenshot always shows what the number was compared against. Both fields render their
+ * `COST_PARAMETERS` confidence tag as visible text (CITED for the expense ratio, ASSUMED for both
+ * financing-spread bounds), per PITFALLS G3.
+ *
+ * T-05-22: `ResetButton` writes each committed value directly through the registry, bypassing
+ * this file's own `handleExpenseRatioInput`/`handleFinancingSpreadInput`. The two `createEffect`s
+ * below are what actually satisfy the must-have that Reset "clears" an invalid state (UI-SPEC F8
+ * error row): each watches its own committed percentage and clears the matching error signal
+ * whenever it changes for ANY reason, this file's own writes included, so an external write
+ * cannot leave a stale error behind.
  */
 
-import { createSignal, Show } from 'solid-js'
+import { createEffect, createSignal, on, Show } from 'solid-js'
 
 import { formatPercent } from '../../../metrics/format.ts'
-import {
-  COST_PARAMETERS,
-  FINANCING_SPREAD_DEFAULT,
-  FINANCING_SPREAD_RANGE,
-  GENERIC_3X_EXPENSE_RATIO,
-} from '../../../validation/cost-parameters.ts'
-import { backtestRequest, updateBacktestRequest } from '../../state.ts'
+import { COST_PARAMETERS, FINANCING_SPREAD_RANGE } from '../../../validation/cost-parameters.ts'
+import { PARAMETER_DEFAULTS } from '../../parameter-defaults.ts'
+import { backtestRequest, DEFAULT_REQUEST, updateBacktestRequest } from '../../state.ts'
+import { DefaultBadge } from './DefaultBadge.tsx'
+import { ResetButton } from './ResetButton.tsx'
 import { SourceCitation } from './SourceCitation.tsx'
 
 export interface CostControlsProps {
   disabled: boolean
 }
-
-// D-09/F-02: the two seed-time percent conversions this file performs -- one per field, matching
-// this plan's own acceptance grep. Every other percent figure below routes through formatPercent.
-const DEFAULT_EXPENSE_RATIO_PERCENT = GENERIC_3X_EXPENSE_RATIO * 100
-const DEFAULT_FINANCING_SPREAD_PERCENT = FINANCING_SPREAD_DEFAULT * 100
 
 const EXPENSE_RATIO_PARAM = COST_PARAMETERS['generic-3x-expense-ratio']
 const FINANCING_LOWER_PARAM = COST_PARAMETERS['financing-spread-lower']
@@ -46,7 +53,7 @@ const FINANCING_UPPER_PARAM = COST_PARAMETERS['financing-spread-upper']
 
 function userSuppliedExpenseRatioCitation(): string {
   return (
-    `user-supplied - sourced default was ${DEFAULT_EXPENSE_RATIO_PERCENT.toFixed(2)}% ` +
+    `user-supplied - sourced default was ${DEFAULT_REQUEST.expenseRatioPercent.toFixed(2)}% ` +
     `(${EXPENSE_RATIO_PARAM.citation}, ${EXPENSE_RATIO_PARAM.confidence})`
   )
 }
@@ -60,9 +67,9 @@ function financingSpreadCitation(isDefault: boolean): string {
     `${formatPercent(FINANCING_SPREAD_RANGE.upper)}] (lower ${FINANCING_LOWER_PARAM.confidence}, ` +
     `upper ${FINANCING_UPPER_PARAM.confidence})`
   if (isDefault) {
-    return `${DEFAULT_FINANCING_SPREAD_PERCENT.toFixed(2)}% - ${rangeText}`
+    return `${DEFAULT_REQUEST.financingSpreadPercent.toFixed(2)}% - ${rangeText}`
   }
-  return `user-supplied - sourced default was ${DEFAULT_FINANCING_SPREAD_PERCENT.toFixed(2)}% (${rangeText})`
+  return `user-supplied - sourced default was ${DEFAULT_REQUEST.financingSpreadPercent.toFixed(2)}% (${rangeText})`
 }
 
 export function CostControls(props: CostControlsProps) {
@@ -72,14 +79,17 @@ export function CostControls(props: CostControlsProps) {
   const expenseRatioPercent = () => backtestRequest().expenseRatioPercent
   const financingSpreadPercent = () => backtestRequest().financingSpreadPercent
 
-  const expenseRatioIsDefault = () => expenseRatioPercent() === DEFAULT_EXPENSE_RATIO_PERCENT
-  const financingSpreadIsDefault = () => financingSpreadPercent() === DEFAULT_FINANCING_SPREAD_PERCENT
+  // T-05-22: `defer: true` skips the initial mount run, so each effect only fires on an actual
+  // change to its own committed value -- including one written externally by Reset.
+  createEffect(on(expenseRatioPercent, () => setExpenseRatioError(null), { defer: true }))
+  createEffect(on(financingSpreadPercent, () => setFinancingSpreadError(null), { defer: true }))
 
   function handleExpenseRatioInput(text: string): void {
-    // UI-SPEC E5 empty: clearing restores the sourced default, never an unstated cost.
+    // UI-SPEC E5 empty: clearing restores the sourced default, never an unstated cost -- the same
+    // registry write Reset itself performs.
     if (text === '') {
       setExpenseRatioError(null)
-      updateBacktestRequest({ expenseRatioPercent: DEFAULT_EXPENSE_RATIO_PERCENT })
+      PARAMETER_DEFAULTS.expenseRatio.reset()
       return
     }
     const value = Number(text)
@@ -94,7 +104,7 @@ export function CostControls(props: CostControlsProps) {
   function handleFinancingSpreadInput(text: string): void {
     if (text === '') {
       setFinancingSpreadError(null)
-      updateBacktestRequest({ financingSpreadPercent: DEFAULT_FINANCING_SPREAD_PERCENT })
+      PARAMETER_DEFAULTS.financingSpread.reset()
       return
     }
     const value = Number(text)
@@ -123,10 +133,16 @@ export function CostControls(props: CostControlsProps) {
           onInput={(e) => handleExpenseRatioInput(e.currentTarget.value)}
         />
         <Show
-          when={expenseRatioIsDefault()}
-          fallback={<SourceCitation text={userSuppliedExpenseRatioCitation()} />}
+          when={PARAMETER_DEFAULTS.expenseRatio.isDefault()}
+          fallback={
+            <>
+              <SourceCitation text={userSuppliedExpenseRatioCitation()} />
+              <ResetButton parameterId="expenseRatio" disabled={props.disabled} />
+            </>
+          }
         >
           <SourceCitation costParameterId="generic-3x-expense-ratio" />
+          <DefaultBadge parameterId="expenseRatio" disabled={props.disabled} />
         </Show>
         <Show when={expenseRatioError() !== null}>
           <span class="cost-error" data-testid="expense-ratio-error">
@@ -149,7 +165,13 @@ export function CostControls(props: CostControlsProps) {
           value={financingSpreadPercent().toFixed(2)}
           onInput={(e) => handleFinancingSpreadInput(e.currentTarget.value)}
         />
-        <SourceCitation text={financingSpreadCitation(financingSpreadIsDefault())} />
+        <SourceCitation text={financingSpreadCitation(PARAMETER_DEFAULTS.financingSpread.isDefault())} />
+        <Show
+          when={PARAMETER_DEFAULTS.financingSpread.isDefault()}
+          fallback={<ResetButton parameterId="financingSpread" disabled={props.disabled} />}
+        >
+          <DefaultBadge parameterId="financingSpread" disabled={props.disabled} />
+        </Show>
         <Show when={financingSpreadError() !== null}>
           <span class="cost-error" data-testid="financing-spread-error">
             {financingSpreadError()}

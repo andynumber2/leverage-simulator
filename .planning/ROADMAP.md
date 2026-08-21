@@ -35,7 +35,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 2: Compiled Data Bundle** - A CLI compiler turns raw CSVs into versioned binary assets with machine-readable provenance (completed 2026-08-17)
 - [x] **Phase 3: Simulation Kernel and the UPRO/TQQQ Gate** - The cost model, proven against real leveraged-ETF history before any UI is built on it (completed 2026-08-18)
 - [x] **Phase 4: First Defensible Backtest in the Browser** - A real single run, in the browser, that can be pasted as a link (completed 2026-08-20)
-- [ ] **Phase 5: Attribution and the Credibility Surface** - Name which mechanism consumed the money, and let a skeptic check every assumption
+- [x] **Phase 5: Attribution and the Credibility Surface** - Name which mechanism consumed the money, and let a skeptic check every assumption (completed 2026-08-21)
 - [ ] **Phase 6: Heatmap Design Pass** - Argue the entry-date x leverage treatment from throwaway mockups, since there is no prior art to copy
 - [ ] **Phase 7: Sweep Engine and the Heatmap** - 10,000 backtests fanned across workers and painted progressively without stalling the UI
 - [ ] **Phase 8: Export and the Canonical Arguments** - Get the result out of the app as a picture, a CSV, or a curated permalink
@@ -224,7 +224,42 @@ PERF-08 decisions must be read against that band rather than against a single fi
   4. The extended tier carries a prominent warning naming the direction of its bias: interpolated monthly data smooths daily volatility and therefore understates volatility drag, making leverage look better than it was in exactly the pre-1954 era the tier exists to reach. The magnitude is quantified by downsampling a known-good daily era to monthly, interpolating it back and measuring the resulting gap, and that figure is printed next to the warning.
   5. Every default parameter is labelled as a default and is editable in place, and a methodology page stating the full cost model, day-count conventions, data sources and known limitations is reachable in one click from any result. Attribution's extra kernel calls keep a single-run parameter change inside the 16ms budget, measured, not assumed.
 
-**Plans**: TBD
+**Plans:** 9/9 plans complete
+
+Plans:
+**Wave 1**
+
+- [x] 05-01-PLAN.md — Attribution tracer, Shapley engine and the always-visible panel (ATTR-01, ATTR-02)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [x] 05-02-PLAN.md — Naive ghost curve on the equity chart (ATTR-03)
+- [x] 05-03-PLAN.md — Synthetic-versus-real validation view and the helper extraction (VALID-04)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [x] 05-04-PLAN.md — Manifest-generated provenance strip with the traceability gate (CRED-01)
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
+- [x] 05-05-PLAN.md — History tier selector wired through bounds and permalink (APP-02)
+
+**Wave 5** *(blocked on Wave 4 completion)*
+
+- [x] 05-06-PLAN.md — Measured extended-tier bias figure and its warning banner (CRED-02, CRED-03)
+
+**Wave 6** *(blocked on Wave 5 completion)*
+
+- [x] 05-07-PLAN.md — Methodology overlay generated from the code's own registries (CRED-04)
+
+**Wave 7** *(blocked on Wave 6 completion)*
+
+- [x] 05-08-PLAN.md — Defaults labelled and resettable across every parameter (CRED-05)
+
+**Wave 8** *(blocked on Wave 7 completion)*
+
+- [x] 05-09-PLAN.md — PERF-07b re-measured with attribution live, and the sweep-cost finding
+
 **UI hint**: yes
 
 ### Phase 6: Heatmap Design Pass
@@ -287,7 +322,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | 2. Compiled Data Bundle | 8/8 | Complete    | 2026-08-17 |
 | 3. Simulation Kernel and the UPRO/TQQQ Gate | 6/6 | In Progress|  |
 | 4. First Defensible Backtest in the Browser | 8/8 | In Progress|  |
-| 5. Attribution and the Credibility Surface | 0/TBD | Not started | - |
+| 5. Attribution and the Credibility Surface | 9/9 | Complete    | 2026-08-21 |
 | 6. Heatmap Design Pass | 0/TBD | Not started | - |
 | 7. Sweep Engine and the Heatmap | 0/TBD | Not started | - |
 | 8. Export and the Canonical Arguments | 0/TBD | Not started | - |

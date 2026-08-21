@@ -16,11 +16,18 @@
 
 import { describe, expect, test } from 'vitest'
 
-import { seriesView } from '../../tools/bundle-compiler/src/binary-format.ts'
-import { fromDaysSinceEpoch, toDaysSinceEpoch } from '../../tools/bundle-compiler/src/calendar.ts'
-import { buildKernelInputs, type BacktestRequest, type LoadedBundle } from '../../src/data/kernel-inputs.ts'
+import { fromDaysSinceEpoch } from '../../tools/bundle-compiler/src/calendar.ts'
+import { buildKernelInputs, type BacktestRequest } from '../../src/data/kernel-inputs.ts'
 import { loadBundleFromDisk } from '../../src/data/load-bundle-node.ts'
 import { runBacktest } from '../../src/kernel/backtest.ts'
+import {
+  buildRateRegimeWindows,
+  deriveReturns,
+  readSeriesLevels,
+  resolveOverlapWindow,
+  sliceLevelsToWindow,
+  SYNTHETIC_LEVERAGE as LEVERAGE,
+} from '../../src/validation/synthetic-comparison.ts'
 import {
   computeTrackingError,
   type TrackingErrorResult,
@@ -35,18 +42,6 @@ import {
   UPRO_INCEPTION_ERA_EXPENSE_RATIO,
 } from '../../src/validation/cost-parameters.ts'
 
-// D-13's two rate-regime era boundaries. These, and only these, are ISO dates written as literals
-// in this file: they are era definitions the plan names explicitly, not data facts read off the
-// manifest. Every other date in this file (fund/index coverage, the resolved overlap window, both
-// sub-window boundaries' bar positions) is derived at run time.
-const NEAR_ZERO_RATE_ERA_END = '2015-12-31'
-const HIGH_RATE_ERA_START = '2022-01-01'
-
-/** ROADMAP criterion 2 / T-03-22: a data refresh that silently truncates either fund's history
- * must fail this gate rather than narrow it into a flattering pass. */
-const MIN_OVERLAP_YEARS = 15
-
-const LEVERAGE = 3
 /** Arbitrary and irrelevant to every statistic this file computes: both D-11 gates are ratio-
  * based (a return, not a dollar amount), so the starting dollar amount cancels out. Chosen only
  * to match the CLI's own default for readability of any ad-hoc debugging run. */
@@ -108,113 +103,6 @@ const FUND_GATE_CONFIGS: readonly FundGateConfig[] = [
   },
 ]
 
-/** Reads one manifest series' full decoded level array, plus the fields needed to slice it to an
- * arbitrary absolute-calendar-index window. */
-function readSeriesLevels(
-  bundle: LoadedBundle,
-  seriesId: string,
-): { levels: Float64Array; calendarStartIndex: number; lastDate: string } {
-  const entry = bundle.manifest.series.find((s) => s.id === seriesId)
-  if (entry === undefined) {
-    throw new Error(`upro-tqqq-gate: no series named "${seriesId}" in the manifest`)
-  }
-  const asset = bundle.assets.get(entry.asset)
-  if (asset === undefined) {
-    throw new Error(`upro-tqqq-gate: asset file "${entry.asset}" for series "${seriesId}" was not loaded`)
-  }
-  const descriptor = asset.header.descriptors.find((d) => d.id === seriesId)
-  if (descriptor === undefined) {
-    throw new Error(`upro-tqqq-gate: no descriptor named "${seriesId}" in the decoded asset header`)
-  }
-  return {
-    levels: seriesView(asset.buffer, asset.header, descriptor),
-    calendarStartIndex: descriptor.calendarStartIndex,
-    lastDate: entry.lastDate,
-  }
-}
-
-/** Slices a full decoded level series to the exact `[entryAbsIndex, entryAbsIndex + barCount)`
- * absolute-calendar-index window the synthetic run occupies. */
-function sliceLevelsToWindow(
-  levels: Float64Array,
-  calendarStartIndex: number,
-  entryAbsIndex: number,
-  barCount: number,
-): Float64Array {
-  const sliced = new Float64Array(barCount)
-  for (let k = 0; k < barCount; k++) {
-    const localIndex = entryAbsIndex + k - calendarStartIndex
-    const value = levels[localIndex]
-    if (value === undefined) {
-      throw new Error(`upro-tqqq-gate: series level missing at local index ${localIndex} (bar ${k})`)
-    }
-    sliced[k] = value
-  }
-  return sliced
-}
-
-/** Derives daily returns from a level/value series the same way `src/data/kernel-inputs.ts` does:
- * `level[k] / level[k-1] - 1`. Bar 0 is defined as 0, matching D-03's cost-free-anchor convention
- * both the kernel's own `outValue` and every level series here already follow at their own bar 0. */
-function deriveReturns(values: Float64Array): Float64Array {
-  const returns = new Float64Array(values.length)
-  returns[0] = 0
-  for (let k = 1; k < values.length; k++) {
-    const previous = values[k - 1] as number
-    const current = values[k] as number
-    returns[k] = previous !== 0 ? current / previous - 1 : 0
-  }
-  return returns
-}
-
-/** Standard lower-bound binary search over the local bar range `[0, barCount)`, returning the
- * greatest local bar index `k` whose absolute calendar day is `<= targetDays`, or -1 if none. */
-function localIndexAtOrBefore(
-  calendar: Int32Array,
-  entryAbsIndex: number,
-  barCount: number,
-  targetDays: number,
-): number {
-  let lo = 0
-  let hi = barCount - 1
-  let result = -1
-  while (lo <= hi) {
-    const mid = (lo + hi) >> 1
-    const days = calendar[entryAbsIndex + mid] as number
-    if (days <= targetDays) {
-      result = mid
-      lo = mid + 1
-    } else {
-      hi = mid - 1
-    }
-  }
-  return result
-}
-
-/** Mirror of `localIndexAtOrBefore`: the least local bar index `k` whose absolute calendar day is
- * `>= targetDays`, or `barCount` if none. */
-function localIndexAtOrAfter(
-  calendar: Int32Array,
-  entryAbsIndex: number,
-  barCount: number,
-  targetDays: number,
-): number {
-  let lo = 0
-  let hi = barCount - 1
-  let result = barCount
-  while (lo <= hi) {
-    const mid = (lo + hi) >> 1
-    const days = calendar[entryAbsIndex + mid] as number
-    if (days >= targetDays) {
-      result = mid
-      hi = mid - 1
-    } else {
-      lo = mid + 1
-    }
-  }
-  return result
-}
-
 function formatPercent(fraction: number): string {
   return `${(fraction * 100).toFixed(4)}%`
 }
@@ -236,10 +124,11 @@ describe('VALID-01/VALID-02: UPRO and TQQQ tracking-error gate', () => {
       expect(indexEntry, `manifest series "${config.indexSeriesId}" not found`).toBeDefined()
       expect(fundEntry, `manifest series "${config.fundSeriesId}" not found`).toBeDefined()
 
-      // D-10: the overlap window's first bar is the LATER of the two series' own firstDate --
-      // for both fund pairs, that is the fund's own inception date, read from the manifest, never
-      // hardcoded.
-      const overlapFirstDate = indexEntry!.firstDate > fundEntry!.firstDate ? indexEntry!.firstDate : fundEntry!.firstDate
+      // D-10/T-03-22: resolveOverlapWindow both derives the overlap start (the LATER of the two
+      // series' own firstDate) and throws a stated failure if the resolved, rate-coverage-
+      // truncated window is below MIN_OVERLAP_YEARS -- a data refresh that silently truncates
+      // history fails this gate rather than narrowing it into a flattering pass.
+      const resolvedWindow = resolveOverlapWindow(bundle, config.indexSeriesId, config.fundSeriesId)
 
       const request: BacktestRequest = {
         symbol: config.indexSymbol,
@@ -253,7 +142,7 @@ describe('VALID-01/VALID-02: UPRO and TQQQ tracking-error gate', () => {
         // in exchange for financing, which is what the financing term already prices.
         dividendReinvest: true,
         leverage: LEVERAGE,
-        entryDate: overlapFirstDate,
+        entryDate: resolvedWindow.entryDate,
         holdingPeriodBars: null, // hold-to-today: buildKernelInputs applies D-29's rate-coverage truncation.
         initialInvestment: GATE_INITIAL_INVESTMENT,
         contributionAmount: 0,
@@ -265,17 +154,6 @@ describe('VALID-01/VALID-02: UPRO and TQQQ tracking-error gate', () => {
       }
 
       const inputs = buildKernelInputs(bundle, request)
-
-      // T-03-22: the resolved window must be derived from the manifest at run time and must clear
-      // 15 years, so a data refresh that silently truncates history fails the gate rather than
-      // narrowing it into a flattering pass.
-      const overlapYears =
-        (toDaysSinceEpoch(inputs.window.lastDate) - toDaysSinceEpoch(inputs.window.firstDate)) / 365.25
-      expect(
-        overlapYears,
-        `${config.fundName} overlap window (${inputs.window.firstDate}..${inputs.window.lastDate}) is only ` +
-          `${overlapYears.toFixed(2)} years, below the required ${MIN_OVERLAP_YEARS}`,
-      ).toBeGreaterThanOrEqual(MIN_OVERLAP_YEARS)
 
       // Defensive: the fund's own coverage must reach at least as far as the resolved (price/rate-
       // truncated) window's own end, so a future refresh that shortens fund coverage below the
@@ -317,40 +195,9 @@ describe('VALID-01/VALID-02: UPRO and TQQQ tracking-error gate', () => {
         lastDayNumber: calendar[entryAbsIndex + barCount - 1] as number,
       }
 
-      const nearZeroRateLastBar = localIndexAtOrBefore(
-        calendar,
-        entryAbsIndex,
-        barCount,
-        toDaysSinceEpoch(NEAR_ZERO_RATE_ERA_END),
-      )
-      const highRateFirstBar = localIndexAtOrAfter(
-        calendar,
-        entryAbsIndex,
-        barCount,
-        toDaysSinceEpoch(HIGH_RATE_ERA_START),
-      )
-
       // D-13: reported only, never gated. Only built when the fund's own window actually reaches
       // into that era with at least the 2 bars computeTrackingError requires.
-      const subWindows: TrackingErrorWindow[] = []
-      if (nearZeroRateLastBar >= 1) {
-        subWindows.push({
-          label: `${config.fundName} near-zero-rate era (through ${NEAR_ZERO_RATE_ERA_END})`,
-          firstBar: 0,
-          lastBar: nearZeroRateLastBar,
-          firstDayNumber: calendar[entryAbsIndex] as number,
-          lastDayNumber: calendar[entryAbsIndex + nearZeroRateLastBar] as number,
-        })
-      }
-      if (highRateFirstBar <= barCount - 2) {
-        subWindows.push({
-          label: `${config.fundName} high-rate era (from ${HIGH_RATE_ERA_START})`,
-          firstBar: highRateFirstBar,
-          lastBar: barCount - 1,
-          firstDayNumber: calendar[entryAbsIndex + highRateFirstBar] as number,
-          lastDayNumber: calendar[entryAbsIndex + barCount - 1] as number,
-        })
-      }
+      const subWindows = buildRateRegimeWindows(calendar, entryAbsIndex, barCount, config.fundName)
 
       const allWindows = [fullWindow, ...subWindows]
       const allResults: TrackingErrorResult[] = allWindows.map((window) =>

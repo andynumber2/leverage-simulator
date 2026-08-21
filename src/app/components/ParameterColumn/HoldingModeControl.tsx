@@ -22,16 +22,23 @@
  * did ask for a window longer than the data supports.) This supersedes the UI-SPEC's "Run to
  * today" secondary action and D-14's wall-clock framing.
  *
- * The date shown is the strict tier's `lastDate` for the selected series, resolved through the
- * same `resolveEntryDateBounds` call `EntryDateControl` uses (D-09 pins the strict tier in
- * Phase 4). That bound already accounts for rate coverage, so it is the bar the run actually
- * ends on, not the last priced bar.
+ * The date shown is the live `activeTier()`'s `lastDate` for the selected series (05-05 lifts
+ * D-09's Phase-4 strict-tier pin), resolved through the same `resolveEntryDateBounds` call
+ * `EntryDateControl` uses. That bound already accounts for rate coverage, so it is the bar the
+ * run actually ends on, not the last priced bar.
+ *
+ * CRED-05/D-22: the control carries the shared default badge/reset affordance
+ * (`PARAMETER_DEFAULTS.holdingMode`) -- default is the open-ended mode (`holdingPeriodBars ===
+ * null`, `DEFAULT_REQUEST`'s own seed), matching `selectOpenEnded`'s own write.
  */
 
 import { createMemo, createSignal, Show } from 'solid-js'
 
 import { resolveEntryDateBounds } from '../../bounds.ts'
-import { backtestRequest, loadedBundle, updateBacktestRequest } from '../../state.ts'
+import { PARAMETER_DEFAULTS } from '../../parameter-defaults.ts'
+import { activeTier, backtestRequest, loadedBundle, updateBacktestRequest } from '../../state.ts'
+import { DefaultBadge } from './DefaultBadge.tsx'
+import { ResetButton } from './ResetButton.tsx'
 
 export interface HoldingModeControlProps {
   disabled: boolean
@@ -39,10 +46,10 @@ export interface HoldingModeControlProps {
 
 /** Only used the first time a user switches from the open-ended mode into fixed mode, so `null`
  * (open-ended) never needs a placeholder bar count of its own. ~1 trading year. */
-const DEFAULT_FIXED_BAR_COUNT = 252
+const FALLBACK_FIXED_BAR_COUNT = 252
 
 export function HoldingModeControl(props: HoldingModeControlProps) {
-  const [lastFixedBarCount, setLastFixedBarCount] = createSignal(DEFAULT_FIXED_BAR_COUNT)
+  const [lastFixedBarCount, setLastFixedBarCount] = createSignal(FALLBACK_FIXED_BAR_COUNT)
 
   const holdingPeriodBars = () => backtestRequest().holdingPeriodBars
   const isFixed = () => holdingPeriodBars() !== null
@@ -53,7 +60,7 @@ export function HoldingModeControl(props: HoldingModeControlProps) {
     const bundle = loadedBundle()
     if (bundle === null) return null
     const request = backtestRequest()
-    const bounds = resolveEntryDateBounds(bundle.manifest, request.symbol, request.dividendReinvest, 'strict')
+    const bounds = resolveEntryDateBounds(bundle.manifest, request.symbol, request.dividendReinvest, activeTier())
     return bounds.ok ? bounds.lastDate : null
   })
 
@@ -111,6 +118,12 @@ export function HoldingModeControl(props: HoldingModeControlProps) {
           {openEndedLabel()}
         </label>
       </div>
+      <Show
+        when={PARAMETER_DEFAULTS.holdingMode.isDefault()}
+        fallback={<ResetButton parameterId="holdingMode" disabled={props.disabled} />}
+      >
+        <DefaultBadge parameterId="holdingMode" disabled={props.disabled} />
+      </Show>
       <Show when={isFixed()}>
         <label class="control-label" for="holding-period-bars-input">
           Bars held

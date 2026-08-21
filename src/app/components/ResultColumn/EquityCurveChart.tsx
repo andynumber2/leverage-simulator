@@ -26,6 +26,16 @@
  * "recreate the instance" path 04-RESEARCH.md's assumption A4 says is acceptable when a partial
  * update cannot be confirmed -- no separate theme-specific code path is needed, the existing
  * rebuild already re-reads `--color-accent`/`--color-text-muted` fresh via `getComputedStyle`.
+ *
+ * Plan 05-02 (ATTR-03/D-07): a permanent, unconditional naive ghost series -- `buildNaiveGhostData`
+ * (`naive-series.ts`), drawn muted/dashed behind the real (accent) series in z-order, on by
+ * default with no toggle. Inserted immediately after the x-series placeholder and before
+ * `equitySeries` in both the `series` array and the `uPlot.AlignedData` tuple, so it never
+ * disturbs the existing conditional ruin-terminator branch: a ruined run still renders four
+ * series entries, a non-ruined run still renders three, the ghost series just always occupies
+ * the second slot now. `null`-gapped (05-RESEARCH.md Pitfall 1/F-02) at every bar where the naive
+ * value is `<= 0`, since a non-positive naive value is not an absorbing state and must be able to
+ * recover later in the same run, unlike the ruin terminator.
  */
 
 import 'uplot/dist/uPlot.min.css'
@@ -38,6 +48,11 @@ import type { KernelResult } from '../../../kernel/backtest.types.ts'
 import { onThemeChange } from '../../theme.ts'
 import type { ScaleMode } from '../../state.ts'
 import { logDecadeSplits } from './log-axis-splits.ts'
+import { buildNaiveGhostData } from './naive-series.ts'
+
+/** D-07/Copywriting Contract: the ghost-curve legend entry, verbatim from
+ * 05-UI-SPEC.md's Copywriting Contract table -- never reworded per-call. */
+const NAIVE_GHOST_LEGEND_LABEL = 'Naive: leverage × return, no costs (dashed)'
 
 /** A log-axis tick value's base-10 exponent at or below this is formatted with
  * `toExponential(0)` rather than `toLocaleString()` -- uPlot's default `numAxisVals` formatter
@@ -168,6 +183,9 @@ export function EquityCurveChart(props: EquityCurveChartProps) {
     const [xs, ys] = buildSeriesData(props)
     const ruined = props.result.ruined && props.result.ruinBarIndex >= 0
     const terminatorData = buildTerminatorData(ys, ruined)
+    // D-07: unconditional, unlike the ruin terminator -- every run gets a ghost series, computed
+    // over the same plottable bar count `xs`/`ys` already use.
+    const ghostData = buildNaiveGhostData(props.inputs, xs.length)
     const accent = readCssColor('--color-accent')
     const textMuted = readCssColor('--color-text-muted')
     const destructive = readCssColor('--color-destructive')
@@ -192,6 +210,16 @@ export function EquityCurveChart(props: EquityCurveChartProps) {
       return settledYAxisSize
     }
 
+    // D-07: muted/dashed, drawn behind the accent-stroked real series by occupying an earlier
+    // slot in both the `series` array and the `uPlot.AlignedData` tuple below -- uPlot draws
+    // series in array order, so this stays subordinate in z-order without any explicit z-index.
+    const ghostSeries: uPlot.Series = {
+      label: NAIVE_GHOST_LEGEND_LABEL,
+      stroke: textMuted,
+      width: 1.5,
+      dash: [4, 3],
+      points: { show: false },
+    }
     const equitySeries: uPlot.Series = {
       label: 'Equity',
       stroke: accent,
@@ -206,8 +234,10 @@ export function EquityCurveChart(props: EquityCurveChartProps) {
       points: { show: true, size: 8, stroke: destructive, fill: destructive },
     }
 
-    const series: uPlot.Series[] = terminatorData !== undefined ? [{}, equitySeries, ruinSeries] : [{}, equitySeries]
-    const data: uPlot.AlignedData = terminatorData !== undefined ? [xs, ys, terminatorData] : [xs, ys]
+    const series: uPlot.Series[] =
+      terminatorData !== undefined ? [{}, ghostSeries, equitySeries, ruinSeries] : [{}, ghostSeries, equitySeries]
+    const data: uPlot.AlignedData =
+      terminatorData !== undefined ? [xs, ghostData, ys, terminatorData] : [xs, ghostData, ys]
 
     const isLog = props.scale === 'log'
 

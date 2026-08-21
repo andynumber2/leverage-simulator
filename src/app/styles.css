@@ -16,12 +16,14 @@
   --color-text-muted: #5b6169;
   --color-accent: #2e6bd6;
   --color-destructive: #c4341f;
+  --color-warning: #9a5b00;
 
   --space-xs: 4px;
   --space-sm: 8px;
   --space-md: 16px;
   --space-lg: 24px;
   --space-xl: 32px;
+  --space-2xl: 48px;
 
   --font-size-label: 12px;
   --font-size-body: 14px;
@@ -40,6 +42,7 @@
   --color-text-muted: #9aa0a8;
   --color-accent: #5b9bf0;
   --color-destructive: #e2604b;
+  --color-warning: #d99a3e;
 }
 
 *,
@@ -120,6 +123,38 @@ body {
   line-height: 1.4;
 }
 
+/* CRED-05/D-22: the default-value badge and its Reset counterpart, at the same recessive weight
+   as .source-citation -- exactly one of the two ever renders for a given control. */
+.default-badge {
+  display: block;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-label);
+  line-height: 1.4;
+}
+
+/* D-18's 44x44px touch-target floor, inline rather than block so it sits beside a control's value
+   without widening the parameter column; text-only, never accent-colored (Copywriting Contract:
+   accent stays reserved for Copy Link). */
+.reset-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  min-width: 44px;
+  min-height: 44px;
+  padding: var(--space-xs) 0;
+  border: none;
+  background: none;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-label);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.reset-button:disabled {
+  cursor: default;
+  text-decoration: none;
+}
+
 .leverage-control {
   display: flex;
   flex-direction: column;
@@ -160,6 +195,45 @@ body {
   font-size: var(--font-size-label);
 }
 
+/* 05-05/APP-02: the history-tier selector. Dense instrument-panel spacing (xs within the group,
+   matching .holding-mode-control), and a fixed 44x44px minimum hit area on each option per D-18's
+   touch-target floor -- the row itself may be taller than 44px once the meaning text wraps, but
+   the option's own tap target never shrinks below it. */
+.tier-control {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.tier-choice {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.tier-option {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-xs);
+  min-height: 44px;
+  padding: var(--space-xs) 0;
+}
+
+/* The extended option's meaning string is the longest label in the parameter column; wraps
+   within the column rather than widening it (no white-space: nowrap, no fixed width). */
+.tier-option-meaning {
+  font-size: var(--font-size-body);
+  color: var(--color-text);
+}
+
+.tier-option-disabled-reason {
+  display: block;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-label);
+  line-height: 1.4;
+}
+
 .holding-mode-control {
   display: flex;
   flex-direction: column;
@@ -184,6 +258,25 @@ body {
   font-family: var(--font-mono);
   width: 8ch;
   padding: var(--space-xs);
+}
+
+/* CRED-05/D-22 (05-08-PLAN.md Task 3): the initial-investment control, reusing the contribution
+   control's classes where the shape matches rather than duplicating rules. */
+.initial-investment-control {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.initial-investment-input {
+  font-family: var(--font-mono);
+  width: 9ch;
+  padding: var(--space-xs);
+}
+
+.initial-investment-error {
+  color: var(--color-destructive);
+  font-size: var(--font-size-label);
 }
 
 .contribution-control {
@@ -281,17 +374,73 @@ body {
   flex-direction: column;
 }
 
-/* D-20: symbol, effective date range and bundle version -- the facts a screenshot needs beyond
-   the chart and metrics to be self-contained. Muted, Label-sized text: informational, never
-   competing with the chart or the headline metric for first read. */
-.result-summary-header {
+/* D-13: tier, effective date range, sources, the seams the run crossed and the bundle version --
+   the facts a screenshot needs beyond the chart and metrics to be self-contained, plus the
+   seam-disclosure and methodology-link affordances. Dense, muted, Label-sized: informational chrome
+   at the same recessive weight the parameter column carries (05-UI-SPEC.md "Spacing Scale"), never
+   competing with the chart or the headline metric for first read. Same blanket monospace treatment
+   the header this strip replaces used for all its fields, kept for visual continuity. */
+.provenance-strip {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-sm);
+  align-items: baseline;
+  gap: var(--space-xs) var(--space-sm);
   margin-bottom: var(--space-sm);
   color: var(--color-text-muted);
   font-size: var(--font-size-label);
   font-family: var(--font-mono);
+}
+
+.provenance-field {
+  display: inline;
+}
+
+.provenance-field-label {
+  color: var(--color-text-muted);
+}
+
+.provenance-field-value {
+  color: var(--color-text-muted);
+}
+
+.provenance-field a {
+  color: var(--color-text-muted);
+}
+
+/* D-14: the "Show all seams" disclosure -- a local expand/collapse, never a URL param or an
+   overlay. Styled as inline muted chrome, matching the strip's own weight rather than the accent
+   color reserved for the Copy Link button and the equity-curve stroke. */
+.provenance-seam-disclosure {
+  border: none;
+  background: transparent;
+  padding: 0;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-label);
+  font-family: var(--font-mono);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.provenance-all-seams {
+  flex-basis: 100%;
+  margin: 0;
+  padding-left: var(--space-md);
+  list-style: disc;
+}
+
+/* D-17: reachable from any result in one click, never accent-colored (accent stays reserved for
+   the equity-curve stroke, the active log/linear toggle state, focus outlines and the Copy link
+   button, per 05-UI-SPEC.md's Color table). */
+.provenance-methodology-link {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-label);
+  font-family: var(--font-ui);
+  text-decoration: none;
+}
+
+.provenance-methodology-link:hover,
+.provenance-methodology-link:focus {
+  text-decoration: underline;
 }
 
 .equity-curve-chart {
@@ -364,6 +513,49 @@ body {
   font-weight: 600;
 }
 
+/* CRED-02/D-20: the only element in Phase 5 permitted to use a colour other than muted/text-
+   primary (05-UI-SPEC.md Visual hierarchy rank 4) -- unconditional on every extended-tier result,
+   no dismiss/collapse affordance, so its footprint is either fully present or fully absent. */
+.extended-tier-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-sm);
+  margin-top: var(--space-md);
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--color-warning);
+  border-radius: 4px;
+  color: var(--color-warning);
+}
+
+.extended-tier-warning-icon {
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  margin-top: 2px;
+}
+
+.extended-tier-warning-text {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  min-width: 0;
+}
+
+.extended-tier-warning-heading {
+  margin: 0;
+  font-size: var(--font-size-body);
+  font-weight: 600;
+  color: var(--color-warning);
+}
+
+.extended-tier-warning-body {
+  margin: 0;
+  font-size: var(--font-size-body);
+  line-height: 1.5;
+  color: var(--color-warning);
+  overflow-wrap: break-word;
+}
+
 /* METR-01 through METR-04: five fixed rows, the headline (row 1) at 28px monospace, the only
    element on screen at that size (04-UI-SPEC.md Typography). */
 .metrics-panel {
@@ -402,6 +594,42 @@ body {
   color: var(--color-text-muted);
   font-size: var(--font-size-label);
   flex-basis: 100%;
+}
+
+/* D-08: "Where the money went" -- naive/actual pair plus (05-01 Task 3) three signed cost
+   components and the reconciliation row. Same dense-chrome discipline as .metrics-panel: xs/sm
+   internally, no colour role other than text-primary (D-04: cost rows never use destructive
+   colour, distinguished only by their +/- prefix and suffix text). */
+.attribution-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  margin-top: var(--space-md);
+}
+
+.attribution-heading {
+  font-size: var(--font-size-body);
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.attribution-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-xs) var(--space-sm);
+}
+
+.attribution-label {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-label);
+}
+
+.attribution-value {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  font-size: var(--font-size-secondary-metric);
+  color: var(--color-text);
 }
 
 /* SHARE-01/UI-SPEC E10: the phase's one explicit CTA, accent-colored per the Color table's
@@ -455,4 +683,260 @@ body {
   padding: var(--space-xs) var(--space-sm);
   overflow-x: auto;
   white-space: nowrap;
+}
+
+/* D-09/F6: the standalone validation section, full width, below the two-column run layout and
+   OUTSIDE the D-20 screenshot region -- --space-2xl (48px) separates it from the run layout
+   above, per the UI-SPEC's Spacing Scale table ("between the two-column run layout and the
+   standalone validation section below it"). Same surface/border treatment as the parameter and
+   result columns, never a second visual weight class competing with the chart or headline metric
+   (Visual hierarchy rank 7). */
+.validation-section {
+  margin: var(--space-2xl) var(--space-md) 0;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  padding: var(--space-lg);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.validation-heading {
+  font-size: var(--font-size-body);
+  font-weight: 600;
+  color: var(--color-text);
+  margin: 0;
+}
+
+.validation-subheading {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-label);
+  margin: 0;
+}
+
+.fund-selector {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.fund-selector__choice {
+  display: flex;
+  gap: var(--space-sm);
+  font-size: var(--font-size-body);
+}
+
+.fund-selector__option {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+/* D-11: the two headline gate figures, same Label + secondary-metric-size value pattern
+   MetricsPanel's own rows use. */
+.tracking-error-summary {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.tracking-error-summary__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-xs) var(--space-sm);
+}
+
+.validation-cost-note {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-label);
+  margin: 0;
+}
+
+.validation-insufficient-overlap {
+  color: var(--color-destructive);
+  font-size: var(--font-size-body);
+  font-weight: 600;
+  margin: 0;
+}
+
+/* D-12/F6 overflow: the widest tabular content in the app so far (regime label, tracking error,
+   return drift). Each row stacks its label above two label/value figure pairs at every width --
+   no <table> element and no fixed-column grid to clip, so narrow viewports degrade to a taller
+   stacked block per row rather than clipping a column (never a horizontal-scroll table, since a
+   stacked block is simpler and reads better at the app's own two-column-collapses-to-one
+   breakpoint, 04-UI-SPEC.md D-17). */
+.sub-window-table {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.sub-window-table__heading {
+  font-size: var(--font-size-body);
+  font-weight: 600;
+  color: var(--color-text);
+  margin: 0;
+}
+
+/* T-05-07: every row shares this exact class list -- no conditional class, colour or ordering
+   keyed on how unfavourable a row's own figures are. */
+.sub-window-row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  padding: var(--space-sm) 0;
+  border-top: 1px solid var(--color-border);
+}
+
+.sub-window-row__label {
+  color: var(--color-text);
+  font-size: var(--font-size-label);
+  font-weight: 600;
+}
+
+.sub-window-row__figure {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: var(--space-xs) var(--space-sm);
+  font-size: var(--font-size-label);
+}
+
+.sub-window-row__figure-label {
+  color: var(--color-text-muted);
+}
+
+.sub-window-row__figure-value {
+  font-family: var(--font-mono);
+  color: var(--color-text);
+}
+
+/* CRED-04/D-17: the methodology overlay -- full-viewport, its own internal scroll (the underlying
+   single-run screen does not scroll behind it), positioned above everything else in the app.
+   `--space-lg` inside the content column, `--space-2xl` between its four sections (05-UI-SPEC.md
+   Spacing Scale). No fixed-height block anywhere in this rule set -- every section is a normal
+   scrolling block, never clipped. */
+.methodology-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  background: var(--color-bg);
+  color: var(--color-text);
+}
+
+.methodology-overlay-header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-lg);
+  background: var(--color-bg);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.methodology-overlay-title {
+  margin: 0;
+  font-size: var(--font-size-headline-metric);
+  font-weight: 600;
+  font-family: var(--font-ui);
+  color: var(--color-text);
+}
+
+/* 44x44px minimum hit area (Spacing Scale's icon-only touch-target exception). */
+.methodology-overlay-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+  border: none;
+  background: transparent;
+  color: var(--color-text);
+  cursor: pointer;
+}
+
+.methodology-overlay-close svg {
+  width: 16px;
+  height: 16px;
+}
+
+.methodology-overlay-content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2xl);
+  padding: var(--space-lg);
+  max-width: 900px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+.methodology-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.methodology-section-heading {
+  margin: 0;
+  font-size: var(--font-size-body);
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.methodology-subheading {
+  margin: var(--space-md) 0 0;
+  font-size: var(--font-size-body);
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.methodology-prose {
+  margin: 0;
+  font-size: var(--font-size-body);
+  font-family: var(--font-ui);
+  color: var(--color-text);
+}
+
+.methodology-row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  padding: var(--space-sm) 0;
+  border-top: 1px solid var(--color-border);
+  font-size: var(--font-size-label);
+}
+
+.methodology-row-name {
+  color: var(--color-text);
+  font-family: var(--font-ui);
+}
+
+.methodology-row-value {
+  font-family: var(--font-mono);
+  color: var(--color-text);
+  font-weight: 600;
+}
+
+.methodology-row-confidence {
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+}
+
+.methodology-row-citation {
+  color: var(--color-text-muted);
+  font-family: var(--font-ui);
+}
+
+.methodology-limitation {
+  margin: 0 0 var(--space-md);
+  font-size: var(--font-size-body);
+  font-family: var(--font-ui);
+  color: var(--color-text);
 }

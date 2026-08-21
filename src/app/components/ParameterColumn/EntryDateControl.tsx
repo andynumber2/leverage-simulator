@@ -2,9 +2,9 @@
  * src/app/components/ParameterColumn/EntryDateControl.tsx
  *
  * A date input whose `min`/`max` come from `resolveEntryDateBounds` for the current symbol,
- * dividend mode and the pinned strict tier (D-09), recomputed live whenever any of those three
- * change (D-12). The displayed value is always ISO `YYYY-MM-DD` in the monospace stack at a fixed
- * ten-character width, locale independent (UI-SPEC E3 long-text).
+ * dividend mode and the live `activeTier()` (05-05 lifts D-09's Phase-4 pin), recomputed live
+ * whenever any of those three change (D-12). The displayed value is always ISO `YYYY-MM-DD` in
+ * the monospace stack at a fixed ten-character width, locale independent (UI-SPEC E3 long-text).
  *
  * A partially typed date neither recomputes nor evicts: a native `<input type="date">` only ever
  * fires `change` with a complete ISO value or an empty string (a cleared input), never a partial
@@ -14,12 +14,21 @@
  * falls outside the recomputed bound, `buildKernelInputs` itself rejects it (D-32) and
  * `src/app/state.ts`'s `scheduleRun` catches that thrown error, clears the result and stores the
  * message (D-11) -- this control does not duplicate that check.
+ *
+ * CRED-05/D-22: the badge/reset affordance (`PARAMETER_DEFAULTS.entryDate`) renders alongside the
+ * citation -- badge when at the manifest-resolved STRICT-tier default, Reset when not. This is a
+ * distinct gesture from clearing the field (which reverts to whichever tier's bound is currently
+ * active, `activeTier()` -- see the `onChange` handler below): Reset always returns to the strict-
+ * tier default regardless of the selected tier, matching `applyLoadedBundle`'s own A4 anchor.
  */
 
 import { createMemo, Show } from 'solid-js'
 
 import { resolveEntryDateBounds, type EntryDateBoundsResult } from '../../bounds.ts'
-import { backtestRequest, loadedBundle, updateBacktestRequest } from '../../state.ts'
+import { PARAMETER_DEFAULTS } from '../../parameter-defaults.ts'
+import { activeTier, backtestRequest, loadedBundle, updateBacktestRequest } from '../../state.ts'
+import { DefaultBadge } from './DefaultBadge.tsx'
+import { ResetButton } from './ResetButton.tsx'
 import { SourceCitation } from './SourceCitation.tsx'
 
 export interface EntryDateControlProps {
@@ -31,7 +40,7 @@ export function EntryDateControl(props: EntryDateControlProps) {
     const bundle = loadedBundle()
     if (bundle === null) return null
     const request = backtestRequest()
-    return resolveEntryDateBounds(bundle.manifest, request.symbol, request.dividendReinvest, 'strict')
+    return resolveEntryDateBounds(bundle.manifest, request.symbol, request.dividendReinvest, activeTier())
   })
 
   const minDate = () => {
@@ -70,7 +79,13 @@ export function EntryDateControl(props: EntryDateControlProps) {
         }}
       />
       <Show when={bounds()?.ok === true}>
-        <SourceCitation text={`earliest available, ${backtestRequest().symbol} strict tier`} />
+        <SourceCitation text={`earliest available, ${backtestRequest().symbol} ${activeTier()} tier`} />
+      </Show>
+      <Show
+        when={PARAMETER_DEFAULTS.entryDate.isDefault()}
+        fallback={<ResetButton parameterId="entryDate" disabled={props.disabled} />}
+      >
+        <DefaultBadge parameterId="entryDate" disabled={props.disabled} />
       </Show>
     </div>
   )

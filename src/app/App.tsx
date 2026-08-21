@@ -17,17 +17,23 @@
 import { onMount, Show } from 'solid-js'
 
 import { ParameterColumn } from './components/ParameterColumn/ParameterColumn.tsx'
+import { AttributionPanel } from './components/ResultColumn/AttributionPanel.tsx'
 import { bundleVersionMismatchVariant } from './components/ResultColumn/BundleVersionBanner.tsx'
 import { EquityCurveChart } from './components/ResultColumn/EquityCurveChart.tsx'
+import { ExtendedTierWarning } from './components/ResultColumn/ExtendedTierWarning.tsx'
 import { LogScaleToggle } from './components/ResultColumn/LogScaleToggle.tsx'
 import { MetricsPanel } from './components/ResultColumn/MetricsPanel.tsx'
-import { ResultSummaryHeader } from './components/ResultColumn/ResultSummaryHeader.tsx'
+import { ProvenanceStrip } from './components/ResultColumn/ProvenanceStrip.tsx'
 import { RuinBanner } from './components/ResultColumn/RuinBanner.tsx'
 import { ValidationExplanation, type ExplanationVariant } from './components/ResultColumn/ValidationExplanation.tsx'
+import { MethodologyOverlay } from './components/MethodologyOverlay.tsx'
 import { ThemeToggle } from './components/ThemeToggle.tsx'
+import { ValidationSection } from './components/ValidationSection/ValidationSection.tsx'
 import { BUNDLE_VERSION } from '../data-bundle.generated.ts'
 import {
+  activeTier,
   backtestRequest,
+  currentAttribution,
   currentCaveatMessage,
   currentDerivedMetrics,
   currentKernelInputs,
@@ -74,6 +80,7 @@ export function App() {
   })
 
   return (
+    <>
     <div class="app-layout">
       <ParameterColumn />
       <main class="result-column" data-testid="result-slot">
@@ -117,7 +124,7 @@ export function App() {
                     paste. Phase 8's SHARE-04 captures this exact element; no capture code ships
                     this phase (tests/app/static-build.test.ts asserts that). */}
                 <div class="screenshot-region" data-testid="screenshot-region">
-                  <ResultSummaryHeader inputs={currentKernelInputs()!} />
+                  <ProvenanceStrip inputs={currentKernelInputs()!} />
 
                   <div class="chart-scale-row">
                     <LogScaleToggle scale={scaleMode()} onChange={setScaleMode} />
@@ -136,11 +143,25 @@ export function App() {
                     <Show when={currentKernelResult()!.ruined && currentDerivedMetrics()!.ruinDate !== null}>
                       <RuinBanner ruinDate={currentDerivedMetrics()!.ruinDate!} />
                     </Show>
+                    {/* CRED-02/D-20: unconditional on every extended-tier result, under the same
+                        result-exists guard as the ruin banner so it never renders during load or
+                        attached to no result; ranks below ruin, above the metrics panel
+                        (05-UI-SPEC.md Visual hierarchy rank 4). */}
+                    <Show when={activeTier() === 'extended'}>
+                      <ExtendedTierWarning />
+                    </Show>
                     <MetricsPanel
                       result={currentKernelResult()!}
                       metrics={currentDerivedMetrics()!}
                       contributionAmount={backtestRequest().contributionAmount}
                     />
+                    {/* D-08: always visible directly under the metrics panel, no independent
+                        empty/loading state -- it renders and clears exactly when MetricsPanel
+                        does. currentAttribution() is non-null in this branch by construction
+                        (storeSuccessfulRun sets both together). */}
+                    <Show when={currentAttribution() !== null}>
+                      <AttributionPanel attribution={currentAttribution()!} />
+                    </Show>
                   </Show>
                 </div>
               </Show>
@@ -149,5 +170,14 @@ export function App() {
         </Show>
       </main>
     </div>
+    {/* D-09: its own always-reachable section, own canonical parameters, rendered below the
+        two-column run layout and OUTSIDE the D-20 screenshot region -- independent of whatever
+        run is currently on screen. */}
+    <ValidationSection />
+    {/* CRED-04/D-17: the last child of the top-level layout, outside both the two-column shell
+        and the validation section, so a full-screen overlay renders over everything else. Mounted
+        unconditionally; it renders no DOM node of its own until the methodology flag opens it. */}
+    <MethodologyOverlay />
+    </>
   )
 }

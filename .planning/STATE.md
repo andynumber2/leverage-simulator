@@ -2,18 +2,18 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_phase: 04
-current_phase_name: first-defensible-backtest-in-the-browser
-status: complete
-stopped_at: Phase 04 shipped and merged to main as 029ea10 (PR #4)
-last_updated: "2026-08-20T16:10:00.000Z"
-last_activity: 2026-08-20
-last_activity_desc: "Phase 04 shipped: PR #4 merged to main, CI green"
+current_phase: 6
+current_phase_name: Heatmap Design Pass
+status: "Phase 5 shipped — PR #5"
+stopped_at: Phase 05 UI-SPEC approved
+last_updated: "2026-08-21T02:29:05.273Z"
+last_activity: 2026-08-21
 progress:
-  total_phases: 8
-  completed_phases: 4
-  total_plans: 28
-  completed_plans: 28
+  total_phases: 5
+  completed_phases: 5
+  total_plans: 37
+  completed_plans: 37
+last_activity_desc: Phase 05 execution resumed (wave continue)
 ---
 
 # Project State
@@ -23,17 +23,17 @@ progress:
 See: .planning/PROJECT.md (updated 2026-08-16)
 
 **Core value:** Given a symbol, a leverage level, an entry point, and a contribution schedule, produce a defensible outcome and show which mechanism consumed the money, in a form that can be pasted into an argument.
-**Current focus:** Phase 05 — attribution-and-the-credibility-surface (not yet started)
+**Current focus:** Phase 05 — attribution-and-the-credibility-surface
 
 ## Current Position
 
-Phase: 04 (first-defensible-backtest-in-the-browser) — COMPLETE, merged to main
-Plan: 8 of 8 executed
-Status: Shipped. PR #4 merged as 029ea10, CI green on the merge commit.
+Phase: 6 — Heatmap Design Pass
+Plan: Not started
+Status: Phase 5 shipped — PR #5
   Verification passed 22/22. Security audit closed 33 of 34 threats, 0 blocking.
   Broken-windows ledger at 0 open.
 Next: Phase 05 (attribution-and-the-credibility-surface). Run /gsd-discuss-phase 05 to begin.
-Last activity: 2026-08-20 — Phase 04 shipped
+Last activity: 2026-08-21
 
 Progress: [█████░░░░░] 50%  (4 of 8 roadmap phases complete)
 
@@ -50,7 +50,7 @@ Progress: [█████░░░░░] 50%  (4 of 8 roadmap phases complete)
 
 **Velocity:**
 
-- Total plans completed: 28
+- Total plans completed: 23
 - Average duration: —
 - Total execution time: —
 
@@ -60,6 +60,7 @@ Progress: [█████░░░░░] 50%  (4 of 8 roadmap phases complete)
 |-------|-------|-------|----------|
 | 1 | 6 | - | - |
 | 02 | 8 | - | - |
+| 05 | 9 | - | - |
 
 **Recent Trend:**
 
@@ -176,6 +177,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-08-19T19:14:16.025Z
-Stopped at: Completed 04-01-PLAN.md
-Resume file: None
+Last session: 2026-08-20T18:11:56.652Z
+Stopped at: Phase 05 UI-SPEC approved
+Resume file: .planning/phases/05-attribution-and-the-credibility-surface/05-UI-SPEC.md
