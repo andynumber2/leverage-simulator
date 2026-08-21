@@ -22,7 +22,7 @@
 
 import { CELL_FLAG_RUINED, type SweepFixture } from '../../../../../src/data/sweep-fixture-format.ts'
 import { RUIN_BASE_RGBA, rampPositionFor } from '../../../../../src/colorscale/value-to-color.ts'
-import { makeHatchPattern, type MockupGeometry } from '../shared/mockup-runtime.ts'
+import { integerLeverageTicks, makeHatchPattern, type MockupGeometry } from '../shared/mockup-runtime.ts'
 import { BAND_LEVELS, resampleField, type Metric } from '../shared/field-sampler.ts'
 import { marchingSquaresSegments } from '../shared/iso-lines.ts'
 
@@ -129,9 +129,10 @@ function getRampValues(fixture: SweepFixture, metric: Metric): Float64Array {
 }
 
 /**
- * Draws leverage row labels (every 10th fixture row) into the left gutter and entry-year column
+ * Draws integer leverage row labels (1x, 2x, 3x ...) into the left gutter and entry-year column
  * labels (every 20th fixture column) into the bottom gutter, identically to
- * `form-1-dense-grid.ts`'s own `drawAxisLabels`, at this form's own `field` geometry.
+ * `form-1-dense-grid.ts`'s own `drawAxisLabels` (including its value-interpolated row placement),
+ * at this form's own `field` geometry.
  */
 function drawAxisLabels(ctx: CanvasRenderingContext2D, fixture: SweepFixture, field: FieldRect): void {
   const cellWidthPx = field.width / fixture.cols
@@ -146,11 +147,10 @@ function drawAxisLabels(ctx: CanvasRenderingContext2D, fixture: SweepFixture, fi
 
   ctx.textBaseline = 'middle'
   ctx.textAlign = 'left'
-  for (let row = 0; row < fixture.rows; row += 10) {
-    const imgRow = fixture.rows - 1 - row
-    const y = field.y + imgRow * cellHeightPx + cellHeightPx / 2
-    const label = `${(fixture.meta.leverages[row] ?? 0).toFixed(2)}x`
-    ctx.fillText(label, 2, y)
+  for (const tick of integerLeverageTicks(fixture.meta.leverages)) {
+    const imgRowF = fixture.rows - 1 - tick.rowF
+    const y = field.y + imgRowF * cellHeightPx + cellHeightPx / 2
+    ctx.fillText(`${tick.leverage}x`, 2, y)
   }
 
   ctx.textBaseline = 'bottom'
