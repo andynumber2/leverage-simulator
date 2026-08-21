@@ -17,11 +17,22 @@
  * unparseable reverts the display to the last valid value, so `buildKernelInputs` is never called
  * with `NaN`. A mid-typing partial value (a lone '.' or '-', or the empty string) is held on
  * screen without writing to the store or scheduling a run.
+ *
+ * CRED-05/D-22: the control carries the shared default badge/reset affordance
+ * (`PARAMETER_DEFAULTS.leverage`). T-05-22: `ResetButton` writes `committedValue()` directly
+ * through the registry, bypassing this control's own `commit`/`handleReadoutInput` -- the
+ * `createEffect` below is what actually satisfies the must-have that Reset "clears" an invalid
+ * state (UI-SPEC F8 error row): it watches `committedValue()` and clears both `rangeError` and
+ * `draftText` whenever it changes for ANY reason, this control's own commit included, so an
+ * external write (Reset, or a future permalink decode) cannot leave a stale error/draft behind.
  */
 
-import { createSignal, Show } from 'solid-js'
+import { createEffect, createSignal, on, Show } from 'solid-js'
 
+import { PARAMETER_DEFAULTS } from '../../parameter-defaults.ts'
 import { backtestRequest, updateBacktestRequest } from '../../state.ts'
+import { DefaultBadge } from './DefaultBadge.tsx'
+import { ResetButton } from './ResetButton.tsx'
 
 export interface LeverageControlProps {
   disabled: boolean
@@ -55,6 +66,19 @@ export function LeverageControl(props: LeverageControlProps) {
 
   const committedValue = () => backtestRequest().leverage
   const displayText = () => draftText() ?? committedValue().toFixed(2)
+
+  // T-05-22: clears any lingering draft/error whenever the committed value changes, regardless of
+  // origin -- `defer: true` skips the initial mount run, so this only fires on an actual change.
+  createEffect(
+    on(
+      committedValue,
+      () => {
+        setDraftText(null)
+        setRangeError(null)
+      },
+      { defer: true },
+    ),
+  )
 
   function commit(value: number): void {
     setRangeError(null)
@@ -127,6 +151,12 @@ export function LeverageControl(props: LeverageControlProps) {
         />
         <span class="leverage-readout-suffix">x</span>
       </span>
+      <Show
+        when={PARAMETER_DEFAULTS.leverage.isDefault()}
+        fallback={<ResetButton parameterId="leverage" disabled={props.disabled} />}
+      >
+        <DefaultBadge parameterId="leverage" disabled={props.disabled} />
+      </Show>
       <Show when={rangeError() !== null}>
         <span class="leverage-range-error" data-testid="leverage-range-error">
           {rangeError()}

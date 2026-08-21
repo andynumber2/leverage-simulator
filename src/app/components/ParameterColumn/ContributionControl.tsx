@@ -19,10 +19,19 @@
  * plan-04-05 local signal that used to label the monthly auto-selection -- one registry
  * definition of "at default" now drives every control, this one included (05-08-PLAN.md Task 2).
  * The auto-selected `monthly` frequency simply reads off-default like any other edited value,
- * with Reset available to return it to `none` alongside the amount.
+ * with Reset available to return it to `none` alongside the amount. The amount field carries its
+ * own badge/reset too (`PARAMETER_DEFAULTS.contributionAmount`, Task 3): resetting the amount
+ * writes both `contributionAmount` and `contributionFrequency` back to their shipped defaults
+ * together, the same pair this control's own empty-input path already writes.
+ *
+ * T-05-22: both `ResetButton`s write their committed values directly through the registry,
+ * bypassing this file's own `handleAmountInput`/`handleFrequencyChange`. The `createEffect` below
+ * is what actually satisfies the must-have that Reset "clears" an invalid state (UI-SPEC F8 error
+ * row): it watches `amount()` and clears `amountError` whenever it changes for any reason, this
+ * control's own writes included.
  */
 
-import { createSignal, For, Show } from 'solid-js'
+import { createEffect, createSignal, For, on, Show } from 'solid-js'
 
 import type { ContributionFrequency } from '../../../data/kernel-inputs.ts'
 import { PARAMETER_DEFAULTS } from '../../parameter-defaults.ts'
@@ -53,6 +62,10 @@ export function ContributionControl(props: ContributionControlProps) {
   const amount = () => backtestRequest().contributionAmount
   const frequency = () => backtestRequest().contributionFrequency
   const frequencyDisabled = () => props.disabled || amount() === 0
+
+  // T-05-22: `defer: true` skips the initial mount run, so this only fires on an actual change,
+  // including one written externally by Reset.
+  createEffect(on(amount, () => setAmountError(null), { defer: true }))
 
   function handleAmountInput(text: string): void {
     // UI-SPEC E4 empty: an empty amount means zero, the Default Landing Run's own value -- not a
@@ -100,6 +113,12 @@ export function ContributionControl(props: ContributionControlProps) {
         value={amount() === 0 ? '' : String(amount())}
         onInput={(e) => handleAmountInput(e.currentTarget.value)}
       />
+      <Show
+        when={PARAMETER_DEFAULTS.contributionAmount.isDefault()}
+        fallback={<ResetButton parameterId="contributionAmount" disabled={props.disabled} />}
+      >
+        <DefaultBadge parameterId="contributionAmount" disabled={props.disabled} />
+      </Show>
       <select
         id="contribution-frequency-select"
         data-testid="contribution-frequency-select"

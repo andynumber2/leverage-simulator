@@ -34,13 +34,16 @@ import { MANIFEST_PATH } from '../../src/data-bundle.generated.ts'
 import { mountApp } from '../../src/app/main.tsx'
 import { dividendModesFor, listSymbols, resolveEntryDateBounds } from '../../src/app/bounds.ts'
 import { encodeParams, type PermalinkParams } from '../../src/app/permalink.ts'
+import { PARAMETER_DEFAULTS } from '../../src/app/parameter-defaults.ts'
 import {
   currentCaveatMessage,
   currentDerivedMetrics,
   currentKernelInputs,
   currentKernelResult,
+  DEFAULT_REQUEST,
   loadedBundle,
   resetAppState,
+  setActiveTier,
   updateBacktestRequest,
 } from '../../src/app/state.ts'
 
@@ -513,4 +516,73 @@ test('6/7. a stacked bundle-mismatch plus cross-field-caveat explanation does no
 
   assertScreenshotRegionSelfContained(el, false)
   assertNoPageOverflow('scenario 6/7')
+})
+
+// ---------------------------------------------------------------------------------------------
+// 8. Default badge / Reset button density at 320px (05-08-PLAN.md's own backstop must-have:
+//    "no control's label, value and reset affordance collide or wrap unpredictably against each
+//    other, despite six more controls carrying the affordance than Phase 4 shipped")
+// ---------------------------------------------------------------------------------------------
+
+test('8. the default badge and reset affordance neither collide with nor wrap unpredictably against their control, at 320px, across all ten defaulted parameters', async () => {
+  await page.viewport(NARROW_VIEWPORT.width, NARROW_VIEWPORT.height)
+  const el = await mountAndWaitForMetrics()
+
+  // The `BacktestRequest` store is a module-level singleton shared across every test in this
+  // file (this file's own `afterEach` restores only the symbol/entryDate/holdingPeriodBars/
+  // leverage fields its OWN earlier scenarios touch, per its "KNOWN HAZARD" comment above) --
+  // scenario 6/7 above deliberately leaves `entryDate`/`holdingPeriodBars` off their D-22
+  // defaults. Establish a genuine "cold arrival" baseline explicitly here rather than assuming
+  // one, the same way `parameter-defaults.browser.test.ts` does.
+  // `DEFAULT_REQUEST.entryDate` is `''`, the store's own un-set sentinel (`applyLoadedBundle`'s
+  // conditional resolution only fires once, at boot, against `entryDate === ''` -- writing the
+  // sentinel back here after the bundle has already loaded would NOT re-resolve it). Reset
+  // `entryDate` through the registry instead, the same manifest-resolved strict-tier value its
+  // own `isDefault` predicate compares against.
+  updateBacktestRequest({ ...DEFAULT_REQUEST })
+  PARAMETER_DEFAULTS.entryDate.reset()
+  setActiveTier('strict')
+  await waitFor(() => el.querySelectorAll('[data-testid^="default-badge-"]').length === 10)
+  await nextFrame()
+
+  // Cold arrival: all ten default badges, each contained within its own control and wrapping
+  // rather than clipping.
+  const badges = Array.from(el.querySelectorAll<HTMLElement>('[data-testid^="default-badge-"]'))
+  expect(badges.length, 'expected ten default badges on a cold arrival').toBe(10)
+  for (const badgeEl of badges) {
+    assertWrapsNotClips(badgeEl, `the default badge "${badgeEl.dataset.testid}"`)
+    const control = badgeEl.closest('.parameter-group')
+    expect(control, `${badgeEl.dataset.testid} has no enclosing .parameter-group`).not.toBeNull()
+    assertContainedWithin(control!.getBoundingClientRect(), badgeEl, badgeEl.dataset.testid ?? 'default badge')
+  }
+  assertNoPageOverflow('scenario 8 (all defaults)')
+
+  // Edit every one of the ten defaulted parameters off its default at once, so every Reset
+  // control renders simultaneously -- the densest the parameter column ever gets, and the exact
+  // case the must-have names.
+  updateBacktestRequest({
+    leverage: 5,
+    entryDate: '2015-01-30',
+    holdingPeriodBars: 10,
+    initialInvestment: 50_000,
+    contributionAmount: 200,
+    contributionFrequency: 'yearly',
+    dividendReinvest: false,
+    expenseRatioPercent: 1.5,
+    financingSpreadPercent: 1.2,
+  })
+  setActiveTier('extended')
+  await waitFor(() => el.querySelectorAll('[data-testid^="reset-button-"]').length === 10)
+  await nextFrame()
+
+  const resetButtons = Array.from(el.querySelectorAll<HTMLElement>('[data-testid^="reset-button-"]'))
+  expect(resetButtons.length).toBe(10)
+  for (const resetEl of resetButtons) {
+    assertWrapsNotClips(resetEl, `the reset button "${resetEl.dataset.testid}"`)
+    const control = resetEl.closest('.parameter-group')
+    expect(control, `${resetEl.dataset.testid} has no enclosing .parameter-group`).not.toBeNull()
+    assertContainedWithin(control!.getBoundingClientRect(), resetEl, resetEl.dataset.testid ?? 'reset button')
+  }
+
+  assertNoPageOverflow('scenario 8 (all off-default)')
 })
