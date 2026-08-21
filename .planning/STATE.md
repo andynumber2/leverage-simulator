@@ -5,8 +5,8 @@ milestone_name: milestone
 current_phase: 6
 current_phase_name: Heatmap Design Pass
 status: "Phase 5 shipped — PR #5"
-stopped_at: Phase 6 context gathered
-last_updated: "2026-08-21T03:53:11.687Z"
+stopped_at: Phase 6 UI-SPEC approved
+last_updated: "2026-08-21T04:04:09.789Z"
 last_activity: 2026-08-21
 progress:
   total_phases: 6
@@ -177,6 +177,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-08-21T03:53:11.662Z
-Stopped at: Phase 6 context gathered
-Resume file: .planning/phases/06-heatmap-design-pass/06-CONTEXT.md
+Last session: 2026-08-21T04:04:09.762Z
+Stopped at: Phase 6 UI-SPEC approved
+Resume file: .planning/phases/06-heatmap-design-pass/06-UI-SPEC.md
