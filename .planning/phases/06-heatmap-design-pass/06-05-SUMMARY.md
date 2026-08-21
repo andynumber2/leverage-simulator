@@ -16,12 +16,13 @@ requires:
     provides: "form-3-small-multiples.ts (FORM_3_GEOMETRY, paintSmallMultiples)"
 provides:
   - "mockups/comparison.tsx and comparison.html (Task 1, committed): the D-05 comparison page, all four forms on the same fixture, primary + max-drawdown stress sections"
+  - "The Task 2 decision: form-2-filled-contour wins, with the three rejection reasons and the three carry-forward findings (A, B, C) plan 06-06 binds into 06-HEATMAP-SPEC.md"
 affects: [06-06]
 
 actuals:
-  tokens: 6900
-  tasks: 1
-  commits: 1
+  tokens: 8200
+  tasks: 2
+  commits: 5
 
 tech-stack:
   added: []
@@ -35,7 +36,9 @@ key-files:
   modified: []
 
 key-decisions:
-  - "comparison.tsx/.html committed and Task 1 verified; Task 2 (the winning-form decision) is a blocking:human checkpoint per this plan's own frontmatter (autonomous: false) and the executor's explicit dispatch instructions -- not decided by this run. See 'Checkpoint: Task 2 halted' below."
+  - "comparison.tsx/.html committed and Task 1 verified. Task 2's decision, made by the owner against the refreshed mockups (10yr fixture, value-space BAND_LEVELS, integer y-axis labels): form-2-filled-contour wins. Rejected: form-1-dense-grid (no boundary mark -- breakeven is inferred from a colour step, not read from a line), form-3-small-multiples (50 strip gaps break vertical continuity, so the breakeven boundary is not traceable as a shape across strips), form-4-grid-with-contour (keeps the hard per-cell mosaic under the contour line, so the field reads as discrete samples rather than a continuous surface). See 'Decision: Task 2' below for the full record."
+  - "The owner accepted, with eyes open, that form 2 is the most expensive of the four at the mockup's own geometry (13.64ms of the 16ms PERF-05 budget vs 0.68-0.93ms for the other three), and that this cost is O(display area) not O(cells) -- see Finding A."
+  - "The fixture holding period changed 20yr to 10yr at the owner's direction, overriding 06-CONTEXT.md's D-11. See 'Fixture Change: D-11 Override' below."
 
 requirements-completed: []
 
@@ -65,26 +68,29 @@ coverage:
     human_judgment: false
   - id: D2
     description: "Task 2: the winning-form decision and the three rejection reasons"
-    verification: []
+    verification:
+      - kind: other
+        ref: "Owner judged all eight panels (four forms x two sections) against the four fixed judging criteria, in both themes, at real viewport width, on the refreshed mockups (10yr fixture, value-space BAND_LEVELS, integer leverage labels). Winner: form-2-filled-contour. See 'Decision: Task 2' below for the winner and all three rejection reasons verbatim."
+        status: pass
     human_judgment: true
-    rationale: "This plan's own frontmatter sets autonomous: false and Task 2 is type=\"checkpoint:decision\" gate=\"blocking\" -- a real judgement about which of four plot forms wins, explicitly not something this executor is authorized to decide (the dispatch instructions state this in full). AUTO_CHAIN and AUTO_CFG both resolved false (workflow.auto_advance is false, workflow._auto_chain_active is false in .planning/config.json), and even if they had resolved true, gate=\"blocking\" checkpoint:decision tasks are excluded from auto-selection per the executor's own auto-mode rules. Task 2 is HALTED, not completed -- see 'Checkpoint: Task 2 halted' below for the full evidence returned to the orchestrator for a human to decide."
+    rationale: "This plan's own frontmatter sets autonomous: false and Task 2 is type=\"checkpoint:decision\" gate=\"blocking\" -- a real judgement about which of four plot forms wins, never something an executor is authorized to decide. The prior run of this plan halted at this checkpoint and returned full evidence to the orchestrator; the owner has now made the decision, and this continuation records it verbatim per the plan's own <output> instruction. No rejection reason cites implementation difficulty or a repaint-figure ranking, satisfying the task's acceptance criteria."
 
-duration: 35min
+duration: 41min
 completed: 2026-08-21
-status: halted
+status: complete
 ---
 
 # Phase 6 Plan 05: D-05 Comparison Page Summary
 
-**Task 1 complete and committed: a hand-rolled Solid.js comparison page renders all four D-02 heatmap forms against the same committed fixture, in both themes, at each form's own geometry, on both multiple-of-contributed and the max-drawdown stress metric -- fully verified. Task 2, the winning-form decision itself, is HALTED at its blocking checkpoint and returned to the orchestrator for a human to decide; this plan is not complete.**
+**Both tasks complete. Task 1: a hand-rolled Solid.js comparison page renders all four D-02 heatmap forms against the same committed fixture, in both themes, at each form's own geometry, on both multiple-of-contributed and the max-drawdown stress metric -- fully verified. Task 2: the owner judged the refreshed mockups (10yr fixture, value-space BAND_LEVELS, integer leverage labels) against the four fixed criteria and chose form-2-filled-contour ("Filled contour", the pork-chop plot). The three rejection reasons, three carry-forward findings for plan 06-06 and Phase 7, and the D-11 fixture-period override are all recorded below.**
 
 ## Performance
 
-- **Duration:** ~35 min
+- **Duration:** ~41 min total (35 min Task 1, ~6 min recording Task 2's decision in this continuation)
 - **Started:** 2026-08-21 (approx, base commit `55d045a`)
-- **Completed (Task 1 only):** 2026-08-21
-- **Tasks:** 1 of 2 completed; Task 2 halted at its checkpoint
-- **Files modified:** 2 (both new)
+- **Completed:** 2026-08-21
+- **Tasks:** 2 of 2 completed
+- **Files modified:** 2 new (Task 1) + 6 modified across three owner-directed fix commits made between the halt and this continuation (see 'Fixture Change: D-11 Override' and Finding B)
 
 ## Accomplishments
 
@@ -94,13 +100,103 @@ status: halted
 ## Task Commits
 
 1. **Task 1: The four-way comparison page and the max-drawdown stress section** - `92f6051` (feat)
+2. **Halt record** - `d3de538` (docs) - Task 1 complete, Task 2 halted at its checkpoint
+3. **Owner-directed fixture change** - `1f40846` (fix) - holding period 20yr to 10yr, overriding D-11
+4. **Owner-directed contour-level fix** - `ba6c55e` (fix) - BAND_LEVELS defined in multiple space, not evenly in ramp position
+5. **Owner-directed axis fix** - `aeb46e8` (fix) - integer leverage y-axis labels, placed by value interpolation
+6. **Task 2: Decision recorded** - this commit (docs) - form-2-filled-contour wins; rejection reasons, carry-forward findings and the D-11 override recorded in this SUMMARY
 
-Task 2 was not committed: it is a `checkpoint:decision gate="blocking"` task and this executor is explicitly instructed not to decide it. No commit exists for Task 2 because no code or decision was produced for it.
+Commits 3-5 were made by the owner between the Task 2 halt and this continuation, against the same halted plan, and are documented here rather than re-executed.
 
 ## Files Created/Modified
 
 - `.planning/phases/06-heatmap-design-pass/mockups/comparison.tsx` - the D-05 comparison page, Solid entry
 - `.planning/phases/06-heatmap-design-pass/mockups/comparison.html` - the document that mounts it
+- `.planning/phases/06-heatmap-design-pass/mockups/sweep-fixture.bin` - regenerated at 10yr holding period (`1f40846`)
+- `scripts/build-sweep-fixture.ts` - holding period parameter (`1f40846`)
+- `.planning/phases/06-heatmap-design-pass/mockups/shared/field-sampler.ts` - `BAND_LEVELS` redefined via `BAND_MULTIPLES` in value space (`ba6c55e`)
+- `.planning/phases/06-heatmap-design-pass/mockups/forms/form-2-filled-contour.ts` - consumes the new `BAND_LEVELS`; integer y-axis labels (`ba6c55e`, `aeb46e8`)
+- `.planning/phases/06-heatmap-design-pass/mockups/forms/form-4-grid-with-contour.ts` - `RUIN_ADJACENT_LEVEL` computed directly rather than indexed from `BAND_LEVELS[1]` (`ba6c55e`)
+- `.planning/phases/06-heatmap-design-pass/mockups/forms/form-1-dense-grid.ts` - integer y-axis labels (`aeb46e8`)
+- `.planning/phases/06-heatmap-design-pass/mockups/forms/form-3-small-multiples.ts` - integer y-axis labels via value-interpolated strip position (`aeb46e8`)
+- `.planning/phases/06-heatmap-design-pass/mockups/shared/mockup-runtime.ts` - `fixtureRowForLeverage`/`integerLeverageTicks` added (`aeb46e8`)
+- `tests/field-sampler.test.ts` - rewritten to assert `BAND_LEVELS` properties rather than specific values (`ba6c55e`)
+
+## Decision: Task 2 -- Winning Form
+
+**Winner: `form-2-filled-contour`** ("Filled contour", the pork-chop plot).
+
+Judged by the owner against the four fixed criteria (breakeven readability, categorical-state
+separation, dark-mode/screenshot-crop survival, caveat placement) on the refreshed mockups: 10yr
+holding period, `BAND_LEVELS` defined in multiple space via `BAND_MULTIPLES`, and integer leverage
+y-axis labels placed by value interpolation.
+
+### Rejection reasons (one per losing form, owner-confirmed)
+
+- **`form-1-dense-grid`:** No boundary mark at all. The reader has to infer breakeven from where
+  blue meets orange rather than being given a line to trace.
+- **`form-3-small-multiples`:** The 50 strip gaps break vertical continuity, so the breakeven
+  boundary is not traceable as a shape at all. The eye has to reconstruct it across 50 independent
+  strips.
+- **`form-4-grid-with-contour`:** Gives the line but keeps the hard per-cell mosaic, so the field
+  reads as discrete samples rather than as a continuous surface with shape.
+
+No rejection reason cites implementation difficulty, build cost, maintenance effort, or a repaint
+figure as a ranking between forms, per the task's own acceptance criteria.
+
+### Cost accepted with eyes open
+
+Form 2 is the most expensive of the four at the mockup's own 800x240 geometry: 13.64ms of the
+16ms PERF-05 budget, versus 0.68-0.93ms for the other three. The owner accepted this cost
+knowingly. See Finding A below for why this figure does not directly bound Phase 7's cost.
+
+## Carry-Forward Findings for 06-06 and Phase 7
+
+Recorded as findings, not decisions, per this plan's `<output>` instruction, so plan 06-06 binds
+them into `06-HEATMAP-SPEC.md` rather than Phase 7 discovering them as surprises.
+
+**Finding A -- form 2's cost is O(display area), not O(cells).** Forms 1/3/4 build an `ImageData`
+at fixture resolution (200x50 = 10,000 px) and let the GPU upscale via `drawImage`, so their cost
+is constant in panel size. Form 2 calls `resampleField` at DISPLAY resolution (764x224 = 171,136
+px in the mockup, 17x more) because smooth bands cannot be produced by upscaling a 200x50 buffer.
+Consequence: form 2's 13.64ms scales linearly with panel area, so a 1200x400 field lands near 38ms
+and breaches both the 16ms budget and the 60fps pan/zoom criterion. Mitigation for Phase 7:
+resample once to an offscreen canvas per data/metric change, then serve pan and zoom as `drawImage`
+transforms of that cached bitmap, which matches the roadmap's own "re-colors the cached grid"
+language. This is a Phase 7 implementation obligation created by choosing form 2, and the spec
+must say so.
+
+**Finding B -- the contour levels are not yet labelled.** `BAND_LEVELS` is now defined in multiple
+space (`BAND_MULTIPLES = [0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10, 25, 50]`) precisely so the lines ARE
+labellable, but no form draws those labels. Whether and how to label them is an open Phase 7
+decision the owner deferred. Ramp position `t` is an internal colour-lookup coordinate and must
+never decide where a user-facing line goes, which is why the old even-in-`t` levels (2.51x, 6.31x,
+15.8x) were replaced.
+
+**Finding C -- the ruin hatch is still unexercised.** `ruinedCount` is 0 in both the 20-year and
+the 10-year fixture, a fact about the SPX 1988-2026 window rather than a defect. Success criterion
+2 therefore rests entirely on the incomplete-hold grey. The hatch is unit-tested but has never been
+visually judged in a field. Phase 7's own roadmap criterion 2 calls for verification "on a
+1929-entry high-leverage sweep where ruin genuinely occurs" -- note that this phase could not
+supply that evidence.
+
+## Fixture Change: D-11 Override
+
+The fixture holding period was changed 20yr to 10yr at the owner's direction (`1f40846`), between
+the Task 2 halt and this continuation. This OVERRIDES decision D-11 in `06-CONTEXT.md`, which had
+explicitly chosen 20 years and named 10 years as the rejected alternative on the grounds that
+single crashes dominate columns.
+
+**Owner's stated rationale:** the holding period will be a user-facing slider in the shipped app
+(Phase 7, VIZ-04), so the fixture's period is a viewing choice for judging plot form rather than a
+locked analytical commitment.
+
+**Observable effect, for the record:**
+
+- Incomplete cells: 51.5% -> 26.0% (5150/10000 -> 2600/10000)
+- Multiple range: [0.011x, 24.6x] -> [0.00038x, 84.2x]
+- 135 cells now clip at the colour domain floor, where none did before
+- Ruined-cell count stayed 0 in both fixtures (no new ruin corner exercised)
 
 ## Decisions Made
 
@@ -124,13 +220,15 @@ None - no external service configuration required for the artifact this plan pro
 ## Next Phase Readiness
 
 - Task 1's artifact (`comparison.tsx`/`.html`) is complete, committed, and fully verified: all four forms render correctly in both themes, at their own geometry, on both metrics, with the load-failure backstop and narrow-viewport reflow both confirmed.
-- Task 2 -- the winning-form decision -- is NOT complete. This plan cannot be marked done and plan 06-06 (which consumes the winning form and the three rejection reasons to write `06-HEATMAP-SPEC.md`) cannot start until a human makes the Task 2 decision and this plan is resumed to record it.
-- The per-form evidence gathered for that decision (repaint figures already measured in 06-01/06-03/06-04, plus direct visual observations from this plan's own rendered comparison page) is compiled in the "Checkpoint: Task 2 halted" section of this executor's final response to the orchestrator, not duplicated here -- once the decision is made, whoever resumes this plan should record the winning option id and the three rejection reasons verbatim in a follow-up edit to this SUMMARY (the plan's own `<output>` instruction), before plan 06-06 begins.
+- Task 2 -- the winning-form decision -- is complete. `form-2-filled-contour` wins; the three rejection reasons are recorded verbatim above, along with three carry-forward findings (A, B, C) and the D-11 fixture-period override.
+- Plan 06-05 is COMPLETE. Plan 06-06 can now write `06-HEATMAP-SPEC.md` and the PROJECT.md Key Decision (D-26) from the "Decision: Task 2" section above, and must fold Findings A, B and C into the spec so Phase 7 does not inherit them as surprises.
 
 ---
 *Phase: 06-heatmap-design-pass*
-*Halted at Task 2 checkpoint: 2026-08-21*
+*Completed: 2026-08-21*
 
 ## Self-Check: PASSED
 
-`comparison.tsx` and `comparison.html` confirmed present on disk via prior `Write` tool success (file state was current in context, no re-read needed). Commit `92f6051` confirmed present via `git log --oneline -5` (see Task Commits section, first line of that output). Working tree confirmed clean (`git status --short` empty) after the commit, and `git diff --diff-filter=D --name-only HEAD~1 HEAD` confirmed empty (no accidental deletions).
+Task 1 (prior run): `comparison.tsx` and `comparison.html` confirmed present on disk. Commit `92f6051` confirmed present. Working tree confirmed clean after the commit, and `git diff --diff-filter=D --name-only HEAD~1 HEAD` confirmed empty (no accidental deletions).
+
+Task 2 (this continuation): commits `92f6051` and `d3de538` confirmed present via `git log --oneline --all`, alongside the three owner-directed fix commits `1f40846`, `ba6c55e` and `aeb46e8`, all five already on this branch before this continuation began. `mockups/comparison.tsx` and `mockups/comparison.html` confirmed present via `find`. No code was written in this continuation; only this SUMMARY.md was edited to record the Task 2 decision, in accordance with the plan's own `<output>` instruction.
