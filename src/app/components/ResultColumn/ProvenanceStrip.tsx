@@ -3,10 +3,14 @@
  *
  * D-13: the dense provenance row inside the D-20 screenshot region, between the parameter column
  * and the result -- tier, effective date range, sources, the seams the run crossed, the bundle
- * version, a "Show all seams" disclosure (D-14) and the "View methodology" link (D-17, plain link
- * only in this plan -- 05-07 wires the overlay it opens). Reads `loadedBundle()` itself for the
- * manifest, the same way the parameter column's controls already do, and calls
- * `buildProvenanceFields` -- there is no second manifest fetch or decode path.
+ * version, a "Show all seams" disclosure (D-14) and the "View methodology" link (D-17). Reads
+ * `loadedBundle()` itself for the manifest, the same way the parameter column's controls already
+ * do, and calls `buildProvenanceFields` -- there is no second manifest fetch or decode path.
+ *
+ * 05-07: the methodology link opens `MethodologyOverlay` on activation via
+ * `openMethodologyOverlay()`, preventing the default navigation -- the `href` is kept (still
+ * pointing at the current permalink with `methodology=1` appended) so the link stays copyable and
+ * middle-clickable, matching this project's existing links-that-also-act-as-controls discipline.
  *
  * 05-05: tier reads the live `activeTier()` signal, not a fixed value, so this field always
  * reflects the tier actually in effect rather than Phase 4's D-09 pin.
@@ -16,7 +20,7 @@ import { createMemo, createSignal, For, Show } from 'solid-js'
 
 import type { SeamRecord } from '../../../../tools/bundle-compiler/src/seams.ts'
 import type { KernelInputs } from '../../../data/kernel-inputs.ts'
-import { activeTier, loadedBundle } from '../../state.ts'
+import { activeTier, loadedBundle, openMethodologyOverlay } from '../../state.ts'
 import { buildProvenanceFields, type ProvenanceField } from './provenance-fields.ts'
 
 export interface ProvenanceStripProps {
@@ -114,7 +118,15 @@ export function ProvenanceStrip(props: ProvenanceStripProps) {
         </Show>
       </Show>
 
-      <a class="provenance-methodology-link" data-testid="provenance-methodology-link" href={methodologyHref()}>
+      <a
+        class="provenance-methodology-link"
+        data-testid="provenance-methodology-link"
+        href={methodologyHref()}
+        onClick={(event) => {
+          event.preventDefault()
+          openMethodologyOverlay()
+        }}
+      >
         View methodology
       </a>
     </div>

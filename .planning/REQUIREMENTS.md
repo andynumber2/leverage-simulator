@@ -203,7 +203,7 @@ measured in CI, not an aspiration.
       daily era to monthly, interpolating it back, and measuring the resulting gap. The figure is
       reported alongside the warning
 
-- [ ] **CRED-04**: A methodology page states the full cost model, day-count conventions, data
+- [x] **CRED-04**: A methodology page states the full cost model, day-count conventions, data
       sources, and known limitations, and is reachable from any result
 
 - [ ] **CRED-05**: Default parameter values are shown as defaults and are editable, so no result
@@ -333,7 +333,7 @@ measured in CI, not an aspiration.
 | CRED-01 | Phase 5 | Pending |
 | CRED-02 | Phase 5 | Complete |
 | CRED-03 | Phase 5 | Complete |
-| CRED-04 | Phase 5 | Pending |
+| CRED-04 | Phase 5 | Complete |
 | CRED-05 | Phase 5 | Pending |
 | SHARE-01 | Phase 4 | Complete |
 | SHARE-02 | Phase 4 | Complete |
