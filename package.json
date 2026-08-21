@@ -11,6 +11,7 @@
     "bench:selftest": "vitest run --project bench-selftest",
     "compile-data": "node --experimental-strip-types tools/bundle-compiler/src/cli.ts",
     "fetch-data": "node --experimental-strip-types tools/fetch-data/src/fetch.ts",
+    "measure-extended-tier-bias": "node --experimental-strip-types scripts/measure-extended-tier-bias.ts",
     "run-backtest": "node --experimental-strip-types scripts/run-backtest.ts",
     "dev": "vite",
     "build": "vite build",

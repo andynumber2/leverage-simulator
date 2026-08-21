@@ -195,11 +195,11 @@ measured in CI, not an aspiration.
 - [ ] **CRED-01**: The active history tier, its date range, its sources, and its seam dates are
       visible in the UI at all times, generated from manifest provenance
 
-- [ ] **CRED-02**: The extended tier carries a prominent warning naming the **direction** of its
+- [x] **CRED-02**: The extended tier carries a prominent warning naming the **direction** of its
       bias: interpolated monthly data smooths daily volatility and therefore understates
       volatility drag, making leverage look better than it was in that era
 
-- [ ] **CRED-03**: The magnitude of that understatement is quantified, by downsampling a known-good
+- [x] **CRED-03**: The magnitude of that understatement is quantified, by downsampling a known-good
       daily era to monthly, interpolating it back, and measuring the resulting gap. The figure is
       reported alongside the warning
 
@@ -331,8 +331,8 @@ measured in CI, not an aspiration.
 | VIZ-10 | Phase 6 | Pending |
 | VIZ-11 | Phase 4 | Complete |
 | CRED-01 | Phase 5 | Pending |
-| CRED-02 | Phase 5 | Pending |
-| CRED-03 | Phase 5 | Pending |
+| CRED-02 | Phase 5 | Complete |
+| CRED-03 | Phase 5 | Complete |
 | CRED-04 | Phase 5 | Pending |
 | CRED-05 | Phase 5 | Pending |
 | SHARE-01 | Phase 4 | Complete |
