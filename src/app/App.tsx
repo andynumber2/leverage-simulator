@@ -26,6 +26,7 @@ import { MetricsPanel } from './components/ResultColumn/MetricsPanel.tsx'
 import { ProvenanceStrip } from './components/ResultColumn/ProvenanceStrip.tsx'
 import { RuinBanner } from './components/ResultColumn/RuinBanner.tsx'
 import { ValidationExplanation, type ExplanationVariant } from './components/ResultColumn/ValidationExplanation.tsx'
+import { MethodologyOverlay } from './components/MethodologyOverlay.tsx'
 import { ThemeToggle } from './components/ThemeToggle.tsx'
 import { ValidationSection } from './components/ValidationSection/ValidationSection.tsx'
 import { BUNDLE_VERSION } from '../data-bundle.generated.ts'
@@ -173,6 +174,10 @@ export function App() {
         two-column run layout and OUTSIDE the D-20 screenshot region -- independent of whatever
         run is currently on screen. */}
     <ValidationSection />
+    {/* CRED-04/D-17: the last child of the top-level layout, outside both the two-column shell
+        and the validation section, so a full-screen overlay renders over everything else. Mounted
+        unconditionally; it renders no DOM node of its own until the methodology flag opens it. */}
+    <MethodologyOverlay />
     </>
   )
 }

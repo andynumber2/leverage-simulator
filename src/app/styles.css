@@ -761,3 +761,131 @@ body {
   font-family: var(--font-mono);
   color: var(--color-text);
 }
+
+/* CRED-04/D-17: the methodology overlay -- full-viewport, its own internal scroll (the underlying
+   single-run screen does not scroll behind it), positioned above everything else in the app.
+   `--space-lg` inside the content column, `--space-2xl` between its four sections (05-UI-SPEC.md
+   Spacing Scale). No fixed-height block anywhere in this rule set -- every section is a normal
+   scrolling block, never clipped. */
+.methodology-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  background: var(--color-bg);
+  color: var(--color-text);
+}
+
+.methodology-overlay-header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-lg);
+  background: var(--color-bg);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.methodology-overlay-title {
+  margin: 0;
+  font-size: var(--font-size-headline-metric);
+  font-weight: 600;
+  font-family: var(--font-ui);
+  color: var(--color-text);
+}
+
+/* 44x44px minimum hit area (Spacing Scale's icon-only touch-target exception). */
+.methodology-overlay-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+  border: none;
+  background: transparent;
+  color: var(--color-text);
+  cursor: pointer;
+}
+
+.methodology-overlay-close svg {
+  width: 16px;
+  height: 16px;
+}
+
+.methodology-overlay-content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2xl);
+  padding: var(--space-lg);
+  max-width: 900px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+.methodology-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.methodology-section-heading {
+  margin: 0;
+  font-size: var(--font-size-body);
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.methodology-subheading {
+  margin: var(--space-md) 0 0;
+  font-size: var(--font-size-body);
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.methodology-prose {
+  margin: 0;
+  font-size: var(--font-size-body);
+  font-family: var(--font-ui);
+  color: var(--color-text);
+}
+
+.methodology-row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  padding: var(--space-sm) 0;
+  border-top: 1px solid var(--color-border);
+  font-size: var(--font-size-label);
+}
+
+.methodology-row-name {
+  color: var(--color-text);
+  font-family: var(--font-ui);
+}
+
+.methodology-row-value {
+  font-family: var(--font-mono);
+  color: var(--color-text);
+  font-weight: 600;
+}
+
+.methodology-row-confidence {
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+}
+
+.methodology-row-citation {
+  color: var(--color-text-muted);
+  font-family: var(--font-ui);
+}
+
+.methodology-limitation {
+  margin: 0 0 var(--space-md);
+  font-size: var(--font-size-body);
+  font-family: var(--font-ui);
+  color: var(--color-text);
+}
