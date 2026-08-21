@@ -2,11 +2,11 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_phase: 6
-current_phase_name: Heatmap Design Pass
-status: "Phase 5 shipped — PR #5"
+current_phase: 06
+current_phase_name: heatmap-design-pass
+status: executing
 stopped_at: Phase 6 UI-SPEC approved
-last_updated: "2026-08-21T04:49:39.558Z"
+last_updated: "2026-08-21T05:37:36.456Z"
 last_activity: 2026-08-21
 last_activity_desc: Phase 05 execution resumed (wave continue)
 progress:
@@ -23,17 +23,17 @@ progress:
 See: .planning/PROJECT.md (updated 2026-08-16)
 
 **Core value:** Given a symbol, a leverage level, an entry point, and a contribution schedule, produce a defensible outcome and show which mechanism consumed the money, in a form that can be pasted into an argument.
-**Current focus:** Phase 05 — attribution-and-the-credibility-surface
+**Current focus:** Phase 06 — heatmap-design-pass
 
 ## Current Position
 
-Phase: 6 — Heatmap Design Pass
-Plan: Not started
-Status: Phase 5 shipped — PR #5
+Phase: 06 (heatmap-design-pass) — EXECUTING
+Plan: 1 of 6
+Status: Executing Phase 06
   Verification passed 22/22. Security audit closed 33 of 34 threats, 0 blocking.
   Broken-windows ledger at 0 open.
 Next: Phase 05 (attribution-and-the-credibility-surface). Run /gsd-discuss-phase 05 to begin.
-Last activity: 2026-08-21 — Phase 06 planning complete
+Last activity: 2026-08-21 — Phase 06 execution started
 
 Progress: [█████░░░░░] 50%  (4 of 8 roadmap phases complete)
 
