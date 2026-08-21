@@ -27,7 +27,7 @@ findings:
   warning: 3
   info: 3
   total: 6
-status: issues
+status: resolved
 ---
 
 # Phase 06: Code Review Report
@@ -178,3 +178,23 @@ mapping. Flagging so Phase 7 does not assume this mapping is production-ready wh
 _Reviewed: 2026-08-21T19:48:06Z_
 _Reviewer: Claude (gsd-code-reviewer)_
 _Depth: standard_
+
+
+## Resolution (2026-08-21, commit `2678557`)
+
+| Finding | Severity | Disposition |
+|---|---|---|
+| WR-01 encoder does not validate meta array lengths | Warning | Fixed. Write-time guard added, three tests cover it. Note: the decoder already caught this loudly, so the original "silently write" framing overstated it; the guard's value is failing at write time with a clearer error. |
+| WR-02 discarded `onThemeChange` unsubscribe | Warning | Deferred to Phase 7. Only bites if `mockup-runtime.ts` is reused in a real mount/unmount lifecycle. |
+| WR-03 hardcoded content-hashed manifest filename | Warning | Fixed. Now derived from `MANIFEST_PATH` in `src/data-bundle.generated.ts`. |
+| IN-01 nested ternaries in `field-sampler.ts` | Info | Fixed. Replaced with `Math.min`/`Math.max`; NaN behaviour unchanged. |
+| IN-02 floor-clipping indistinguishable from at-floor | Info | Not a defect. Intentional per D-16 and disclosed by the legend's "and below/above" labels. |
+| IN-03 drawdown metric uses the multiple-of-contributed colour domain | Info | Deferred to Phase 7. Already declared out of scope in `06-HEATMAP-SPEC.md` section 11. |
+
+Post-fix state: `npm run typecheck` exit 0, 700/700 unit tests pass (up from 697; the three new
+tests cover the WR-01 guard).
+
+Side effect worth recording: fixing WR-01 broke two existing decoder tests that had been building
+their malformed buffers through `encodeSweepFixture`. They now patch the encoded meta JSON block
+in place at a fixed byte length, so the decoder's own consistency check remains the thing under
+test rather than the new encoder guard.
