@@ -19,7 +19,7 @@
  * call exists in this file.
  */
 
-import { Show } from 'solid-js'
+import { createMemo, For, Show } from 'solid-js'
 
 import type { AttributionResult } from '../../../validation/attribution.ts'
 import { formatCurrency, formatPercent, formatSignedCurrency, formatSignedPercent } from '../../../metrics/format.ts'
@@ -55,7 +55,10 @@ function reconciliationIsWellDefined(attribution: AttributionResult): boolean {
 }
 
 export function AttributionPanel(props: AttributionPanelProps) {
-  const componentRows: ComponentRowDef[] = [
+  // Must be a memo, not a plain array: the component body runs once, so reading
+  // `props.attribution` here without a tracked scope would freeze every component row at the
+  // first run's values while the naive/actual rows (read inside JSX) kept updating.
+  const componentRows = createMemo<ComponentRowDef[]>(() => [
     {
       testId: 'attribution-volatility-drag',
       label: 'Volatility drag',
@@ -74,12 +77,17 @@ export function AttributionPanel(props: AttributionPanelProps) {
       value: props.attribution.expenseRatio,
       share: props.attribution.expenseRatioShare,
     },
-  ]
+  ])
 
   // D-06: the shares already sum to 100% by construction (the Shapley efficiency property) --
-  // this is a plain sum, never a residual-absorbing adjustment.
-  const reconciliationTotal =
-    props.attribution.volatilityDragShare + props.attribution.financingCostShare + props.attribution.expenseRatioShare
+  // this is a plain sum, never a residual-absorbing adjustment. Memoized for the same
+  // reactivity reason as `componentRows` above.
+  const reconciliationTotal = createMemo(
+    () =>
+      props.attribution.volatilityDragShare +
+      props.attribution.financingCostShare +
+      props.attribution.expenseRatioShare,
+  )
 
   return (
     <div class="attribution-panel" data-testid="attribution-panel">
@@ -97,20 +105,22 @@ export function AttributionPanel(props: AttributionPanelProps) {
         <span class="attribution-value">{formatCurrency(props.attribution.actualFinalValue)}</span>
       </div>
 
-      {componentRows.map((row) => (
-        <div class="attribution-row" data-testid={row.testId}>
-          <span class="attribution-label">{row.label}:</span>
-          <span class="attribution-value">
-            {formatSignedCurrency(row.value)} ({formatSignedPercent(row.share)} of gap)
-            {row.value < 0 ? GAIN_SUFFIX : ''}
-          </span>
-        </div>
-      ))}
+      <For each={componentRows()}>
+        {(row) => (
+          <div class="attribution-row" data-testid={row.testId}>
+            <span class="attribution-label">{row.label}:</span>
+            <span class="attribution-value">
+              {formatSignedCurrency(row.value)} ({formatSignedPercent(row.share)} of gap)
+              {row.value < 0 ? GAIN_SUFFIX : ''}
+            </span>
+          </div>
+        )}
+      </For>
 
       <Show when={reconciliationIsWellDefined(props.attribution)}>
         <div class="attribution-row" data-testid="attribution-reconciliation">
           <span class="attribution-label">Total:</span>
-          <span class="attribution-value">{formatPercent(reconciliationTotal)}</span>
+          <span class="attribution-value">{formatPercent(reconciliationTotal())}</span>
         </div>
       </Show>
     </div>

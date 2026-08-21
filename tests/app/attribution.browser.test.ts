@@ -87,6 +87,9 @@ test('changing leverage through the existing control changes both rendered attri
   expect(attributionBefore).not.toBeNull()
   const naiveBefore = parseCurrency(el.querySelector('[data-testid="attribution-naive"] .attribution-value')?.textContent)
   const actualBefore = parseCurrency(el.querySelector('[data-testid="attribution-actual"] .attribution-value')?.textContent)
+  const dragBefore = el.querySelector('[data-testid="attribution-volatility-drag"] .attribution-value')?.textContent
+  const financingBefore = el.querySelector('[data-testid="attribution-financing-cost"] .attribution-value')?.textContent
+  const expenseBefore = el.querySelector('[data-testid="attribution-expense-ratio"] .attribution-value')?.textContent
 
   updateBacktestRequest({ leverage: 2 })
   await waitFor(() => currentAttribution() !== null && currentAttribution()!.naiveFinalValue !== attributionBefore!.naiveFinalValue)
@@ -96,6 +99,17 @@ test('changing leverage through the existing control changes both rendered attri
 
   expect(naiveAfter).not.toBe(naiveBefore)
   expect(actualAfter).not.toBe(actualBefore)
+
+  // The three component rows and the reconciliation total must track the new run too. These read
+  // `props.attribution` through a memo rather than a plain component-body value; without that they
+  // freeze at the first run while naive/actual keep updating, and the panel silently attributes the
+  // new result's gap to the old result's costs.
+  const dragAfter = el.querySelector('[data-testid="attribution-volatility-drag"] .attribution-value')?.textContent
+  const financingAfter = el.querySelector('[data-testid="attribution-financing-cost"] .attribution-value')?.textContent
+  const expenseAfter = el.querySelector('[data-testid="attribution-expense-ratio"] .attribution-value')?.textContent
+  expect(dragAfter).not.toBe(dragBefore)
+  expect(financingAfter).not.toBe(financingBefore)
+  expect(expenseAfter).not.toBe(expenseBefore)
 
   // The metrics panel updated too, in the same pass -- both surfaces reflect the same new run.
   const metricsPanel = el.querySelector('[data-testid="metrics-panel"]')
