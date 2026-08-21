@@ -99,7 +99,7 @@ export type ScaleMode = 'log' | 'linear'
  * only fires after `status` becomes 'ready'. D-09/F-02: `expenseRatioPercent` and
  * `financingSpreadPercent` are PERCENTAGES; `GENERIC_3X_EXPENSE_RATIO` and
  * `FINANCING_SPREAD_DEFAULT` are FRACTIONS, multiplied by 100 exactly once, here. */
-const DEFAULT_REQUEST: BacktestRequest = {
+export const DEFAULT_REQUEST: BacktestRequest = {
   symbol: 'SPX',
   dividendReinvest: true,
   leverage: 3,
