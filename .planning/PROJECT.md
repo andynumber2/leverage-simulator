@@ -48,15 +48,18 @@ against real leveraged ETF price history.
       (total-return and price-return), so the toggle switches data rather than approximating
 - [ ] Detect and flag ruin (position value reaching or crossing zero), and handle it correctly
       rather than producing negative-value nonsense downstream
-- [ ] Validate synthetic leverage against real leveraged ETF history: synthetic 3x S&P 500 must
+- [x] Validate synthetic leverage against real leveraged ETF history: synthetic 3x S&P 500 must
       track UPRO since 2009, and synthetic 3x NDX must track TQQQ, within a documented tolerance
+      (Phase 3: the tracking gate; Phase 5: the comparison surfaced in-app, not only in tests)
 
 **Cost attribution**
 
-- [ ] For any single run, decompose the gap between naive `L*r` and the actual result into
+- [x] For any single run, decompose the gap between naive `L*r` and the actual result into
       volatility drag, financing cost, and expense ratio, reported in both dollars and percent
-- [ ] Expense ratio and financing spread are user-editable, defaulting to values sourced from
+      (Phase 5: Shapley decomposition, reconciling to the total gap with no residual)
+- [x] Expense ratio and financing spread are user-editable, defaulting to values sourced from
       real products (roughly 0.90% ER and ~0.5% over the short rate)
+      (Phase 5: every default labelled as a default and editable in place)
 
 **Outcome metrics**
 
@@ -90,8 +93,10 @@ against real leveraged ETF price history.
 - [x] Two user-selectable history tiers: **strict** (every input genuinely daily) and
       **extended** (deep history, with monthly rate and dividend data interpolated to daily)
       (Phase 2: tier ranges computed from seam records)
-- [ ] The GUI states explicitly and prominently what each tier means, including the actual
+- [x] The GUI states explicitly and prominently what each tier means, including the actual
       seam dates and data sources. Provenance is visible, never a footnote
+      (Phase 5: provenance strip rendered from the manifest, plus the extended-tier bias warning
+      carrying its measured magnitude)
 
 **Sharing**
 
@@ -201,4 +206,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-08-17 after Phase 2 (Compiled Data Bundle) completed*
+*Last updated: 2026-08-21 after Phase 5 (Attribution and the Credibility Surface) completed*
