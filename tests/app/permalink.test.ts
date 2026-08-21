@@ -170,6 +170,35 @@ describe('property: decodeParams(encodeParams(p)) round trip', () => {
   })
 })
 
+describe('permalink: tier round-trips independently of every other field', () => {
+  test('a permalink carrying tier "strict" round-trips to tier "strict"', () => {
+    const params = fixedModeExample({ tier: 'strict' })
+    const decoded = decodeParams(encodeParams(params))
+    expect(decoded.status).toBe('ok')
+    if (decoded.status === 'ok') expect(decoded.params.tier).toBe('strict')
+  })
+
+  test('a permalink carrying tier "extended" round-trips to tier "extended"', () => {
+    const params = fixedModeExample({ tier: 'extended' })
+    const decoded = decodeParams(encodeParams(params))
+    expect(decoded.status).toBe('ok')
+    if (decoded.status === 'ok') expect(decoded.params.tier).toBe('extended')
+  })
+
+  test('a permalink carrying the extended tier decodes to the extended tier while every other decoded parameter is unaffected', () => {
+    const strictDecoded = decodeParams(encodeParams(fixedModeExample({ tier: 'strict' })))
+    const extendedDecoded = decodeParams(encodeParams(fixedModeExample({ tier: 'extended' })))
+    expect(strictDecoded.status).toBe('ok')
+    expect(extendedDecoded.status).toBe('ok')
+    if (strictDecoded.status === 'ok' && extendedDecoded.status === 'ok') {
+      expect(extendedDecoded.params.tier).toBe('extended')
+      // Swap the tier back and the two decoded objects must be identical -- proving tier is the
+      // one field that differs and no other field was disturbed by the tier change.
+      expect({ ...extendedDecoded.params, tier: strictDecoded.params.tier }).toEqual(strictDecoded.params)
+    }
+  })
+})
+
 describe('encodeParams: determinism and key order', () => {
   test('called twice on the same parameter set produces byte-identical query strings', () => {
     const params = fixedModeExample()

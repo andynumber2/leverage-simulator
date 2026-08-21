@@ -22,16 +22,16 @@
  * did ask for a window longer than the data supports.) This supersedes the UI-SPEC's "Run to
  * today" secondary action and D-14's wall-clock framing.
  *
- * The date shown is the strict tier's `lastDate` for the selected series, resolved through the
- * same `resolveEntryDateBounds` call `EntryDateControl` uses (D-09 pins the strict tier in
- * Phase 4). That bound already accounts for rate coverage, so it is the bar the run actually
- * ends on, not the last priced bar.
+ * The date shown is the live `activeTier()`'s `lastDate` for the selected series (05-05 lifts
+ * D-09's Phase-4 strict-tier pin), resolved through the same `resolveEntryDateBounds` call
+ * `EntryDateControl` uses. That bound already accounts for rate coverage, so it is the bar the
+ * run actually ends on, not the last priced bar.
  */
 
 import { createMemo, createSignal, Show } from 'solid-js'
 
 import { resolveEntryDateBounds } from '../../bounds.ts'
-import { backtestRequest, loadedBundle, updateBacktestRequest } from '../../state.ts'
+import { activeTier, backtestRequest, loadedBundle, updateBacktestRequest } from '../../state.ts'
 
 export interface HoldingModeControlProps {
   disabled: boolean
@@ -53,7 +53,7 @@ export function HoldingModeControl(props: HoldingModeControlProps) {
     const bundle = loadedBundle()
     if (bundle === null) return null
     const request = backtestRequest()
-    const bounds = resolveEntryDateBounds(bundle.manifest, request.symbol, request.dividendReinvest, 'strict')
+    const bounds = resolveEntryDateBounds(bundle.manifest, request.symbol, request.dividendReinvest, activeTier())
     return bounds.ok ? bounds.lastDate : null
   })
 

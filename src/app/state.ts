@@ -74,6 +74,7 @@ import { buildCashFlows, solveIrr } from '../metrics/irr.ts'
 import { computeAttribution, type AttributionResult } from '../validation/attribution.ts'
 import { FINANCING_SPREAD_DEFAULT, GENERIC_3X_EXPENSE_RATIO } from '../validation/cost-parameters.ts'
 import { BUNDLE_VERSION } from '../data-bundle.generated.ts'
+import type { Tier } from './bounds.ts'
 import { decodeParams, encodeParams, type PermalinkParams } from './permalink.ts'
 
 export type LoadStatus = 'loading' | 'ready' | 'failed'
@@ -100,6 +101,11 @@ const DEFAULT_REQUEST: BacktestRequest = {
 
 const [request, setRequestStore] = createStore<BacktestRequest>({ ...DEFAULT_REQUEST })
 const [scale, setScaleSignal] = createSignal<ScaleMode>('log')
+/** 05-05: the live history-tier selection (APP-02). Seeded to `'strict'`, same as the permalink's
+ * previously-pinned wire value, so a first load with no permalink and no user interaction behaves
+ * identically to Phase 4's fixed tier. Bounds the entry date and selects which manifest tier range
+ * the UI reads; it does not enter `BacktestRequest` or the kernel (see `activeTier`'s doc comment). */
+const [tier, setTierSignal] = createSignal<Tier>('strict')
 const [status, setStatus] = createSignal<LoadStatus>('loading')
 const [loadErrorMessage, setLoadErrorMessage] = createSignal<string | null>(null)
 const [bundle, setBundle] = createSignal<LoadedBundle | null>(null)
@@ -189,6 +195,21 @@ export function setScaleMode(mode: ScaleMode): void {
   scheduleRun()
 }
 
+/** 05-05: the one live tier value every consumer (`EntryDateControl`, `HoldingModeControl`,
+ * `ProvenanceStrip`, `writePermalinkUrl`) reads, instead of each holding its own literal. Does not
+ * enter `BacktestRequest`/`buildKernelInputs`/the kernel: the tier bounds the entry date and
+ * selects a manifest tier range, it is not itself a run parameter, and adding it to
+ * `BacktestRequest` would create a second definition of what a run is (`src/data/kernel-inputs.ts`
+ * carries no tier field, asserted by this plan's no-diff acceptance criterion). */
+export function activeTier(): Tier {
+  return tier()
+}
+
+export function setActiveTier(newTier: Tier): void {
+  setTierSignal(newTier)
+  scheduleRun()
+}
+
 export function loadStatus(): LoadStatus {
   return status()
 }
@@ -245,17 +266,18 @@ const HOLDING_PERIOD_OVERRUN_PATTERN = 'runs past the last supported bar'
  * exact same D-10 caveat-and-compute retry, not a silently different fixed-mode run).
  * `resolvedEndDate` is `inputs.window.lastDate`, the actual end THIS run computed to (D-14) --
  * informational only; decode never feeds it back into `buildKernelInputs`, which recomputes the
- * window itself from `entryDate`/`holdingPeriodBars` alone. `tier` is hard-coded `'strict'` (D-09
- * pins it for the whole of Phase 4) and `bundleVersion` is the imported `BUNDLE_VERSION` (D-15:
+ * window itself from `entryDate`/`holdingPeriodBars` alone. `tier` is `activeTier()`, the live
+ * signal (05-05 lifts D-09's Phase-4 pin) and `bundleVersion` is the imported `BUNDLE_VERSION` (D-15:
  * the currently deployed bundle -- the only one this build can address, per `MANIFEST_PATH`
  * pointing at exactly one manifest).
  *
- * Reads `request`/`scale()` at call time rather than at the moment the write was scheduled --
- * safe because the only way either changes is through `updateBacktestRequest`/`setScaleMode`,
- * both of which call `scheduleRun()` and so produce a further `storeSuccessfulRun` call that
- * reschedules the pending write with fresh `inputs` before this one would have fired (see
- * `schedulePermalinkSync` below). This function performs the actual write; callers never call it
- * directly -- `schedulePermalinkSync` and `flushPermalinkUrl` are the two entry points.
+ * Reads `request`/`scale()`/`activeTier()` at call time rather than at the moment the write was
+ * scheduled -- safe because the only way any of the three changes is through
+ * `updateBacktestRequest`/`setScaleMode`/`setActiveTier`, all of which call `scheduleRun()` and so
+ * produce a further `storeSuccessfulRun` call that reschedules the pending write with fresh
+ * `inputs` before this one would have fired (see `schedulePermalinkSync` below). This function
+ * performs the actual write; callers never call it directly -- `schedulePermalinkSync` and
+ * `flushPermalinkUrl` are the two entry points.
  */
 function writePermalinkUrl(inputs: KernelInputs): void {
   const params: PermalinkParams = {
@@ -271,7 +293,7 @@ function writePermalinkUrl(inputs: KernelInputs): void {
     financingSpreadPercent: request.financingSpreadPercent,
     holdMode: request.holdingPeriodBars === null ? 'end-of-data' : 'fixed',
     resolvedEndDate: inputs.window.lastDate,
-    tier: 'strict',
+    tier: activeTier(),
     scale: scale(),
     bundleVersion: BUNDLE_VERSION,
   }
@@ -496,6 +518,7 @@ export function resetAppState(): void {
   setValidationError(null)
   setCaveatMessage(null)
   setLinkBundleVersion(null)
+  setTierSignal('strict')
 }
 
 /**
@@ -506,7 +529,9 @@ export function resetAppState(): void {
  *
  * An empty query string (`decoded.status === 'empty'`) leaves `DEFAULT_REQUEST` untouched: the
  * default landing run. A successful decode (`'ok'`) seeds every one of `BacktestRequest`'s ten
- * fields plus `scale`, and records the link's `bundleVersion` for `BundleVersionBanner`. A decode
+ * fields plus `scale` and `tier` (05-05: the tier signal, seeded through `setActiveTier` so a
+ * decoded link's tier flows through the same path a user selection would), and records the link's
+ * `bundleVersion` for `BundleVersionBanner`. A decode
  * error (`'error'`) leaves the request store at its default shape (still "the default landing
  * run", per the plan's own wording) but evicts the run that would otherwise follow -- see
  * `permalinkDecodeFailedAtBoot`'s doc comment -- and raises the explanation through the same
@@ -534,6 +559,7 @@ function applyPermalinkFromLocation(): void {
       financingSpreadPercent: params.financingSpreadPercent,
     })
     setScaleSignal(params.scale)
+    setActiveTier(params.tier)
   } else if (decoded.status === 'error') {
     permalinkDecodeFailedAtBoot = true
     clearForEviction(decoded.error)
@@ -621,6 +647,11 @@ function applyLoadedBundle(loaded: LoadedBundle): void {
     throw new Error(`app: series "${seriesId}" has no strict-tier date range in the loaded bundle manifest`)
   }
 
+  // 05-05/A4: deliberately reads `tiers.strict`, never `activeTier()`, regardless of a later tier
+  // selection. D-23's "longest window the strict tier allows" default-landing-run rule stays
+  // derivable from this one sentence rather than moving with the control; a tier selected before
+  // this point (e.g. from a decoded permalink) still only affects the entry-date/holding-mode
+  // BOUNDS, never which date the default landing run resolves to.
   if (request.entryDate === '') {
     setRequestStore('entryDate', seriesEntry.tiers.strict.firstDate)
   }

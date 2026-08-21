@@ -161,6 +161,45 @@ body {
   font-size: var(--font-size-label);
 }
 
+/* 05-05/APP-02: the history-tier selector. Dense instrument-panel spacing (xs within the group,
+   matching .holding-mode-control), and a fixed 44x44px minimum hit area on each option per D-18's
+   touch-target floor -- the row itself may be taller than 44px once the meaning text wraps, but
+   the option's own tap target never shrinks below it. */
+.tier-control {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.tier-choice {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.tier-option {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-xs);
+  min-height: 44px;
+  padding: var(--space-xs) 0;
+}
+
+/* The extended option's meaning string is the longest label in the parameter column; wraps
+   within the column rather than widening it (no white-space: nowrap, no fixed width). */
+.tier-option-meaning {
+  font-size: var(--font-size-body);
+  color: var(--color-text);
+}
+
+.tier-option-disabled-reason {
+  display: block;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-label);
+  line-height: 1.4;
+}
+
 .holding-mode-control {
   display: flex;
   flex-direction: column;
