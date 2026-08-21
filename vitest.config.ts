@@ -16,10 +16,20 @@ import type { BrowserCapturedEnvironment } from './bench/environment-block.ts'
 import { readProductionKernelSeries } from './bench/kernel-series-bridge.ts'
 import { withPreviewServer } from './bench/preview-server.ts'
 import type { MeasurementRow } from './bench/report.ts'
+import { readSweepFixtureBytes } from './bench/sweep-fixture-bridge.ts'
 
 /** Convention this repo's compiler and CLI both follow (tools/bundle-compiler/src/cli.ts): the
  * compiled bundle always lands at "public/data" under the working directory. */
 const COMPILED_BUNDLE_DIR = path.resolve(process.cwd(), 'public', 'data')
+
+/** 06-01-PLAN.md Task 1(f): the committed Phase 6 design-pass fixture `scripts/
+ * build-sweep-fixture.ts` writes and `bench/heatmap-repaint.bench.test.ts` reads through the
+ * `readSweepFixture` command below -- the browser bench context has no filesystem access to this
+ * path directly. */
+const SWEEP_FIXTURE_PATH = path.resolve(
+  process.cwd(),
+  '.planning/phases/06-heatmap-design-pass/mockups/sweep-fixture.bin',
+)
 
 /** Task 1 (04-06, PERF-07): number of pointer-move steps `measureInteractionTiming`'s drag
  * issues. Each `page.mouse.move` call is a real CDP round trip, so the drag's actual wall-clock
@@ -118,6 +128,11 @@ export default defineConfig({
               // only Node can do" pattern readBundleBytes uses, here decoding the committed
               // bundle into the real SPX series PERF-02 measures runBacktest against.
               readKernelSeries: async (_context) => readProductionKernelSeries(COMPILED_BUNDLE_DIR),
+              // 06-01-PLAN.md Task 1(f): the committed sweep-fixture.bin's raw bytes, the same
+              // "browser context has no filesystem access" pattern readBundleBytes/readKernelSeries
+              // use, here handing the bytes to heatmap-repaint.bench.test.ts to decode with the
+              // real decodeSweepFixture.
+              readSweepFixture: async (_context) => readSweepFixtureBytes(SWEEP_FIXTURE_PATH),
               // Task 1 (04-03, RESEARCH.md Open Question 1): settles, rather than assumes, that
               // the `context` object a custom command receives exposes a real, unrestricted
               // Playwright `BrowserContext` at `context.context`. PERF-08's whole harness

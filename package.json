@@ -13,6 +13,7 @@
     "fetch-data": "node --experimental-strip-types tools/fetch-data/src/fetch.ts",
     "measure-extended-tier-bias": "node --experimental-strip-types scripts/measure-extended-tier-bias.ts",
     "run-backtest": "node --experimental-strip-types scripts/run-backtest.ts",
+    "build-sweep-fixture": "node --experimental-strip-types scripts/build-sweep-fixture.ts",
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
