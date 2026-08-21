@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
+    <title>Phase 6 mockup: form 1, dense grid</title>
+  </head>
+  <body>
+    <!--
+      D-28: no inline copy of the colour mapping here -- this file imports mountMockup, the fixture
+      loader, and the form's own paint function from shared/src modules rather than duplicating any
+      of their logic, so a palette change re-renders this page automatically. No framework, no
+      bundler directive: served as-is by `vite dev` (see 06-01-PLAN.md's "Resolved before
+      execution" note 1).
+    -->
+    <script type="module">
+      import { loadSweepFixture, mountMockup } from './shared/mockup-runtime.ts'
+      import { FORM_1_GEOMETRY, paintDenseGrid } from './forms/form-1-dense-grid.ts'
+
+      const fixture = await loadSweepFixture('./sweep-fixture.bin')
+
+      mountMockup({
+        title: 'Dense grid',
+        geometry: FORM_1_GEOMETRY,
+        paint: (ctx) => paintDenseGrid(ctx, fixture, 'multiple'),
+      })
+    </script>
+  </body>
+</html>
