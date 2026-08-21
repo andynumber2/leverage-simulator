@@ -275,7 +275,7 @@ Plans:
   3. The mockups place the overlapping-windows caveat where it will actually be read: visible copy stating that adjacent entry dates share nearly all their underlying history and that the grid is a sensitivity analysis over one shared past, not thousands of independent trials. A treatment that relegates this to a footnote is rejected on those grounds.
   4. Each mockup repaints its 10,000-cell grid on a metric change in under 16ms on real hardware, so no treatment survives the pass that cannot be built inside the budget locked in Phase 1.
 
-**Plans:** 5/6 plans executed
+**Plans:** 6/6 plans executed
 
 Plans:
 **Wave 1**
@@ -294,7 +294,7 @@ Plans:
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
-- [ ] 06-06-PLAN.md: The two binding artifacts. `06-HEATMAP-SPEC.md` at implementable precision plus the PROJECT.md Key Decision, carrying forward the unspent PERF-03 lever, VIZ-09's missing mockup and the open hover question
+- [x] 06-06-PLAN.md: The two binding artifacts. `06-HEATMAP-SPEC.md` at implementable precision plus the PROJECT.md Key Decision, carrying forward the unspent PERF-03 lever, VIZ-09's missing mockup and the open hover question
 
 **UI hint**: yes
 
@@ -343,7 +343,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | 3. Simulation Kernel and the UPRO/TQQQ Gate | 6/6 | In Progress|  |
 | 4. First Defensible Backtest in the Browser | 8/8 | In Progress|  |
 | 5. Attribution and the Credibility Surface | 9/9 | Complete    | 2026-08-21 |
-| 6. Heatmap Design Pass | 5/6 | In Progress|  |
+| 6. Heatmap Design Pass | 6/6 | In Progress|  |
 | 7. Sweep Engine and the Heatmap | 0/TBD | Not started | - |
 | 8. Export and the Canonical Arguments | 0/TBD | Not started | - |
 
