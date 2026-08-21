@@ -47,9 +47,10 @@ import { seriesView } from '../tools/bundle-compiler/src/binary-format.ts'
 import { fromDaysSinceEpoch, indexOfDate, toDaysSinceEpoch, type ReferenceCalendar } from '../tools/bundle-compiler/src/calendar.ts'
 import { interpolateMonthlyToDaily } from '../tools/bundle-compiler/src/rate-series.ts'
 import type { LoadedBundle } from '../src/data/bundle-source.ts'
+import type { KernelInputs } from '../src/data/kernel-inputs.ts'
 import { loadBundleFromDisk } from '../src/data/load-bundle-node.ts'
 import { runBacktest } from '../src/kernel/backtest.ts'
-import { LONG_GAP_FLAG_MIN_DAYS, type KernelInputs, type KernelOutputs, type KernelParams, type KernelSeries } from '../src/kernel/backtest.types.ts'
+import { LONG_GAP_FLAG_MIN_DAYS, type KernelOutputs, type KernelParams, type KernelSeries } from '../src/kernel/backtest.types.ts'
 import { computeAttribution } from '../src/validation/attribution.ts'
 
 /** The known-good daily era and symbol this measurement inverts (see header comment). */
