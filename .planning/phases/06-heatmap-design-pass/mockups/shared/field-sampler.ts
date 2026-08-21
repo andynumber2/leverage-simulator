@@ -6,7 +6,8 @@
  * across a ruined or incomplete cell -- that would let a region carrying no value read as a real,
  * merely-poor outcome (PITFALLS E4/E5, T-06-08). This module is the whole geometry surface for
  * that: bilinear interpolation over the fixture's own 200x50 grid, a hard categorical override
- * with a total nearest-cell tie rule, and quantisation into `BAND_LEVELS`' ten bands so the
+ * with a total nearest-cell tie rule, and quantisation into `BAND_LEVELS`' bands (round
+ * multiples, not an even split of ramp position -- see that constant's own doc comment) so the
  * filled-contour form reads as discrete SHAPES rather than a smooth gradient (that shape-reading
  * is the entire premise of D-02 form 2 and of PITFALLS E1's hidden-threshold complaint).
  *
@@ -35,14 +36,23 @@ export type Metric = 'multiple' | 'drawdown'
  * applies. */
 export type CategoricalMask = 'ruined' | 'incomplete' | null
 
-/** Ten bands' worth of boundaries in ramp-position space (`rampPositionFor`'s own `[0, 1]`
- * range): eleven values evenly spaced at a step of 0.1. An EVEN band count (ten) is what places
- * breakeven's own ramp position -- exactly 0.5, `rampPositionFor(1.0)` -- on a boundary rather
- * than inside a band, which is the whole premise of the filled-contour form (D-02 form 2) and
- * the fix for PITFALLS E1's hidden-threshold complaint. No separate "explicit boundary at 0.5"
- * insertion is needed: choosing an even band count makes 0.5 fall out of the even spacing for
- * free. */
-export const BAND_LEVELS: readonly number[] = Array.from({ length: 11 }, (_, i) => i / 10)
+/** Band boundaries in ramp-position space (`rampPositionFor`'s own `[0, 1]` range), defined in
+ * MULTIPLE space and converted -- never spaced evenly in `t` directly. `t` is an internal
+ * colour-lookup coordinate; spacing boundaries evenly in `t` puts them at unlabellable multiples
+ * (evenly spacing eleven points across this module's symlog domain lands boundaries at ~2.51x,
+ * ~6.31x, ~15.8x). `BAND_MULTIPLES` is round numbers a reader can name on sight, and
+ * `rampPositionFor` converts each to its true (non-uniform) ramp position, the same conversion
+ * the legend ticks (`LEGEND_TICK_MULTIPLES` in `value-to-color.ts`) already use.
+ *
+ * Breakeven (`rampPositionFor(1.0)`, exactly `0.5`) is a member BY CONSTRUCTION -- `1` is one of
+ * `BAND_MULTIPLES`' own entries -- rather than by an even-band-count accident, which is the whole
+ * premise of the filled-contour form (D-02 form 2) and the fix for PITFALLS E1's hidden-threshold
+ * complaint. The leading `0` and trailing `1` preserve the domain's own floor and ceiling, exactly
+ * as before, so `bandIndexFor`'s clamping and the ramp's own endpoints are unaffected. `rampPositionFor`
+ * is monotonic in its input, so mapping an ascending `BAND_MULTIPLES` produces an ascending
+ * sequence; `tests/field-sampler.test.ts` asserts this explicitly rather than assuming it. */
+const BAND_MULTIPLES: readonly number[] = [0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10, 25, 50]
+export const BAND_LEVELS: readonly number[] = [0, ...BAND_MULTIPLES.map(rampPositionFor), 1]
 
 const NUM_BANDS = BAND_LEVELS.length - 1
 

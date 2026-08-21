@@ -10,7 +10,8 @@
  * and caveat (`mockup-runtime.ts`), own geometry (D-12).
  *
  * The base pass never builds contour polygons: `resampleField` bilinearly resamples the field at
- * DISPLAY resolution and quantises into `BAND_LEVELS`' ten bands, so the band edges come out
+ * DISPLAY resolution and quantises into `BAND_LEVELS`' bands (round multiples, not an even split
+ * of ramp position), so the band edges come out
  * smooth and curved for free, with no polygon stitching or self-intersection risk (this plan's
  * own "Resolved before execution" note). The annotation pass strokes those same band boundaries
  * with `marchingSquaresSegments`, run over the field's RAMP POSITIONS (not raw metric values) at
@@ -110,8 +111,8 @@ let cachedRampValues: Float64Array | undefined
 let cachedRampValuesLength = -1
 
 /** The fixture's `metric` array, transformed into ramp positions once per repaint (not once per
- * marching-squares call -- `BAND_LEVELS` has eleven entries, and this array is shared across all
- * eleven `marchingSquaresSegments` calls below). Same space `resampleField`'s own quantisation
+ * marching-squares call -- `BAND_LEVELS` has twelve entries, and this array is shared across all
+ * twelve `marchingSquaresSegments` calls below). Same space `resampleField`'s own quantisation
  * operates in (see this file's header comment), which is what keeps the annotation pass
  * registered against the base pass. */
 function getRampValues(fixture: SweepFixture, metric: Metric): Float64Array {
