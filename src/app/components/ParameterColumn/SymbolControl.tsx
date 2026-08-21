@@ -6,12 +6,18 @@
  * with the dividend-reinvest toggle: when `dividendModesFor` reports the selected symbol lacks
  * one of its two modes, the toggle is disabled and the reason is stated inline through
  * `SourceCitation` -- the option is never silently dropped (UI-SPEC E1 partial).
+ *
+ * CRED-05/D-22: the dividend-mode toggle carries the shared default badge/reset affordance
+ * (`PARAMETER_DEFAULTS.dividendMode`), driven by the one registry rather than a local predicate.
  */
 
 import { For, Show } from 'solid-js'
 
 import { dividendModesFor, listSymbols } from '../../bounds.ts'
+import { PARAMETER_DEFAULTS } from '../../parameter-defaults.ts'
 import { backtestRequest, loadedBundle, updateBacktestRequest } from '../../state.ts'
+import { DefaultBadge } from './DefaultBadge.tsx'
+import { ResetButton } from './ResetButton.tsx'
 import { SourceCitation } from './SourceCitation.tsx'
 
 export interface SymbolControlProps {
@@ -67,6 +73,12 @@ export function SymbolControl(props: SymbolControlProps) {
         </label>
         <Show when={dividendToggleDisabled() && !props.disabled}>
           <SourceCitation text={dividendUnavailableReason(modes())} />
+        </Show>
+        <Show
+          when={PARAMETER_DEFAULTS.dividendMode.isDefault()}
+          fallback={<ResetButton parameterId="dividendMode" disabled={props.disabled} />}
+        >
+          <DefaultBadge parameterId="dividendMode" disabled={props.disabled} />
         </Show>
       </div>
     </div>

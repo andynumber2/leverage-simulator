@@ -11,16 +11,24 @@
  * An empty (zero) amount is a meaningful value, not a missing one (UI-SPEC E4 empty): it is the
  * Default Landing Run. While the amount is zero the frequency select is disabled and reads `none`.
  * The moment a non-zero amount is entered with no frequency already chosen, frequency defaults to
- * `monthly` and that default is labelled through `SourceCitation` -- an amount with no frequency
- * selected is unreachable, not an error state (UI-SPEC E4 partial). A negative amount is rejected
- * at the control with the bound named inline, in `--color-destructive` via `.contribution-error`.
+ * `monthly` -- an amount with no frequency selected is unreachable, not an error state (UI-SPEC E4
+ * partial). A negative amount is rejected at the control with the bound named inline, in
+ * `--color-destructive` via `.contribution-error`.
+ *
+ * CRED-05/D-22: frequency's badge/reset (`PARAMETER_DEFAULTS.contributionFrequency`) replaces the
+ * plan-04-05 local signal that used to label the monthly auto-selection -- one registry
+ * definition of "at default" now drives every control, this one included (05-08-PLAN.md Task 2).
+ * The auto-selected `monthly` frequency simply reads off-default like any other edited value,
+ * with Reset available to return it to `none` alongside the amount.
  */
 
 import { createSignal, For, Show } from 'solid-js'
 
 import type { ContributionFrequency } from '../../../data/kernel-inputs.ts'
+import { PARAMETER_DEFAULTS } from '../../parameter-defaults.ts'
 import { backtestRequest, updateBacktestRequest } from '../../state.ts'
-import { SourceCitation } from './SourceCitation.tsx'
+import { DefaultBadge } from './DefaultBadge.tsx'
+import { ResetButton } from './ResetButton.tsx'
 
 export interface ContributionControlProps {
   disabled: boolean
@@ -41,7 +49,6 @@ const FREQUENCY_OPTIONS = Object.keys(FREQUENCY_LABELS) as ContributionFrequency
 
 export function ContributionControl(props: ContributionControlProps) {
   const [amountError, setAmountError] = createSignal<string | null>(null)
-  const [frequencyIsDefault, setFrequencyIsDefault] = createSignal(false)
 
   const amount = () => backtestRequest().contributionAmount
   const frequency = () => backtestRequest().contributionFrequency
@@ -52,7 +59,6 @@ export function ContributionControl(props: ContributionControlProps) {
     // partial or missing state.
     if (text === '') {
       setAmountError(null)
-      setFrequencyIsDefault(false)
       updateBacktestRequest({ contributionAmount: 0, contributionFrequency: 'none' })
       return
     }
@@ -63,14 +69,12 @@ export function ContributionControl(props: ContributionControlProps) {
     }
     setAmountError(null)
     if (value === 0) {
-      setFrequencyIsDefault(false)
       updateBacktestRequest({ contributionAmount: 0, contributionFrequency: 'none' })
       return
     }
     if (frequency() === 'none') {
       // UI-SPEC E4 partial: the moment a non-zero amount lands with no frequency chosen yet,
       // frequency defaults to monthly -- an amount with no frequency is unreachable.
-      setFrequencyIsDefault(true)
       updateBacktestRequest({ contributionAmount: value, contributionFrequency: 'monthly' })
       return
     }
@@ -78,7 +82,6 @@ export function ContributionControl(props: ContributionControlProps) {
   }
 
   function handleFrequencyChange(value: string): void {
-    setFrequencyIsDefault(false)
     updateBacktestRequest({ contributionFrequency: value as ContributionFrequency })
   }
 
@@ -106,8 +109,11 @@ export function ContributionControl(props: ContributionControlProps) {
       >
         <For each={FREQUENCY_OPTIONS}>{(freq) => <option value={freq}>{FREQUENCY_LABELS[freq]}</option>}</For>
       </select>
-      <Show when={frequencyIsDefault()}>
-        <SourceCitation text="monthly - default frequency, applied because a contribution amount was entered with none selected" />
+      <Show
+        when={PARAMETER_DEFAULTS.contributionFrequency.isDefault()}
+        fallback={<ResetButton parameterId="contributionFrequency" disabled={frequencyDisabled()} />}
+      >
+        <DefaultBadge parameterId="contributionFrequency" disabled={frequencyDisabled()} />
       </Show>
       <Show when={amountError() !== null}>
         <span class="contribution-error" data-testid="contribution-amount-error">
