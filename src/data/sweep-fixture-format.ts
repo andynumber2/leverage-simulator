@@ -170,6 +170,16 @@ export function encodeSweepFixture(fixture: SweepFixture): Uint8Array {
       `encodeSweepFixture: flags.length (${fixture.flags.length}) does not equal cols * rows (${cellCount})`,
     )
   }
+  if (fixture.meta.entryDates.length !== fixture.cols) {
+    throw new Error(
+      `encodeSweepFixture: meta.entryDates.length (${fixture.meta.entryDates.length}) does not equal cols (${fixture.cols})`,
+    )
+  }
+  if (fixture.meta.leverages.length !== fixture.rows) {
+    throw new Error(
+      `encodeSweepFixture: meta.leverages.length (${fixture.meta.leverages.length}) does not equal rows (${fixture.rows})`,
+    )
+  }
 
   const metaBytes = new TextEncoder().encode(JSON.stringify(toOrderedMeta(fixture.meta)))
   const metaByteLength = metaBytes.length

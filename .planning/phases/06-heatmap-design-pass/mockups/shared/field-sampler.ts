@@ -65,7 +65,7 @@ const NUM_BANDS = BAND_LEVELS.length - 1
  * via the fallthrough return.
  */
 export function bandIndexFor(t: number): number {
-  const clamped = t < 0 ? 0 : t > 1 ? 1 : t
+  const clamped = Math.min(1, Math.max(0, t))
   for (let i = 0; i < NUM_BANDS; i++) {
     const upper = BAND_LEVELS[i + 1]!
     if (clamped < upper) return i
@@ -101,7 +101,7 @@ export interface FieldSample {
 }
 
 function clampIndex(value: number, max: number): number {
-  return value < 0 ? 0 : value > max ? max : value
+  return Math.min(max, Math.max(0, value))
 }
 
 /** The flag byte's categorical branch (D-18 wins over D-20 when a single cell carries both

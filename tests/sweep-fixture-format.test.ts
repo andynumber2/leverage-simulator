@@ -16,6 +16,8 @@ import { fileURLToPath } from 'node:url'
 
 import { describe, expect, test } from 'vitest'
 
+import { MANIFEST_PATH as GENERATED_MANIFEST_PATH } from '../src/data-bundle.generated.ts'
+
 import {
   CELL_FLAG_INCOMPLETE,
   CELL_FLAG_RUINED,
@@ -33,10 +35,43 @@ const COMMITTED_FIXTURE_PATH = path.join(
   REPO_ROOT,
   '.planning/phases/06-heatmap-design-pass/mockups/sweep-fixture.bin',
 )
-const MANIFEST_PATH = path.join(REPO_ROOT, 'public/data/manifest.f0a9dfbdfa.json')
+// WR-03: derive the manifest location from the generated pointer module rather than
+// hardcoding this build's content hash. `MANIFEST_PATH` is a browser-reachable path
+// rooted at the `public/` directory, so strip its leading slash to resolve on disk.
+const MANIFEST_FILE_PATH = path.join(REPO_ROOT, 'public', GENERATED_MANIFEST_PATH.replace(/^\//, ''))
 
 function toArrayBuffer(buffer: Buffer): ArrayBuffer {
   return buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength) as ArrayBuffer
+}
+
+/**
+ * Rewrites an encoded fixture's meta JSON block in place with `badMeta`, padding the replacement
+ * with trailing spaces so its byte length is unchanged. Keeping the length identical leaves the
+ * header's meta-length field, the payload alignment and every downstream offset valid, so the
+ * DECODER's own meta-vs-header consistency check is what fails, which is the contract under test.
+ *
+ * Necessary because `encodeSweepFixture` now rejects a length-mismatched meta at write time
+ * (defence in depth), so these buffers can no longer be produced through the encoder.
+ */
+function withPatchedMeta(encoded: Uint8Array, badMeta: unknown): ArrayBuffer {
+  const FIXED_HEADER_BYTES = 20
+  const copy = new Uint8Array(encoded)
+  const view = new DataView(copy.buffer, copy.byteOffset, copy.byteLength)
+  const metaByteLength = view.getUint32(16, true)
+
+  const encoder = new TextEncoder()
+  let badJson = JSON.stringify(badMeta)
+  let badBytes = encoder.encode(badJson)
+  if (badBytes.length > metaByteLength) {
+    throw new Error(
+      `withPatchedMeta: replacement meta (${badBytes.length}B) exceeds the original block (${metaByteLength}B)`,
+    )
+  }
+  badJson = badJson + ' '.repeat(metaByteLength - badBytes.length)
+  badBytes = encoder.encode(badJson)
+
+  copy.set(badBytes, FIXED_HEADER_BYTES)
+  return toArrayBuffer(Buffer.from(copy))
 }
 
 function makeSyntheticFixture(cols: number, rows: number): SweepFixture {
@@ -93,6 +128,25 @@ describe('encodeSweepFixture / decodeSweepFixture: round-trip', () => {
   })
 })
 
+describe('encodeSweepFixture: write-time meta validation (WR-01)', () => {
+  test('rejects meta.entryDates whose length disagrees with cols', () => {
+    const fixture = makeSyntheticFixture(4, 3)
+    const badMeta: SweepFixtureMeta = { ...fixture.meta, entryDates: fixture.meta.entryDates.slice(0, -1) }
+    expect(() => encodeSweepFixture({ ...fixture, meta: badMeta })).toThrowError(/entryDates/)
+  })
+
+  test('rejects meta.leverages whose length disagrees with rows', () => {
+    const fixture = makeSyntheticFixture(4, 3)
+    const badMeta: SweepFixtureMeta = { ...fixture.meta, leverages: [...fixture.meta.leverages, 9] }
+    expect(() => encodeSweepFixture({ ...fixture, meta: badMeta })).toThrowError(/leverages/)
+  })
+
+  test('accepts meta whose lengths match cols and rows', () => {
+    const fixture = makeSyntheticFixture(4, 3)
+    expect(() => encodeSweepFixture(fixture)).not.toThrow()
+  })
+})
+
 describe('decodeSweepFixture: fail-loud contract (T-06-01, T-06-02)', () => {
   function encodedBuffer(): Buffer {
     const fixture = makeSyntheticFixture(4, 3)
@@ -138,10 +192,10 @@ describe('decodeSweepFixture: fail-loud contract (T-06-01, T-06-02)', () => {
   test('a meta block whose entryDates length disagrees with cols throws SweepFixtureFormatError', () => {
     const fixture = makeSyntheticFixture(4, 3)
     const badMeta: SweepFixtureMeta = { ...fixture.meta, entryDates: fixture.meta.entryDates.slice(0, -1) }
-    const encoded = encodeSweepFixture({ ...fixture, meta: badMeta })
-    expect(() => decodeSweepFixture(toArrayBuffer(Buffer.from(encoded)))).toThrowError(SweepFixtureFormatError)
+    const encoded = withPatchedMeta(encodeSweepFixture(fixture), badMeta)
+    expect(() => decodeSweepFixture(encoded)).toThrowError(SweepFixtureFormatError)
     try {
-      decodeSweepFixture(toArrayBuffer(Buffer.from(encoded)))
+      decodeSweepFixture(encoded)
       expect.unreachable('expected decodeSweepFixture to throw')
     } catch (err) {
       const message = (err as Error).message
@@ -152,9 +206,9 @@ describe('decodeSweepFixture: fail-loud contract (T-06-01, T-06-02)', () => {
 
   test('a meta block whose leverages length disagrees with rows throws SweepFixtureFormatError', () => {
     const fixture = makeSyntheticFixture(4, 3)
-    const badMeta: SweepFixtureMeta = { ...fixture.meta, leverages: [...fixture.meta.leverages, 9] }
-    const encoded = encodeSweepFixture({ ...fixture, meta: badMeta })
-    expect(() => decodeSweepFixture(toArrayBuffer(Buffer.from(encoded)))).toThrowError(SweepFixtureFormatError)
+    const badMeta: SweepFixtureMeta = { ...fixture.meta, leverages: fixture.meta.leverages.slice(0, -1) }
+    const encoded = withPatchedMeta(encodeSweepFixture(fixture), badMeta)
+    expect(() => decodeSweepFixture(encoded)).toThrowError(SweepFixtureFormatError)
   })
 
   test('a buffer truncated by one byte throws SweepFixtureFormatError', () => {
@@ -174,7 +228,7 @@ describe('the committed sweep-fixture.bin', () => {
     expect(decoded.meta.leverages[0]).toBe(1)
     expect(decoded.meta.leverages[49]).toBe(5)
 
-    const manifest = JSON.parse(readFileSync(MANIFEST_PATH, 'utf-8')) as {
+    const manifest = JSON.parse(readFileSync(MANIFEST_FILE_PATH, 'utf-8')) as {
       series: Array<{ id: string; tiers: { strict: { firstDate: string; lastDate: string } | null } }>
     }
     const seriesEntry = manifest.series.find((s) => s.id === 'SPX/total-return')
