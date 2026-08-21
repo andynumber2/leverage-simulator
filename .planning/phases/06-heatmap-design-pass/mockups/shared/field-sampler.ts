@@ -1,0 +1,290 @@
+/**
+ * .planning/phases/06-heatmap-design-pass/mockups/shared/field-sampler.ts
+ *
+ * 06-03-PLAN.md Task 1: the filled-contour form's base pass (D-02 form 2) needs a smoothly
+ * bilinearly resampled field rather than one flat colour per fixture cell, but must never smooth
+ * across a ruined or incomplete cell -- that would let a region carrying no value read as a real,
+ * merely-poor outcome (PITFALLS E4/E5, T-06-08). This module is the whole geometry surface for
+ * that: bilinear interpolation over the fixture's own 200x50 grid, a hard categorical override
+ * with a total nearest-cell tie rule, and quantisation into `BAND_LEVELS`' ten bands so the
+ * filled-contour form reads as discrete SHAPES rather than a smooth gradient (that shape-reading
+ * is the entire premise of D-02 form 2 and of PITFALLS E1's hidden-threshold complaint).
+ *
+ * Plain TypeScript, zero imports outside `src/`, no DOM: `resampleField` and `sampleField` are
+ * pure typed-array math, so both run unmodified in the fast Node `unit` project
+ * (`tests/field-sampler.test.ts`) and in a browser mockup alike.
+ */
+
+import {
+  CELL_FLAG_INCOMPLETE,
+  CELL_FLAG_RUINED,
+  type SweepFixture,
+} from '../../../../../src/data/sweep-fixture-format.ts'
+import {
+  INCOMPLETE_RGBA,
+  interpolateRamp,
+  rampPositionFor,
+  RUIN_BASE_RGBA,
+  type Rgba,
+} from '../../../../../src/colorscale/value-to-color.ts'
+
+export type Metric = 'multiple' | 'drawdown'
+
+/** D-18/D-20: which categorical branch a display pixel's bilinear stencil resolves to, or
+ * `null` when every stencil corner is a plain, valued cell and the continuous band path
+ * applies. */
+export type CategoricalMask = 'ruined' | 'incomplete' | null
+
+/** Ten bands' worth of boundaries in ramp-position space (`rampPositionFor`'s own `[0, 1]`
+ * range): eleven values evenly spaced at a step of 0.1. An EVEN band count (ten) is what places
+ * breakeven's own ramp position -- exactly 0.5, `rampPositionFor(1.0)` -- on a boundary rather
+ * than inside a band, which is the whole premise of the filled-contour form (D-02 form 2) and
+ * the fix for PITFALLS E1's hidden-threshold complaint. No separate "explicit boundary at 0.5"
+ * insertion is needed: choosing an even band count makes 0.5 fall out of the even spacing for
+ * free. */
+export const BAND_LEVELS: readonly number[] = Array.from({ length: 11 }, (_, i) => i / 10)
+
+const NUM_BANDS = BAND_LEVELS.length - 1
+
+/**
+ * Maps a ramp position `t` (0 to 1, clamped otherwise) to its band index (0 to
+ * `NUM_BANDS - 1`). A value exactly equal to an interior boundary resolves to the UPPER band
+ * (edge assumption A-E3 adjacency requires this tie rule be explicit, not implicit): the loop
+ * below tests each band's own upper edge with a strict `<`, so a value equal to that edge falls
+ * through into the next band, and only the very last band's upper edge (`t = 1`) is inclusive,
+ * via the fallthrough return.
+ */
+export function bandIndexFor(t: number): number {
+  const clamped = t < 0 ? 0 : t > 1 ? 1 : t
+  for (let i = 0; i < NUM_BANDS; i++) {
+    const upper = BAND_LEVELS[i + 1]!
+    if (clamped < upper) return i
+  }
+  return NUM_BANDS - 1
+}
+
+/** One band's representative colour, cached at its CENTRE ramp position (never its edge) so a
+ * band's colour is representative of the whole band rather than of a boundary a neighbouring
+ * band shares. Built once, at module load, not per pixel -- `resampleField`'s pixel loop only
+ * ever indexes into this array, which is what makes T-06-10's "well inside 16ms" disposition
+ * hold. Uses `interpolateRamp` directly (the ramp-position-space core `valueToColor`'s own
+ * continuous path calls) rather than reconstructing a fake raw metric value and round-tripping
+ * it back through `rampPositionFor`: `BAND_LEVELS` is already expressed in ramp-position space,
+ * so this is the more direct of the two equivalent routes to the same colour. */
+const BAND_COLORS: readonly Rgba[] = Array.from({ length: NUM_BANDS }, (_, i) => {
+  const centerT = (BAND_LEVELS[i]! + BAND_LEVELS[i + 1]!) / 2
+  return interpolateRamp(centerT)
+})
+
+/** A single display pixel's resolved sample, before colour lookup: either a categorical branch
+ * (`ruined`/`incomplete`) or a continuous, UNQUANTISED ramp position ready for `bandIndexFor`.
+ * Exported (alongside `sampleField`) so the interpolation math is independently testable to the
+ * precision `tests/field-sampler.test.ts`'s linearity assertions need, without going through
+ * `resampleField`'s band-quantised, byte-rounded RGBA output -- that output's entire point is to
+ * be a step function, so it cannot itself carry a 1e-9-precision linearity proof.
+ * `resampleField`'s own pixel loop calls this exact function for every pixel: there is no
+ * second, independently-drifting copy of this arithmetic. */
+export interface FieldSample {
+  categorical: CategoricalMask
+  /** Ramp position in `[0, 1]`, meaningful only when `categorical` is `null`. */
+  rampPosition: number
+}
+
+function clampIndex(value: number, max: number): number {
+  return value < 0 ? 0 : value > max ? max : value
+}
+
+/** The flag byte's categorical branch (D-18 wins over D-20 when a single cell carries both
+ * bits, matching `valueToColor`'s own branch order), or `null` for a plain, valued cell. */
+function categoricalFor(flags: number): CategoricalMask {
+  if ((flags & CELL_FLAG_RUINED) !== 0) return 'ruined'
+  if ((flags & CELL_FLAG_INCOMPLETE) !== 0) return 'incomplete'
+  return null
+}
+
+interface StencilCorner {
+  col: number
+  row: number
+  weight: number
+}
+
+/** The bilinear stencil's four corner cells for a fractional grid position (`colF`, `rowF`):
+ * `col0`/`row0` are the floored coordinates, `col1`/`row1` one cell over. Every coordinate is
+ * clamped into `[0, cols - 1]`/`[0, rows - 1]` (clamp-to-edge), so an edge or out-of-range
+ * `colF`/`rowF` still yields four valid, in-bounds corners rather than an out-of-range index --
+ * at a grid edge, `col0 === col1` (or `row0 === row1`) and the duplicated corner's weight simply
+ * adds together, which degrades gracefully to nearest-value sampling rather than needing a
+ * special case. */
+function stencilCorners(colF: number, rowF: number, cols: number, rows: number): readonly StencilCorner[] {
+  const clampedColF = clampIndex(colF, cols - 1)
+  const clampedRowF = clampIndex(rowF, rows - 1)
+  const col0 = clampIndex(Math.floor(clampedColF), cols - 1)
+  const row0 = clampIndex(Math.floor(clampedRowF), rows - 1)
+  const col1 = clampIndex(col0 + 1, cols - 1)
+  const row1 = clampIndex(row0 + 1, rows - 1)
+  const fx = clampedColF - col0
+  const fy = clampedRowF - row0
+  return [
+    { col: col0, row: row0, weight: (1 - fx) * (1 - fy) },
+    { col: col1, row: row0, weight: fx * (1 - fy) },
+    { col: col0, row: row1, weight: (1 - fx) * fy },
+    { col: col1, row: row1, weight: fx * fy },
+  ]
+}
+
+/**
+ * The single-pixel primitive `resampleField`'s loop calls once per display pixel. Computes the
+ * four-corner bilinear stencil at fractional GRID position (`colF`, `rowF`), in the fixture's
+ * own (unflipped) row/column indexing.
+ *
+ * If ANY stencil corner carries a categorical flag (D-18/D-20), returns the categorical branch
+ * of the NEAREST such corner, by Euclidean distance from (`colF`, `rowF`) to that corner's own
+ * integer grid position -- ties broken toward the lower row, then the lower column, so the rule
+ * is total (edge assumption A-E3). No plain, valued corner is ever consulted once any corner in
+ * the stencil is categorical: the categorical region has a hard edge, never a smoothed one
+ * blended with a valued neighbour.
+ *
+ * Otherwise, bilinearly interpolates the four corners' own ramp positions
+ * (`rampPositionFor` of each corner's `metric` value) and returns the interpolated ramp
+ * position, unquantised.
+ */
+export function sampleField(fixture: SweepFixture, metric: Metric, colF: number, rowF: number): FieldSample {
+  const { cols, rows } = fixture
+  const values = metric === 'multiple' ? fixture.multiples : fixture.drawdowns
+  const corners = stencilCorners(colF, rowF, cols, rows)
+
+  let nearestCol = -1
+  let nearestRow = -1
+  let nearestMask: CategoricalMask = null
+  let nearestDistSq = Number.POSITIVE_INFINITY
+
+  for (const corner of corners) {
+    const index = corner.row * cols + corner.col
+    const mask = categoricalFor(fixture.flags[index] ?? 0)
+    if (mask === null) continue
+
+    const dRow = corner.row - rowF
+    const dCol = corner.col - colF
+    const distSq = dRow * dRow + dCol * dCol
+
+    const closer =
+      nearestMask === null ||
+      distSq < nearestDistSq ||
+      (distSq === nearestDistSq && (corner.row < nearestRow || (corner.row === nearestRow && corner.col < nearestCol)))
+
+    if (closer) {
+      nearestCol = corner.col
+      nearestRow = corner.row
+      nearestMask = mask
+      nearestDistSq = distSq
+    }
+  }
+
+  if (nearestMask !== null) {
+    return { categorical: nearestMask, rampPosition: 0 }
+  }
+
+  let interpolatedT = 0
+  for (const corner of corners) {
+    const index = corner.row * cols + corner.col
+    const value = values[index] ?? 0
+    interpolatedT += corner.weight * rampPositionFor(value)
+  }
+  return { categorical: null, rampPosition: interpolatedT }
+}
+
+/**
+ * Converts a display pixel centre (`px`, `py`, both display-pixel coordinates) into a
+ * fractional source-grid position, applying the same A-E5 vertical flip
+ * `form-1-dense-grid.ts`'s `cellDisplayCenter` uses: fixture row 0 (1.00x) paints at the BOTTOM
+ * of the display. `sampleField` itself carries no flip or geometry constant of its own (mirroring
+ * `iso-lines.ts`'s "the caller converts grid coordinates to display coordinates" convention) --
+ * this is the one place in this module that does.
+ */
+function pixelToGridPosition(
+  px: number,
+  py: number,
+  widthPx: number,
+  heightPx: number,
+  cols: number,
+  rows: number,
+): { colF: number; rowF: number } {
+  const cellWidthPx = widthPx / cols
+  const cellHeightPx = heightPx / rows
+  const colF = (px + 0.5) / cellWidthPx - 0.5
+  const imgRowF = (py + 0.5) / cellHeightPx - 0.5
+  const rowF = rows - 1 - imgRowF
+  return { colF, rowF }
+}
+
+/** The display resolution `resampleField` paints at. Only the display pixel size: the source
+ * grid's own `cols`/`rows` come from `fixture`, never duplicated here. */
+export interface ResampleGeometry {
+  widthPx: number
+  heightPx: number
+}
+
+let cachedBuffer: Uint8ClampedArray | undefined
+let cachedCols = -1
+let cachedRows = -1
+let cachedWidthPx = -1
+let cachedHeightPx = -1
+
+/** Created once per distinct (`cols`, `rows`, `widthPx`, `heightPx`) combination and reused on
+ * every subsequent `resampleField` call at that same geometry -- the measured repaint figure
+ * (`bench/heatmap-form-2.bench.test.ts`) must reflect resampling, not allocation, mirroring
+ * `bench/canvas-grid.ts`'s `getPutImageDataBuffer` discipline. */
+function getBuffer(cols: number, rows: number, widthPx: number, heightPx: number): Uint8ClampedArray {
+  if (
+    cachedBuffer === undefined ||
+    cachedCols !== cols ||
+    cachedRows !== rows ||
+    cachedWidthPx !== widthPx ||
+    cachedHeightPx !== heightPx
+  ) {
+    cachedBuffer = new Uint8ClampedArray(widthPx * heightPx * 4)
+    cachedCols = cols
+    cachedRows = rows
+    cachedWidthPx = widthPx
+    cachedHeightPx = heightPx
+  }
+  return cachedBuffer
+}
+
+/**
+ * Resamples `fixture`'s `metric` array onto a `geometry.widthPx` by `geometry.heightPx` RGBA
+ * buffer in one pass: bilinear interpolation (`sampleField`), the categorical override, band
+ * quantisation (`bandIndexFor`) and colour lookup (`BAND_COLORS`), and nothing else -- no DOM,
+ * no canvas. Returns a reused `Uint8ClampedArray`, so the caller must finish using one call's
+ * result (e.g. via `ImageData` + `putImageData`) before calling `resampleField` again at the
+ * same geometry.
+ */
+export function resampleField(fixture: SweepFixture, metric: Metric, geometry: ResampleGeometry): Uint8ClampedArray {
+  const { cols, rows } = fixture
+  const { widthPx, heightPx } = geometry
+  const buffer = getBuffer(cols, rows, widthPx, heightPx)
+
+  for (let py = 0; py < heightPx; py++) {
+    for (let px = 0; px < widthPx; px++) {
+      const { colF, rowF } = pixelToGridPosition(px, py, widthPx, heightPx, cols, rows)
+      const sample = sampleField(fixture, metric, colF, rowF)
+
+      let color: Rgba
+      if (sample.categorical === 'ruined') {
+        color = RUIN_BASE_RGBA
+      } else if (sample.categorical === 'incomplete') {
+        color = INCOMPLETE_RGBA
+      } else {
+        color = BAND_COLORS[bandIndexFor(sample.rampPosition)]!
+      }
+
+      const pixelIndex = (py * widthPx + px) * 4
+      buffer[pixelIndex] = color[0]
+      buffer[pixelIndex + 1] = color[1]
+      buffer[pixelIndex + 2] = color[2]
+      buffer[pixelIndex + 3] = color[3]
+    }
+  }
+
+  return buffer
+}
