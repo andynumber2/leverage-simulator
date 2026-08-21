@@ -172,20 +172,20 @@ measured in CI, not an aspiration.
 - [ ] **VIZ-04**: A sweep-mode toggle between fixed holding period and hold-to-today, with the
       chart stating which mode produced it
 
-- [ ] **VIZ-05**: The heatmap design is validated against throwaway mockups before implementation,
+- [x] **VIZ-05**: The heatmap design is validated against throwaway mockups before implementation,
       since no existing tool pairs these axes and there is no pattern to copy
 
 - [ ] **VIZ-06**: Ruined cells are rendered categorically distinct from the continuous color
       scale, never as merely the darkest end of it
 
-- [ ] **VIZ-07**: Color scales are perceptually uniform and colorblind-safe, and outcomes spanning
+- [x] **VIZ-07**: Color scales are perceptually uniform and colorblind-safe, and outcomes spanning
       orders of magnitude use a log or otherwise non-linear mapping rather than linear color
 
 - [x] **VIZ-08**: Equity curves offer a log scale, and the choice of scale is visible
 - [ ] **VIZ-09**: In hold-to-today mode, the short-horizon artifact at the recent edge is visually
       marked, so the right side of the chart is not read as comparable to the left
 
-- [ ] **VIZ-10**: The heatmap carries visible copy stating that entry windows overlap and that the
+- [x] **VIZ-10**: The heatmap carries visible copy stating that entry windows overlap and that the
       grid is a sensitivity analysis over one shared history, not thousands of independent trials
 
 - [x] **VIZ-11**: Charts are legible in both light and dark
@@ -323,12 +323,12 @@ measured in CI, not an aspiration.
 | VIZ-02 | Phase 7 | Pending |
 | VIZ-03 | Phase 7 | Pending |
 | VIZ-04 | Phase 7 | Pending |
-| VIZ-05 | Phase 6 | Pending |
+| VIZ-05 | Phase 6 | Complete |
 | VIZ-06 | Phase 7 | Pending |
-| VIZ-07 | Phase 6 | Pending |
+| VIZ-07 | Phase 6 | Complete |
 | VIZ-08 | Phase 4 | Complete |
 | VIZ-09 | Phase 7 | Pending |
-| VIZ-10 | Phase 6 | Pending |
+| VIZ-10 | Phase 6 | Complete |
 | VIZ-11 | Phase 4 | Complete |
 | CRED-01 | Phase 5 | Complete |
 | CRED-02 | Phase 5 | Complete |
