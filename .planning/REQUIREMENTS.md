@@ -130,7 +130,7 @@ measured in CI, not an aspiration.
       validation tracking error. Residual error is reported, not fitted away. This constraint is
       written into the validation phase spec
 
-- [ ] **VALID-04**: The validation comparison is visible in the app, not only in tests, so a
+- [x] **VALID-04**: The validation comparison is visible in the app, not only in tests, so a
       skeptical reader can check the model against reality without running code
 
 ### Metrics
@@ -151,10 +151,10 @@ measured in CI, not an aspiration.
 
 ### Attribution
 
-- [ ] **ATTR-01**: For any single run, the gap between the naive `L*r` result and the actual result
+- [x] **ATTR-01**: For any single run, the gap between the naive `L*r` result and the actual result
       is decomposed into volatility drag, financing cost, and expense ratio
 
-- [ ] **ATTR-02**: The decomposition is reported in both dollar and percentage terms, and the
+- [x] **ATTR-02**: The decomposition is reported in both dollar and percentage terms, and the
       components reconcile to the total gap without an unexplained residual
 
 - [x] **ATTR-03**: A zero-cost comparison mode shows the naive result alongside the real one, so a
@@ -192,7 +192,7 @@ measured in CI, not an aspiration.
 
 ### Credibility
 
-- [ ] **CRED-01**: The active history tier, its date range, its sources, and its seam dates are
+- [x] **CRED-01**: The active history tier, its date range, its sources, and its seam dates are
       visible in the UI at all times, generated from manifest provenance
 
 - [x] **CRED-02**: The extended tier carries a prominent warning naming the **direction** of its
@@ -206,7 +206,7 @@ measured in CI, not an aspiration.
 - [x] **CRED-04**: A methodology page states the full cost model, day-count conventions, data
       sources, and known limitations, and is reachable from any result
 
-- [ ] **CRED-05**: Default parameter values are shown as defaults and are editable, so no result
+- [x] **CRED-05**: Default parameter values are shown as defaults and are editable, so no result
       can be dismissed as depending on hidden assumptions
 
 ### Sharing and Export
@@ -228,7 +228,7 @@ measured in CI, not an aspiration.
 ### Application Shell
 
 - [x] **APP-01**: User can select a symbol from the bundled universe
-- [ ] **APP-02**: User can select the history tier, with each tier's meaning stated on screen
+- [x] **APP-02**: User can select the history tier, with each tier's meaning stated on screen
 - [x] **APP-03**: The app is a fully static build deployable to Cloudflare Pages with no backend,
       no database, and no runtime external API calls
 
@@ -309,15 +309,15 @@ measured in CI, not an aspiration.
 | VALID-01 | Phase 3 | Complete |
 | VALID-02 | Phase 3 | Complete |
 | VALID-03 | Phase 3 | Complete |
-| VALID-04 | Phase 5 | Pending |
+| VALID-04 | Phase 5 | Complete |
 | METR-01 | Phase 4 | Complete |
 | METR-02 | Phase 4 | Complete |
 | METR-03 | Phase 4 | Complete |
 | METR-04 | Phase 4 | Complete |
 | METR-05 | Phase 4 | Complete |
 | METR-06 | Phase 7 | Pending |
-| ATTR-01 | Phase 5 | Pending |
-| ATTR-02 | Phase 5 | Pending |
+| ATTR-01 | Phase 5 | Complete |
+| ATTR-02 | Phase 5 | Complete |
 | ATTR-03 | Phase 5 | Complete |
 | VIZ-01 | Phase 7 | Pending |
 | VIZ-02 | Phase 7 | Pending |
@@ -330,11 +330,11 @@ measured in CI, not an aspiration.
 | VIZ-09 | Phase 7 | Pending |
 | VIZ-10 | Phase 6 | Pending |
 | VIZ-11 | Phase 4 | Complete |
-| CRED-01 | Phase 5 | Pending |
+| CRED-01 | Phase 5 | Complete |
 | CRED-02 | Phase 5 | Complete |
 | CRED-03 | Phase 5 | Complete |
 | CRED-04 | Phase 5 | Complete |
-| CRED-05 | Phase 5 | Pending |
+| CRED-05 | Phase 5 | Complete |
 | SHARE-01 | Phase 4 | Complete |
 | SHARE-02 | Phase 4 | Complete |
 | SHARE-03 | Phase 4 | Complete |
@@ -342,7 +342,7 @@ measured in CI, not an aspiration.
 | SHARE-05 | Phase 8 | Pending |
 | SHARE-06 | Phase 8 | Pending |
 | APP-01 | Phase 4 | Complete |
-| APP-02 | Phase 5 | Pending |
+| APP-02 | Phase 5 | Complete |
 | APP-03 | Phase 4 | Complete |
 | APP-04 | Phase 4 | Complete |
 
