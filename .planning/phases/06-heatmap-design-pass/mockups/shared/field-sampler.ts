@@ -224,7 +224,7 @@ export interface ResampleGeometry {
   heightPx: number
 }
 
-let cachedBuffer: Uint8ClampedArray | undefined
+let cachedBuffer: Uint8ClampedArray<ArrayBuffer> | undefined
 let cachedCols = -1
 let cachedRows = -1
 let cachedWidthPx = -1
@@ -234,7 +234,7 @@ let cachedHeightPx = -1
  * every subsequent `resampleField` call at that same geometry -- the measured repaint figure
  * (`bench/heatmap-form-2.bench.test.ts`) must reflect resampling, not allocation, mirroring
  * `bench/canvas-grid.ts`'s `getPutImageDataBuffer` discipline. */
-function getBuffer(cols: number, rows: number, widthPx: number, heightPx: number): Uint8ClampedArray {
+function getBuffer(cols: number, rows: number, widthPx: number, heightPx: number): Uint8ClampedArray<ArrayBuffer> {
   if (
     cachedBuffer === undefined ||
     cachedCols !== cols ||
@@ -259,7 +259,11 @@ function getBuffer(cols: number, rows: number, widthPx: number, heightPx: number
  * result (e.g. via `ImageData` + `putImageData`) before calling `resampleField` again at the
  * same geometry.
  */
-export function resampleField(fixture: SweepFixture, metric: Metric, geometry: ResampleGeometry): Uint8ClampedArray {
+export function resampleField(
+  fixture: SweepFixture,
+  metric: Metric,
+  geometry: ResampleGeometry,
+): Uint8ClampedArray<ArrayBuffer> {
   const { cols, rows } = fixture
   const { widthPx, heightPx } = geometry
   const buffer = getBuffer(cols, rows, widthPx, heightPx)
