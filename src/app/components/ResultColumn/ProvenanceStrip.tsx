@@ -8,16 +8,15 @@
  * manifest, the same way the parameter column's controls already do, and calls
  * `buildProvenanceFields` -- there is no second manifest fetch or decode path.
  *
- * Tier is hard-coded 'strict' here (Phase 4's D-09 pin, unchanged by this plan): 05-05 adds the
- * live tier selector and wires this prop through, per that plan's own must-have "the provenance
- * strip's tier field reflects the selected tier, not a fixed value."
+ * 05-05: tier reads the live `activeTier()` signal, not a fixed value, so this field always
+ * reflects the tier actually in effect rather than Phase 4's D-09 pin.
  */
 
 import { createMemo, createSignal, For, Show } from 'solid-js'
 
 import type { SeamRecord } from '../../../../tools/bundle-compiler/src/seams.ts'
 import type { KernelInputs } from '../../../data/kernel-inputs.ts'
-import { loadedBundle } from '../../state.ts'
+import { activeTier, loadedBundle } from '../../state.ts'
 import { buildProvenanceFields, type ProvenanceField } from './provenance-fields.ts'
 
 export interface ProvenanceStripProps {
@@ -50,7 +49,7 @@ export function ProvenanceStrip(props: ProvenanceStripProps) {
       bundle.manifest,
       props.inputs.meta.seriesId,
       { firstDate: props.inputs.window.firstDate, lastDate: props.inputs.window.lastDate },
-      'strict',
+      activeTier(),
       props.inputs.meta.bundleVersion,
     )
   })
