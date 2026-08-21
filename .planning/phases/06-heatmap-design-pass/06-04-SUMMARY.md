@@ -127,6 +127,10 @@ None - no external service configuration required.
 - `form-3-small-multiples.ts`'s exported geometry helpers (`fieldRect`, `stripLayout`, `stripRect`, `cellDisplayCenter`, `gapCenterBetween`) are available for plan 06-05 or Phase 7 to reuse if the small-multiples form is carried forward.
 - No blockers. The committed fixture's `ruinedCount=0` (documented already in 06-01-SUMMARY.md) means this form's D-18 hatch overlay is unit-exercised via the code path but has no in-field pixels to visually judge in plan 06-05, the same open methodological note 06-01 already recorded for form 1.
 
+## Self-Check: PASSED
+
+All created files verified present on disk; all task commit hashes (403322d, ef0f9f5) and the plan-metadata commit hash (a2ea737) verified present in `git log --oneline --all`.
+
 ---
 *Phase: 06-heatmap-design-pass*
 *Completed: 2026-08-21*
