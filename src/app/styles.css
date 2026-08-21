@@ -123,6 +123,38 @@ body {
   line-height: 1.4;
 }
 
+/* CRED-05/D-22: the default-value badge and its Reset counterpart, at the same recessive weight
+   as .source-citation -- exactly one of the two ever renders for a given control. */
+.default-badge {
+  display: block;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-label);
+  line-height: 1.4;
+}
+
+/* D-18's 44x44px touch-target floor, inline rather than block so it sits beside a control's value
+   without widening the parameter column; text-only, never accent-colored (Copywriting Contract:
+   accent stays reserved for Copy Link). */
+.reset-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  min-width: 44px;
+  min-height: 44px;
+  padding: var(--space-xs) 0;
+  border: none;
+  background: none;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-label);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.reset-button:disabled {
+  cursor: default;
+  text-decoration: none;
+}
+
 .leverage-control {
   display: flex;
   flex-direction: column;
@@ -226,6 +258,25 @@ body {
   font-family: var(--font-mono);
   width: 8ch;
   padding: var(--space-xs);
+}
+
+/* CRED-05/D-22 (05-08-PLAN.md Task 3): the initial-investment control, reusing the contribution
+   control's classes where the shape matches rather than duplicating rules. */
+.initial-investment-control {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.initial-investment-input {
+  font-family: var(--font-mono);
+  width: 9ch;
+  padding: var(--space-xs);
+}
+
+.initial-investment-error {
+  color: var(--color-destructive);
+  font-size: var(--font-size-label);
 }
 
 .contribution-control {

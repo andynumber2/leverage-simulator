@@ -12,12 +12,19 @@
  *
  * Selecting an option calls `setActiveTier`, which applies immediately (no intermediate
  * unparseable state) and flows through the same coalesced recompute every other control uses.
+ *
+ * CRED-05/D-22: the control carries the shared default badge/reset affordance
+ * (`PARAMETER_DEFAULTS.tier`), driven by the one registry -- default is `'strict'`, the same
+ * value 05-05's `activeTier()` signal is seeded to.
  */
 
 import { createMemo, For, Show } from 'solid-js'
 
 import { resolveEntryDateBounds, type EntryDateBoundsResult, type Tier } from '../../bounds.ts'
+import { PARAMETER_DEFAULTS } from '../../parameter-defaults.ts'
 import { activeTier, backtestRequest, loadedBundle, setActiveTier } from '../../state.ts'
+import { DefaultBadge } from './DefaultBadge.tsx'
+import { ResetButton } from './ResetButton.tsx'
 
 export interface TierControlProps {
   disabled: boolean
@@ -85,6 +92,12 @@ export function TierControl(props: TierControlProps) {
           }}
         </For>
       </div>
+      <Show
+        when={PARAMETER_DEFAULTS.tier.isDefault()}
+        fallback={<ResetButton parameterId="tier" disabled={props.disabled} />}
+      >
+        <DefaultBadge parameterId="tier" disabled={props.disabled} />
+      </Show>
     </div>
   )
 }
