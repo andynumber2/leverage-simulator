@@ -275,7 +275,7 @@ Plans:
   3. The mockups place the overlapping-windows caveat where it will actually be read: visible copy stating that adjacent entry dates share nearly all their underlying history and that the grid is a sensitivity analysis over one shared past, not thousands of independent trials. A treatment that relegates this to a footnote is rejected on those grounds.
   4. Each mockup repaints its 10,000-cell grid on a metric change in under 16ms on real hardware, so no treatment survives the pass that cannot be built inside the budget locked in Phase 1.
 
-**Plans:** 1/6 plans executed
+**Plans:** 4/6 plans executed
 
 Plans:
 **Wave 1**
@@ -284,9 +284,9 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 06-02-PLAN.md: D-17's colourblind legibility check as a live CI assertion, at thresholds fixed before the palette was tested, and any palette change it forces
-- [ ] 06-03-PLAN.md: Forms 2 and 4. Hand-rolled iso-bands by per-pixel resample and hand-rolled iso-lines by unstitched marching squares, with no new dependency
-- [ ] 06-04-PLAN.md: Form 3. Fifty stacked one-dimensional leverage strips, with a criterion-4 figure proven non-vacuous against the whole field
+- [x] 06-02-PLAN.md: D-17's colourblind legibility check as a live CI assertion, at thresholds fixed before the palette was tested, and any palette change it forces
+- [x] 06-03-PLAN.md: Forms 2 and 4. Hand-rolled iso-bands by per-pixel resample and hand-rolled iso-lines by unstitched marching squares, with no new dependency
+- [x] 06-04-PLAN.md: Form 3. Fifty stacked one-dimensional leverage strips, with a criterion-4 figure proven non-vacuous against the whole field
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
@@ -343,7 +343,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | 3. Simulation Kernel and the UPRO/TQQQ Gate | 6/6 | In Progress|  |
 | 4. First Defensible Backtest in the Browser | 8/8 | In Progress|  |
 | 5. Attribution and the Credibility Surface | 9/9 | Complete    | 2026-08-21 |
-| 6. Heatmap Design Pass | 1/6 | In Progress|  |
+| 6. Heatmap Design Pass | 4/6 | In Progress|  |
 | 7. Sweep Engine and the Heatmap | 0/TBD | Not started | - |
 | 8. Export and the Canonical Arguments | 0/TBD | Not started | - |
 
