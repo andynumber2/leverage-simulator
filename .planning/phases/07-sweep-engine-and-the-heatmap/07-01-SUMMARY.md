@@ -206,6 +206,15 @@ None - no external service configuration required.
 - `SweepChunkRequest.generation` is threaded through the worker/pool already; plan 07-05 adds the actual staleness check as a comparison against this existing field.
 - No blockers. The one open item from the plan's own `<planner_assumptions>` (VIZ-03/VIZ-06 unclassified edge families) was reviewed manually during this plan and no additional edge category was found to apply beyond what `06-HEATMAP-SPEC.md` and the D-18/D-20 branch-order tie already govern.
 
+## Self-Check: PASSED
+
+All 12 files this plan created are tracked (`git ls-files`): `src/heatmap/iso-lines.ts`,
+`field-sampler.ts`, `hatch-pattern.ts`, `sweep-copy.ts`, `paint-contour.ts`;
+`src/sweep/sweep-grid.ts`, `resolve-column-series.ts`, `sweep.worker.ts`, `sweep-pool.ts`;
+`src/app/components/ResultColumn/HeatmapPanel.tsx`; `tests/sweep/column-series.test.ts`;
+`tests/app/sweep-tracer.browser.test.ts`. All four commit hashes this SUMMARY cites
+(`502d208`, `cf88047`, `bef7069`, `30de660`) are present in `git log`.
+
 ---
 *Phase: 07-sweep-engine-and-the-heatmap*
 *Completed: 2026-08-22*
