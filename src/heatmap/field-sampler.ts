@@ -1,5 +1,5 @@
 /**
- * .planning/phases/06-heatmap-design-pass/mockups/shared/field-sampler.ts
+ * src/heatmap/field-sampler.ts
  *
  * 06-03-PLAN.md Task 1: the filled-contour form's base pass (D-02 form 2) needs a smoothly
  * bilinearly resampled field rather than one flat colour per fixture cell, but must never smooth
@@ -14,20 +14,26 @@
  * Plain TypeScript, zero imports outside `src/`, no DOM: `resampleField` and `sampleField` are
  * pure typed-array math, so both run unmodified in the fast Node `unit` project
  * (`tests/field-sampler.test.ts`) and in a browser mockup alike.
+ *
+ * 07-01-PLAN.md Task 1, D-11: graduated verbatim from
+ * `.planning/phases/06-heatmap-design-pass/mockups/shared/field-sampler.ts` into `src/heatmap/`
+ * so both the Phase 6 mockups and Phase 7's production renderer consume one copy. No algorithm,
+ * constant, tie rule, or exported name changed; only the two five-level relative imports
+ * shortened to their new two-level depth from `src/heatmap/`.
  */
 
 import {
   CELL_FLAG_INCOMPLETE,
   CELL_FLAG_RUINED,
   type SweepFixture,
-} from '../../../../../src/data/sweep-fixture-format.ts'
+} from '../data/sweep-fixture-format.ts'
 import {
   INCOMPLETE_RGBA,
   interpolateRamp,
   rampPositionFor,
   RUIN_BASE_RGBA,
   type Rgba,
-} from '../../../../../src/colorscale/value-to-color.ts'
+} from '../colorscale/value-to-color.ts'
 
 export type Metric = 'multiple' | 'drawdown'
 

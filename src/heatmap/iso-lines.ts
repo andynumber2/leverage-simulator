@@ -1,5 +1,5 @@
 /**
- * .planning/phases/06-heatmap-design-pass/mockups/shared/iso-lines.ts
+ * src/heatmap/iso-lines.ts
  *
  * 06-03-PLAN.md Task 1: emits UNSTITCHED marching-squares segments for a level curve over a
  * regular value grid. Both forms 2 and 4 (D-02) draw band boundaries and the breakeven boundary
@@ -15,6 +15,11 @@
  * paint function) converts grid coordinates to display coordinates, exactly the same way
  * `field-sampler.ts`'s `resampleField` does for the base pass, so a segment always lands on the
  * exact same field the base pass painted.
+ *
+ * 07-01-PLAN.md Task 1, D-11: graduated verbatim from
+ * `.planning/phases/06-heatmap-design-pass/mockups/shared/iso-lines.ts` into `src/heatmap/` so
+ * both the Phase 6 mockups and Phase 7's production renderer consume one copy. No algorithm,
+ * constant, tie rule, or exported name changed; this file has zero imports so nothing else moved.
  */
 
 /** One unstitched line segment, in GRID coordinates (fractional column, fractional row). */

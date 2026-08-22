@@ -19,7 +19,8 @@ import {
   type SweepFixture,
 } from '../../../../../src/data/sweep-fixture-format.ts'
 import { RUIN_BASE_RGBA, valueToColor } from '../../../../../src/colorscale/value-to-color.ts'
-import { integerLeverageTicks, makeHatchPattern, type MockupGeometry } from '../shared/mockup-runtime.ts'
+import { integerLeverageTicks, makeHatchPattern } from '../../../../../src/heatmap/hatch-pattern.ts'
+import type { MockupGeometry } from '../shared/mockup-runtime.ts'
 
 /** D-12: form 1 picks near-square cells and its own geometry -- 200 cols by 50 rows at 4px per
  * cell, giving the same 10,000 cells the Phase 1 canvas benchmark measured. `widthPx`/`heightPx`
