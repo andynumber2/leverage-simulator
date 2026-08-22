@@ -2,9 +2,12 @@
  * src/colorscale/value-to-color.ts
  *
  * D-27a: the graduated colour function -- a symmetric-log diverging scale, interpolated in
- * Oklab, plus the two categorical branches (D-18 ruin, D-20 incomplete-hold). Zero imports, so
- * both a plain HTML mockup (`.planning/phases/06-heatmap-design-pass/mockups/`) and Phase 7's
- * Solid renderer can consume it without dragging in a framework. This is the real version of
+ * Oklab, plus the two categorical branches (D-18 ruin, D-20 incomplete-hold). Zero FRAMEWORK
+ * imports, so both a plain HTML mockup (`.planning/phases/06-heatmap-design-pass/mockups/`) and
+ * Phase 7's Solid renderer can consume it without dragging in a framework -- 07-02-PLAN.md Task 2
+ * adds this module's one deliberate exception, `src/metrics/format.ts` (itself zero-imports, not
+ * a framework), so every legend tick label routes through the project's single formatting
+ * contract rather than a second inline formatter. This is the real version of
  * `bench/canvas-grid.ts`'s `mapValueToRgba` (D-27): read that file, do not extend it in place --
  * this module does not carry over its green-channel-fixed-at-64 paint-equivalence trick, which
  * is local to that bench file's own arm-comparison plumbing.
@@ -25,13 +28,23 @@
  * array to Oklab once and returns a closure performing the same piecewise-linear interpolation
  * this module always has. This is a mechanical refactor: every value `interpolateRamp` produced
  * before this change is byte-identical after it (`tests/value-to-color.test.ts`'s equivalence
- * block asserts this explicitly). Plan 07-02's Task 2 adds the second instantiation.
+ * block asserts this explicitly).
+ *
+ * 07-02-PLAN.md Task 2 (D-25/D-26): `interpolateSequentialRamp` is the second instantiation, a
+ * single-hue violet family for max drawdown, which has no meaningful midpoint (PITFALLS E1) and
+ * must never render through this module's diverging ramp. `SweepMetric` names the three swept
+ * metrics; `scaleTypeForMetric`/`rampPositionForMetric`/`bandLevelsForMetric`/
+ * `legendTicksForMetric`/`emphasizedBandLevelFor` are the per-metric routing this module now
+ * owns, so `src/heatmap/field-sampler.ts` never chooses a ramp or a domain itself (this plan's
+ * own `key_links`).
  *
  * Oklab conversion coefficients are Björn Ottosson's published sRGB<->Oklab matrices
  * (https://bottosson.github.io/posts/oklab/, "Oklab" 2020), transcribed once here (T-06-04):
  * `tests/value-to-color.test.ts` asserts a round-trip (`oklabToSrgb(srgbToOklab(c))` returns `c`)
  * so a mis-transcribed coefficient fails the build rather than silently shifting the palette.
  */
+
+import { formatMultiple, formatPercent, formatSignedPercent } from '../metrics/format.ts'
 
 /** Four integer RGBA channel values, each in the inclusive range 0 to 255. */
 export type Rgba = readonly [r: number, g: number, b: number, a: number]
@@ -78,6 +91,25 @@ export const RAMP_STOPS: readonly RampStop[] = [
   { t: 0.5, hex: '#A9A29A' },
   { t: 0.75, hex: '#E6550D' },
   { t: 1.0, hex: '#A63603' },
+]
+
+/** D-25/D-26: max drawdown's sequential ramp, single-hue violet -- blue and orange belong to the
+ * diverging ramp above, red is reserved for ruin (`RUIN_BASE_RGBA`), and green is excluded
+ * project-wide (PITFALLS E3). Linear in the drawdown fraction (`DRAWDOWN_DOMAIN_MIN/MAX`), not
+ * log: a percentage drawdown does not span orders of magnitude the way a return multiple does.
+ * These are `07-UI-SPEC.md`'s own recommended stops, measured against this project's real
+ * thresholds before being committed here (07-02-PLAN.md Task 2): 33-sample Oklab perceptual-step
+ * ratio ~1.34 (ceiling 2.5, VIZ-07), minimum adjacent CIE76 delta E across 16 band centres ~3.86
+ * under the worst-case simulated deficiency (floor 3.0), minimum categorical delta E from both
+ * `INCOMPLETE_RGBA` and `RUIN_BASE_RGBA` ~39.6 (floor 10.0) -- all measured by
+ * `tests/value-to-color.test.ts` and `tests/color-scale-cvd.test.ts`, not asserted from memory.
+ * No stop moved from the UI-SPEC's recommended values; both thresholds passed on the first
+ * measurement. */
+export const SEQUENTIAL_RAMP_STOPS: readonly RampStop[] = [
+  { t: 0.0, hex: '#EEEBFB' },
+  { t: 0.33, hex: '#B7A9EA' },
+  { t: 0.67, hex: '#7857C4' },
+  { t: 1.0, hex: '#3B1B7E' },
 ]
 
 /** D-18: the light-theme destructive colour (`04-UI-SPEC.md` §Color), reused for the ruin hatch
@@ -246,6 +278,13 @@ export function buildRampInterpolator(stops: readonly RampStop[]): (t: number) =
  * refactor (`tests/value-to-color.test.ts`'s equivalence block asserts this explicitly). */
 export const interpolateRamp = buildRampInterpolator(RAMP_STOPS)
 
+/** D-25: max drawdown's sequential ramp, the second instantiation of `buildRampInterpolator`.
+ * `interpolateSequentialRamp(0)` is `SEQUENTIAL_RAMP_STOPS`' own `#EEEBFB`;
+ * `interpolateSequentialRamp(1)` is `#3B1B7E`. Differs from `interpolateRamp` at every interior
+ * `t` (`tests/value-to-color.test.ts` asserts this at `t = 0.25, 0.5, 0.75`), since the two ramps
+ * share no stop colours. */
+export const interpolateSequentialRamp = buildRampInterpolator(SEQUENTIAL_RAMP_STOPS)
+
 /**
  * Maps a positive `multiple` to its ramp position `t` (0 to 1), the same symlog transform
  * `valueToColor`'s continuous path uses, so the legend can place a tick at its true position
@@ -267,9 +306,208 @@ export function rampPositionFor(multiple: number): number {
  * normalised to `t` in `[0, 1]`, and returned via `interpolateRamp(t)`. Because the domain is
  * symmetric about zero, `log10(1.0) = 0` lands at exactly `t = 0.5`, the ramp's own midpoint stop
  * (D-13, D-14).
+ *
+ * `value` is always the `multiple` metric here -- this is the field's own single-metric colour
+ * function, unchanged by D-25/D-26. `src/heatmap/field-sampler.ts` is the one caller that must
+ * choose between metrics, and it does so via `rampPositionForMetric`/`scaleTypeForMetric` below,
+ * never by routing a non-multiple value through this function.
  */
 export function valueToColor(input: ColorScaleInput): Rgba {
   if (input.ruined) return RUIN_BASE_RGBA
   if (input.incomplete) return INCOMPLETE_RGBA
   return interpolateRamp(rampPositionFor(input.value))
+}
+
+/** 07-02-PLAN.md: the three metrics a sweep can render. `field-sampler.ts` imports this as
+ * `Metric` (a type alias) so its own exported name never changes, even as this module gains the
+ * authority to route every metric's ramp, domain and band boundaries. */
+export type SweepMetric = 'multiple' | 'drawdown' | 'annualized'
+
+/** Which ramp family a metric renders through. `multiple` and `annualized` are diverging (both
+ * have a real, meaningful threshold at their domain's exact midpoint -- 1.00x and 0%/yr
+ * respectively); `drawdown` is sequential (a pure magnitude with no midpoint, PITFALLS E1). */
+export type ScaleType = 'diverging' | 'sequential'
+
+export function scaleTypeForMetric(metric: SweepMetric): ScaleType {
+  switch (metric) {
+    case 'multiple':
+    case 'annualized':
+      return 'diverging'
+    case 'drawdown':
+      return 'sequential'
+    default: {
+      const exhaustive: never = metric
+      throw new Error(`value-to-color: unknown metric "${String(exhaustive)}"`)
+    }
+  }
+}
+
+/** D-26: max drawdown's fixed, linear domain -- `0%` to `80%`, clipped beyond, never fitted to a
+ * sweep's own range (this plan's `must_haves.prohibitions`). Linear, not log: a percentage
+ * drawdown does not span orders of magnitude the way a return multiple does. */
+export const DRAWDOWN_DOMAIN_MIN = 0
+export const DRAWDOWN_DOMAIN_MAX = 0.8
+
+/** D-26: the annualized-return metric's fixed, linear domain, symmetric about `0` so the
+ * `0%/yr` breakeven threshold lands at ramp position `0.5` exactly -- what makes the diverging
+ * scale honest for this metric (the same reasoning `DOMAIN_LOG_MIN/MAX`'s symmetry about `1.0x`
+ * gives the `multiple` metric). Planner-authored default (07-02-PLAN.md `planner_assumptions`):
+ * symmetry about 0 is not negotiable, the magnitude is, and is flagged there for review. */
+export const ANNUALIZED_DOMAIN_MIN = -0.3
+export const ANNUALIZED_DOMAIN_MAX = 0.3
+
+/**
+ * Routes a raw metric value to its ramp position `t` (0 to 1, clamped -- a value beyond a
+ * metric's domain clamps to the nearest endpoint, never throws or extrapolates). `multiple` uses
+ * the existing symlog transform (`rampPositionFor`); `drawdown` and `annualized` are linear
+ * normalisations over their own fixed domains above. `rampPositionForMetric(1.0, 'multiple')`,
+ * `rampPositionForMetric(0, 'annualized')` are each exactly `0.5`;
+ * `rampPositionForMetric(0, 'drawdown')` is exactly `0`.
+ */
+export function rampPositionForMetric(value: number, metric: SweepMetric): number {
+  switch (metric) {
+    case 'multiple':
+      return rampPositionFor(value)
+    case 'drawdown':
+      return clamp((value - DRAWDOWN_DOMAIN_MIN) / (DRAWDOWN_DOMAIN_MAX - DRAWDOWN_DOMAIN_MIN), 0, 1)
+    case 'annualized':
+      return clamp((value - ANNUALIZED_DOMAIN_MIN) / (ANNUALIZED_DOMAIN_MAX - ANNUALIZED_DOMAIN_MIN), 0, 1)
+    default: {
+      const exhaustive: never = metric
+      throw new Error(`value-to-color: unknown metric "${String(exhaustive)}"`)
+    }
+  }
+}
+
+/** The `multiple` metric's own round-number contour boundaries, duplicated (not imported) from
+ * `src/heatmap/field-sampler.ts`'s private `BAND_MULTIPLES` -- this module has zero framework
+ * imports by design (see this module's header) and `field-sampler.ts` already imports FROM this
+ * module, so importing back would create a cycle. Both arrays must stay in sync by hand; keeping
+ * `field-sampler.ts`'s own `BAND_LEVELS` export "unchanged for existing callers" (07-02-PLAN.md
+ * Task 3) depends on this array producing byte-identical ramp positions via the same
+ * `rampPositionFor`. */
+const MULTIPLE_BAND_MULTIPLES: readonly number[] = [0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10, 25, 50]
+const MULTIPLE_BAND_LEVELS: readonly number[] = [0, ...MULTIPLE_BAND_MULTIPLES.map(rampPositionFor), 1]
+
+/** `drawdown`'s round-number contour boundaries: 10-point steps from 10% to 70% (Finding B's rule
+ * -- boundaries are chosen in the metric's own units, never spaced evenly in ramp position). */
+const DRAWDOWN_BAND_MULTIPLES: readonly number[] = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7]
+
+/** `annualized`'s round-number contour boundaries: 10-point steps from -20% to +20%. */
+const ANNUALIZED_BAND_MULTIPLES: readonly number[] = [-0.2, -0.1, 0, 0.1, 0.2]
+
+/**
+ * Per-metric contour band boundaries, in ramp-position space, always starting at `0` and ending
+ * at `1` (the domain's own floor and ceiling), always strictly ascending. Derived from round
+ * numbers in the metric's own units and converted via `rampPositionForMetric` -- never spaced
+ * evenly in ramp position directly (Finding B: ramp position is an internal colour-lookup
+ * coordinate, not a user-facing threshold). `multiple` keeps the existing `BAND_MULTIPLES`-derived
+ * levels; `drawdown` and `annualized` are new (07-02-PLAN.md Task 2).
+ */
+export function bandLevelsForMetric(metric: SweepMetric): readonly number[] {
+  switch (metric) {
+    case 'multiple':
+      return MULTIPLE_BAND_LEVELS
+    case 'drawdown':
+      return [0, ...DRAWDOWN_BAND_MULTIPLES.map((value) => rampPositionForMetric(value, metric)), 1]
+    case 'annualized':
+      return [0, ...ANNUALIZED_BAND_MULTIPLES.map((value) => rampPositionForMetric(value, metric)), 1]
+    default: {
+      const exhaustive: never = metric
+      throw new Error(`value-to-color: unknown metric "${String(exhaustive)}"`)
+    }
+  }
+}
+
+/**
+ * The one contour boundary drawn emphasised (2px, `var(--color-text)`, matching
+ * `paint-contour.ts`'s existing breakeven treatment) for a given metric, or `null` when the
+ * metric has no such threshold. `multiple`: `1.00x`. `annualized`: `0%/yr`. `drawdown`: `null` --
+ * a sequential scale has no breakeven-equivalent to call out (`07-UI-SPEC.md`'s own
+ * no-emphasized-tick rule for the sequential ramp).
+ */
+export function emphasizedBandLevelFor(metric: SweepMetric): number | null {
+  switch (metric) {
+    case 'multiple':
+      return rampPositionForMetric(1.0, metric)
+    case 'annualized':
+      return rampPositionForMetric(0, metric)
+    case 'drawdown':
+      return null
+    default: {
+      const exhaustive: never = metric
+      throw new Error(`value-to-color: unknown metric "${String(exhaustive)}"`)
+    }
+  }
+}
+
+/** One legend tick: the raw value in the metric's own units, the ramp position it sits at
+ * (`rampPositionForMetric`), and its formatted label -- always routed through
+ * `src/metrics/format.ts`, never a second inline formatter (07-02-PLAN.md Task 2). */
+export interface LegendTick {
+  value: number
+  rampPosition: number
+  label: string
+}
+
+/** Values interior to `annualized`'s domain, at the same 15-point-step granularity as
+ * `DRAWDOWN`'s ticks (`0%`, `20%`, `40%`, `60%` there) scaled to `annualized`'s narrower
+ * `[-30%, +30%]` range. */
+const ANNUALIZED_INTERIOR_TICK_VALUES: readonly number[] = [-0.15, 0, 0.15]
+
+/** Values interior to `drawdown`'s domain (the clipped end, `80%`, is handled separately below
+ * with its own "and above" label). */
+const DRAWDOWN_INTERIOR_TICK_VALUES: readonly number[] = [0, 0.2, 0.4, 0.6]
+
+/**
+ * The legend's tick values and formatted labels for a given metric. `multiple` reuses the
+ * existing `LEGEND_TICK_MULTIPLES`; `drawdown` is `0%`, `20%`, `40%`, `60%` plus the clipped end
+ * label `"80% and above"`; `annualized` is `"-30%/yr and below"`, `-15%/yr`, `0%/yr`, `+15%/yr`,
+ * `"+30%/yr and above"`. Every numeric portion of every label routes through
+ * `src/metrics/format.ts`.
+ */
+export function legendTicksForMetric(metric: SweepMetric): readonly LegendTick[] {
+  switch (metric) {
+    case 'multiple':
+      return LEGEND_TICK_MULTIPLES.map((value) => ({
+        value,
+        rampPosition: rampPositionForMetric(value, metric),
+        label: formatMultiple(value),
+      }))
+    case 'drawdown': {
+      const interiorTicks: LegendTick[] = DRAWDOWN_INTERIOR_TICK_VALUES.map((value) => ({
+        value,
+        rampPosition: rampPositionForMetric(value, metric),
+        label: formatPercent(value),
+      }))
+      const clippedTick: LegendTick = {
+        value: DRAWDOWN_DOMAIN_MAX,
+        rampPosition: rampPositionForMetric(DRAWDOWN_DOMAIN_MAX, metric),
+        label: `${formatPercent(DRAWDOWN_DOMAIN_MAX)} and above`,
+      }
+      return [...interiorTicks, clippedTick]
+    }
+    case 'annualized': {
+      const lowClippedTick: LegendTick = {
+        value: ANNUALIZED_DOMAIN_MIN,
+        rampPosition: rampPositionForMetric(ANNUALIZED_DOMAIN_MIN, metric),
+        label: `${formatSignedPercent(ANNUALIZED_DOMAIN_MIN)}/yr and below`,
+      }
+      const interiorTicks: LegendTick[] = ANNUALIZED_INTERIOR_TICK_VALUES.map((value) => ({
+        value,
+        rampPosition: rampPositionForMetric(value, metric),
+        label: `${formatSignedPercent(value)}/yr`,
+      }))
+      const highClippedTick: LegendTick = {
+        value: ANNUALIZED_DOMAIN_MAX,
+        rampPosition: rampPositionForMetric(ANNUALIZED_DOMAIN_MAX, metric),
+        label: `${formatSignedPercent(ANNUALIZED_DOMAIN_MAX)}/yr and above`,
+      }
+      return [lowClippedTick, ...interiorTicks, highClippedTick]
+    }
+    default: {
+      const exhaustive: never = metric
+      throw new Error(`value-to-color: unknown metric "${String(exhaustive)}"`)
+    }
+  }
 }
