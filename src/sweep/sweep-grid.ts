@@ -20,6 +20,16 @@ import type { SweepFixture, SweepFixtureMeta } from '../data/sweep-fixture-forma
 export const SWEEP_COLS = 200
 export const SWEEP_ROWS = 50
 
+/**
+ * 07-03-PLAN.md Task 1: the non-finite sentinel `sweep.worker.ts` stores in `annualized[i]` when
+ * `solveIrr`/`solveCagr` returns `null` (an undefined bracket or a non-positive initial
+ * investment). Never `0`: a genuinely undefined annualized return must never render as a real
+ * breakeven cell, which is precisely the failure the diverging scale's `0%/yr` midpoint would
+ * otherwise invite. `NaN`, not `Infinity`, because it reads unambiguously as "not a number"
+ * rather than as a very large (but real) rate.
+ */
+export const ANNUALIZED_UNDEFINED = Number.NaN
+
 /** D-01: the leverage axis's fixed bounds, 1x to 5x inclusive. */
 export const LEVERAGE_MIN = 1
 export const LEVERAGE_MAX = 5

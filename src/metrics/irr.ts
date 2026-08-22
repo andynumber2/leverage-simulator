@@ -40,14 +40,24 @@ const TOLERANCE = 1e-9
  * last bar's cumulative day offset. A contribution flagged at or after the ruin bar is a
  * `droppedContributionsTotal` line item (D-21), never a cash flow here -- that exclusion is what
  * guarantees the sequence has exactly one sign change.
+ *
+ * 07-03-PLAN.md Task 1 (SIM-11): `reuse`, when supplied, is cleared and filled in place and
+ * returned instead of allocating a fresh array -- `src/sweep/sweep.worker.ts`'s hot loop passes
+ * one array it allocates once per chunk, not once per cell, across all 10,000 sweep cells. Omit
+ * `reuse` (the single-run call site in `src/app/state.ts` does) and this function's existing
+ * signature and behavior are unchanged: a fresh array is allocated and returned, exactly as
+ * before.
  */
 export function buildCashFlows(
   params: KernelParams,
   series: KernelSeries,
   outputs: KernelOutputs,
   result: KernelResult,
+  reuse?: CashFlow[],
 ): CashFlow[] {
-  const flows: CashFlow[] = [{ daysSinceEntry: 0, amount: -params.initialInvestment }]
+  const flows = reuse ?? []
+  flows.length = 0
+  flows.push({ daysSinceEntry: 0, amount: -params.initialInvestment })
 
   const lastIndex = result.barCount - 1
   let cumulativeDays = 0
