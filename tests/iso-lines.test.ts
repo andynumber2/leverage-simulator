@@ -1,13 +1,16 @@
 /**
  * tests/iso-lines.test.ts: 06-03-PLAN.md Task 1, pure determinism and topology assertions for
- * `mockups/shared/iso-lines.ts`'s marching-squares segment emitter, against analytic fields, in
+ * `src/heatmap/iso-lines.ts`'s marching-squares segment emitter, against analytic fields, in
  * the style `tests/canvas-grid.test.ts` uses. Runs in the fast Node `unit` project:
  * `iso-lines.ts` has no DOM dependency.
+ *
+ * 07-01-PLAN.md Task 1, D-11: import path updated after `iso-lines.ts` graduated from
+ * `.planning/phases/06-heatmap-design-pass/mockups/shared/` to `src/heatmap/`.
  */
 
 import { describe, expect, test } from 'vitest'
 
-import { marchingSquaresSegments } from '../.planning/phases/06-heatmap-design-pass/mockups/shared/iso-lines.ts'
+import { marchingSquaresSegments } from '../src/heatmap/iso-lines.ts'
 
 describe('marchingSquaresSegments: vertical-line analytic field f(col, row) = col', () => {
   test('at level = col + 0.5 emits segments that all lie on the vertical line x = col + 0.5, to within 1e-9', () => {

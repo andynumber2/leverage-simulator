@@ -76,7 +76,7 @@
 import { createSignal } from 'solid-js'
 import { createStore } from 'solid-js/store'
 
-import { fromDaysSinceEpoch, toDaysSinceEpoch } from '../../tools/bundle-compiler/src/calendar.ts'
+import { fromDaysSinceEpoch, indexOfDate, toDaysSinceEpoch } from '../../tools/bundle-compiler/src/calendar.ts'
 import type { LoadedBundle } from '../data/bundle-source.ts'
 import { loadBundleFromFetch } from '../data/load-bundle-browser.ts'
 import { buildKernelInputs, type BacktestRequest, type KernelInputs } from '../data/kernel-inputs.ts'
@@ -86,9 +86,13 @@ import { solveCagr } from '../metrics/cagr.ts'
 import { buildCashFlows, solveIrr } from '../metrics/irr.ts'
 import { computeAttribution, type AttributionResult } from '../validation/attribution.ts'
 import { FINANCING_SPREAD_DEFAULT, GENERIC_3X_EXPENSE_RATIO } from '../validation/cost-parameters.ts'
+import { DOMAIN_LOG_MAX, DOMAIN_LOG_MIN } from '../colorscale/value-to-color.ts'
+import { CELL_FLAG_INCOMPLETE, CELL_FLAG_RUINED } from '../data/sweep-fixture-format.ts'
 import { BUNDLE_VERSION } from '../data-bundle.generated.ts'
-import type { Tier } from './bounds.ts'
+import { resolveEntryDateBounds, type Tier } from './bounds.ts'
 import { decodeParams, encodeParams, type PermalinkParams } from './permalink.ts'
+import { createSweepGrid, leverageForRow, SWEEP_COLS, SWEEP_ROWS, type SweepGrid, type SweepGridMeta } from '../sweep/sweep-grid.ts'
+import { createSweepPool, type SweepPool, type SweepRunRequest } from '../sweep/sweep-pool.ts'
 
 export type LoadStatus = 'loading' | 'ready' | 'failed'
 export type ScaleMode = 'log' | 'linear'
@@ -168,6 +172,210 @@ const [attribution, setAttribution] = createSignal<AttributionResult | null>(nul
 
 export function currentAttribution(): AttributionResult | null {
   return attribution()
+}
+
+/** 07-01-PLAN.md Task 2, D-18: the result column's two mounts -- `'single'` (Phase 4/5's existing
+ * chart/metrics stack) or `'sweep'` (the heatmap, `HeatmapPanel`). A fresh visit seeds `'single'`
+ * (D-18); `resetAppState` restores that seed. */
+export type ResultMode = 'single' | 'sweep'
+
+const [resultModeSignal, setResultModeSignal] = createSignal<ResultMode>('single')
+
+export function resultMode(): ResultMode {
+  return resultModeSignal()
+}
+
+/** Switches the result column's mount. Entering `'sweep'` mode schedules a sweep against the
+ * current parameters (`scheduleSweep`) so the heatmap has something to paint the moment it
+ * mounts; leaving it does not clear `sweepGrid()` -- the last resolved grid stays available so a
+ * user flipping back and forth does not repay the sweep cost every toggle (a later plan may add
+ * cache invalidation on a parameter change; this task's own scope is the single click-to-paint
+ * path). */
+export function setResultMode(mode: ResultMode): void {
+  setResultModeSignal(mode)
+  if (mode === 'sweep') scheduleSweep()
+}
+
+/** The most recently resolved live sweep grid, or `null` before any sweep has ever completed.
+ * `{ equals: false }`: `scheduleSweep` mutates the SAME `SweepGrid` object's typed arrays across
+ * its own run (`sweep-pool.ts`'s `runSweep` writes in place) and calls this signal's setter with
+ * that same reference once the sweep resolves -- Solid's default `Object.is` equality would treat
+ * a same-reference write as a no-op and never notify `HeatmapPanel`'s effect, which is exactly
+ * the reactivity a 10,000-cell typed-array grid needs to avoid paying a clone cost on every
+ * completed sweep. */
+const [sweepGridSignal, setSweepGridSignal] = createSignal<SweepGrid | null>(null, { equals: false })
+
+export function sweepGrid(): SweepGrid | null {
+  return sweepGridSignal()
+}
+
+/** Monotonic sweep id, incremented once per `scheduleSweep` dispatch. Threaded into every
+ * `SweepChunkRequest.generation` this run's chunks carry (via `SweepRunRequest.generation`) so
+ * plan 07-05's stale-sweep check is a comparison against an existing field, not a signature
+ * change; this task never reads it back to skip a merge. */
+let sweepGenerationCounter = 0
+
+/** Constructed lazily, on the first `scheduleSweep` call, so a session that never enters sweep
+ * mode never spins up a Worker pool. `createSweepPool`'s own contract is to construct its workers
+ * ONCE and keep them alive; this module-level singleton is what lets a later sweep reuse the same
+ * live pool rather than rebuilding it. */
+let sweepPool: SweepPool | null = null
+
+function getSweepPool(): SweepPool {
+  if (sweepPool === null) {
+    sweepPool = createSweepPool()
+  }
+  return sweepPool
+}
+
+/** D-02: 200 evenly-spaced trading-calendar positions across `bounds`, by interpolating between
+ * `bounds`' two absolute CALENDAR INDICES (never a naive evenly-spaced-in-calendar-days scheme,
+ * which would drift off actual trading sessions and could even land midweek on a non-trading
+ * day) -- the same "even spacing in INDEX space, not value space" principle
+ * `src/sweep/sweep-grid.ts`'s `leverageForRow` uses for the leverage axis. */
+function resolveSweepEntryDates(
+  currentBundle: LoadedBundle,
+  bounds: { firstDate: string; lastDate: string },
+): string[] {
+  const firstAbsIndex = indexOfDate({ days: currentBundle.calendar }, toDaysSinceEpoch(bounds.firstDate))
+  const lastAbsIndex = indexOfDate({ days: currentBundle.calendar }, toDaysSinceEpoch(bounds.lastDate))
+  if (firstAbsIndex === -1 || lastAbsIndex === -1) {
+    throw new Error(
+      `app: sweep entry-date bounds [${bounds.firstDate}, ${bounds.lastDate}] do not resolve to trading ` +
+        'sessions in the compiled calendar',
+    )
+  }
+  const dates: string[] = new Array(SWEEP_COLS)
+  for (let col = 0; col < SWEEP_COLS; col++) {
+    const t = SWEEP_COLS > 1 ? col / (SWEEP_COLS - 1) : 0
+    const absIndex = Math.round(firstAbsIndex + t * (lastAbsIndex - firstAbsIndex))
+    dates[col] = fromDaysSinceEpoch(currentBundle.calendar[absIndex] ?? 0)
+  }
+  return dates
+}
+
+/** Scans the resolved grid once (10,000 cells, cheap next to the sweep itself) and fills in
+ * `meta`'s telemetry fields, mirroring `scripts/build-sweep-fixture.ts`'s own aggregation
+ * (`ruinedCount`/`incompleteCount`/`minMultiple`/`maxMultiple`/`clippedBelowCount`/
+ * `clippedAboveCount`) so the live grid's meta carries the same real figures the committed design
+ * fixture's did, not placeholders. */
+function fillSweepMetaStats(grid: SweepGrid): void {
+  let ruinedCount = 0
+  let incompleteCount = 0
+  let minMultiple = Number.POSITIVE_INFINITY
+  let maxMultiple = Number.NEGATIVE_INFINITY
+  let clippedBelowCount = 0
+  let clippedAboveCount = 0
+  const domainMin = 10 ** DOMAIN_LOG_MIN
+  const domainMax = 10 ** DOMAIN_LOG_MAX
+  const cellCount = grid.cols * grid.rows
+
+  for (let i = 0; i < cellCount; i++) {
+    const flag = grid.flags[i] ?? 0
+    if ((flag & CELL_FLAG_RUINED) !== 0) ruinedCount++
+    if ((flag & CELL_FLAG_INCOMPLETE) !== 0) {
+      incompleteCount++
+      continue
+    }
+    const multiple = grid.multiples[i] ?? 0
+    if (multiple < minMultiple) minMultiple = multiple
+    if (multiple > maxMultiple) maxMultiple = multiple
+    if (multiple < domainMin) clippedBelowCount++
+    if (multiple > domainMax) clippedAboveCount++
+  }
+
+  if (!Number.isFinite(minMultiple)) minMultiple = 0
+  if (!Number.isFinite(maxMultiple)) maxMultiple = 0
+
+  grid.meta.ruinedCount = ruinedCount
+  grid.meta.incompleteCount = incompleteCount
+  grid.meta.minMultiple = minMultiple
+  grid.meta.maxMultiple = maxMultiple
+  grid.meta.clippedBelowCount = clippedBelowCount
+  grid.meta.clippedAboveCount = clippedAboveCount
+}
+
+/** D-03/Pattern 5, applied to the sweep path: any number of `scheduleSweep` calls within one
+ * animation frame collapse into exactly one sweep dispatch. */
+let sweepScheduled = false
+
+/**
+ * Builds the sweep request from the EXISTING `backtestRequest()` fields plus `activeTier()` --
+ * never a parallel request shape -- resolving the entry-date axis as 200 evenly-spaced
+ * trading-calendar positions across `resolveEntryDateBounds(activeTier())` (D-02) and the
+ * leverage axis from `leverageForRow` (D-01). Coalesced through `requestAnimationFrame` exactly
+ * the way `scheduleRun` coalesces the single-run path.
+ */
+export function scheduleSweep(): void {
+  if (sweepScheduled) return
+  sweepScheduled = true
+  requestAnimationFrame(() => {
+    sweepScheduled = false
+    void runSweepNow()
+  })
+}
+
+async function runSweepNow(): Promise<void> {
+  const currentBundle = bundle()
+  if (currentBundle === null || status() !== 'ready') return
+
+  const req = { ...request }
+
+  const boundsResult = resolveEntryDateBounds(currentBundle.manifest, req.symbol, req.dividendReinvest, activeTier())
+  if (!boundsResult.ok) {
+    // Mirrors the single-run path's D-11/D-12 eviction discipline: a sweep whose entry-date
+    // bounds cannot resolve has nothing to paint. No sweep-specific explanation surface exists
+    // yet in this tracer (a later plan adds one); the grid is simply left at its last value.
+    return
+  }
+
+  const entryDates = resolveSweepEntryDates(currentBundle, boundsResult)
+
+  sweepGenerationCounter += 1
+  const generation = sweepGenerationCounter
+
+  const meta: SweepGridMeta = {
+    bundleVersion: currentBundle.manifest.bundleVersion,
+    symbol: req.symbol,
+    dividendReinvest: req.dividendReinvest,
+    entryDates,
+    leverages: Array.from({ length: SWEEP_ROWS }, (_, row) => leverageForRow(row)),
+    // Deferred to the plan that surfaces this in the UI (07-06's caption/legend work): not read
+    // anywhere in this task's own rendering path, and `holdMode` is the contractual source of
+    // truth a consumer must check first regardless.
+    holdingYears: 0,
+    initialInvestment: req.initialInvestment,
+    expenseRatioPercent: req.expenseRatioPercent,
+    financingSpreadPercent: req.financingSpreadPercent,
+    ruinedCount: 0,
+    incompleteCount: 0,
+    minMultiple: 0,
+    maxMultiple: 0,
+    clippedBelowCount: 0,
+    clippedAboveCount: 0,
+    holdMode: req.holdingPeriodBars === null ? 'end-of-data' : 'fixed',
+    endOfDataDate: boundsResult.lastDate,
+  }
+  const grid = createSweepGrid(SWEEP_COLS, SWEEP_ROWS, meta)
+
+  const runRequest: SweepRunRequest = {
+    generation,
+    entryDates,
+    params: {
+      symbol: req.symbol,
+      dividendReinvest: req.dividendReinvest,
+      initialInvestment: req.initialInvestment,
+      contributionAmount: req.contributionAmount,
+      contributionFrequency: req.contributionFrequency,
+      expenseRatioPercent: req.expenseRatioPercent,
+      financingSpreadPercent: req.financingSpreadPercent,
+      holdingPeriodBars: req.holdingPeriodBars,
+    },
+  }
+
+  await getSweepPool().runSweep(grid, runRequest)
+  fillSweepMetaStats(grid)
+  setSweepGridSignal(grid)
 }
 
 /** D-06: the resolved calendar date of `ruinBarIndex`, read through the same absolute-calendar-
@@ -585,6 +793,11 @@ export function resetAppState(): void {
   setLinkBundleVersion(null)
   setTierSignal('strict')
   setMethodologyOverlayOpenSignal(false)
+  // 07-01-PLAN.md Task 2, D-18: a fresh visit (and every test's reset) seeds resultMode back to
+  // 'single'. The last resolved sweepGrid is intentionally left in place -- it is a pure function
+  // of a subsequent scheduleSweep() call, not app-load state, so clearing it here would only
+  // force a redundant recompute the next time a test or a real user re-enters sweep mode.
+  setResultModeSignal('single')
 }
 
 /**

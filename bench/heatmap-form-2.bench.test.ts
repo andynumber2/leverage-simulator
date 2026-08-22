@@ -30,7 +30,7 @@ import { beforeAll, expect, test } from 'vitest'
 
 import { decodeSweepFixture, type SweepFixture } from '../src/data/sweep-fixture-format.ts'
 import type { Rgba } from '../src/colorscale/value-to-color.ts'
-import { resampleField } from '../.planning/phases/06-heatmap-design-pass/mockups/shared/field-sampler.ts'
+import { resampleField } from '../src/heatmap/field-sampler.ts'
 import {
   fieldRect,
   FORM_2_GEOMETRY,

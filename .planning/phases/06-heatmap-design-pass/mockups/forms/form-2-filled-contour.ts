@@ -22,9 +22,10 @@
 
 import { CELL_FLAG_RUINED, type SweepFixture } from '../../../../../src/data/sweep-fixture-format.ts'
 import { RUIN_BASE_RGBA, rampPositionFor } from '../../../../../src/colorscale/value-to-color.ts'
-import { integerLeverageTicks, makeHatchPattern, type MockupGeometry } from '../shared/mockup-runtime.ts'
-import { BAND_LEVELS, resampleField, type Metric } from '../shared/field-sampler.ts'
-import { marchingSquaresSegments } from '../shared/iso-lines.ts'
+import { integerLeverageTicks, makeHatchPattern } from '../../../../../src/heatmap/hatch-pattern.ts'
+import type { MockupGeometry } from '../shared/mockup-runtime.ts'
+import { BAND_LEVELS, resampleField, type Metric } from '../../../../../src/heatmap/field-sampler.ts'
+import { marchingSquaresSegments } from '../../../../../src/heatmap/iso-lines.ts'
 
 export type { Metric }
 

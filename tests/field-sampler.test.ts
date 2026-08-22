@@ -1,8 +1,11 @@
 /**
  * tests/field-sampler.test.ts: 06-03-PLAN.md Task 1, pure determinism and interpolation
- * assertions for `mockups/shared/field-sampler.ts`'s two rendering primitives, against analytic
+ * assertions for `src/heatmap/field-sampler.ts`'s two rendering primitives, against analytic
  * fields, in the style `tests/canvas-grid.test.ts` uses. Runs in the fast Node `unit` project:
  * `field-sampler.ts` has no DOM dependency.
+ *
+ * 07-01-PLAN.md Task 1, D-11: import path updated after `field-sampler.ts` graduated from
+ * `.planning/phases/06-heatmap-design-pass/mockups/shared/` to `src/heatmap/`.
  */
 
 import { describe, expect, test } from 'vitest'
@@ -14,7 +17,7 @@ import {
   type SweepFixtureMeta,
 } from '../src/data/sweep-fixture-format.ts'
 import { DOMAIN_LOG_MAX, DOMAIN_LOG_MIN, rampPositionFor } from '../src/colorscale/value-to-color.ts'
-import { BAND_LEVELS, bandIndexFor, resampleField, sampleField } from '../.planning/phases/06-heatmap-design-pass/mockups/shared/field-sampler.ts'
+import { BAND_LEVELS, bandIndexFor, resampleField, sampleField } from '../src/heatmap/field-sampler.ts'
 
 function makeMeta(cols: number, rows: number): SweepFixtureMeta {
   return {

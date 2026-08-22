@@ -14,7 +14,7 @@
 import type { SweepFixture } from '../../../../../src/data/sweep-fixture-format.ts'
 import { rampPositionFor } from '../../../../../src/colorscale/value-to-color.ts'
 import type { MockupGeometry } from '../shared/mockup-runtime.ts'
-import { marchingSquaresSegments } from '../shared/iso-lines.ts'
+import { marchingSquaresSegments } from '../../../../../src/heatmap/iso-lines.ts'
 import { fieldRect, paintDenseGrid, type FieldRect, type Metric } from './form-1-dense-grid.ts'
 
 export type { Metric }

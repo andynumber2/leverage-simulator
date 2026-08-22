@@ -21,6 +21,7 @@ import { AttributionPanel } from './components/ResultColumn/AttributionPanel.tsx
 import { bundleVersionMismatchVariant } from './components/ResultColumn/BundleVersionBanner.tsx'
 import { EquityCurveChart } from './components/ResultColumn/EquityCurveChart.tsx'
 import { ExtendedTierWarning } from './components/ResultColumn/ExtendedTierWarning.tsx'
+import { HeatmapPanel } from './components/ResultColumn/HeatmapPanel.tsx'
 import { LogScaleToggle } from './components/ResultColumn/LogScaleToggle.tsx'
 import { MetricsPanel } from './components/ResultColumn/MetricsPanel.tsx'
 import { ProvenanceStrip } from './components/ResultColumn/ProvenanceStrip.tsx'
@@ -44,8 +45,11 @@ import {
   loadedBundle,
   loadError,
   loadStatus,
+  resultMode,
   scaleMode,
+  setResultMode,
   setScaleMode,
+  sweepGrid,
 } from './state.ts'
 import { initTheme } from './theme.ts'
 
@@ -98,6 +102,21 @@ export function App() {
         </Show>
 
         <Show when={loadStatus() === 'ready'}>
+          {/* 07-01-PLAN.md Task 2: a minimal, unstyled control to reach sweep mode -- the styled
+              segmented control (SweepModeToggle) is plan 07-06's job and replaces this. */}
+          <button
+            type="button"
+            data-testid="sweep-mode-toggle"
+            onClick={() => setResultMode(resultMode() === 'single' ? 'sweep' : 'single')}
+          >
+            {resultMode() === 'single' ? 'Show sweep' : 'Show single run'}
+          </button>
+
+          <Show when={resultMode() === 'sweep'}>
+            <HeatmapPanel grid={sweepGrid()} />
+          </Show>
+
+          <Show when={resultMode() === 'single'}>
           {/* D-11: an invalid parameter combination clears chart and metrics and shows only the
               explanation. D-10: a cross-field caveat renders here too, but alongside the still-
               computed chart and metrics below -- ValidationExplanation itself decides the
@@ -166,6 +185,7 @@ export function App() {
                 </div>
               </Show>
             </Show>
+          </Show>
           </Show>
         </Show>
       </main>
