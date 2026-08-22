@@ -23,7 +23,7 @@ import { readSweepFixtureBytes } from './bench/sweep-fixture-bridge.ts'
 const COMPILED_BUNDLE_DIR = path.resolve(process.cwd(), 'public', 'data')
 
 /** 06-01-PLAN.md Task 1(f): the committed Phase 6 design-pass fixture `scripts/
- * build-sweep-fixture.ts` writes and `bench/heatmap-repaint.bench.test.ts` reads through the
+ * build-sweep-fixture.ts` writes and `bench/heatmap-form-2.bench.test.ts` reads through the
  * `readSweepFixture` command below -- the browser bench context has no filesystem access to this
  * path directly. */
 const SWEEP_FIXTURE_PATH = path.resolve(
@@ -130,7 +130,7 @@ export default defineConfig({
               readKernelSeries: async (_context) => readProductionKernelSeries(COMPILED_BUNDLE_DIR),
               // 06-01-PLAN.md Task 1(f): the committed sweep-fixture.bin's raw bytes, the same
               // "browser context has no filesystem access" pattern readBundleBytes/readKernelSeries
-              // use, here handing the bytes to heatmap-repaint.bench.test.ts to decode with the
+              // use, here handing the bytes to heatmap-form-2.bench.test.ts to decode with the
               // real decodeSweepFixture.
               readSweepFixture: async (_context) => readSweepFixtureBytes(SWEEP_FIXTURE_PATH),
               // Task 1 (04-03, RESEARCH.md Open Question 1): settles, rather than assumes, that

@@ -1,23 +1,28 @@
 /**
  * bench/heatmap-form-2.bench.test.ts: 06-03-PLAN.md Task 2, criterion 4's form-2 arm.
  *
- * Follows `bench/heatmap-repaint.bench.test.ts`'s pattern exactly: prove paint equivalence
+ * Proves paint equivalence
  * BEFORE trusting any timing, then measure. Reads the committed `sweep-fixture.bin`'s bytes
  * through the `readSweepFixture` browser command, decodes it with the real `decodeSweepFixture`,
  * and measures `paintFilledContour` -- the actual paint function `form-2-filled-contour.html`
  * uses, not a copy.
  *
  * Criterion 4 names a METRIC CHANGE, so the measured operation is a repaint that switches the
- * displayed metric array from multiple-of-contributed to max drawdown and back, matching
- * `bench/heatmap-repaint.bench.test.ts`'s own convention.
+ * displayed metric array from multiple-of-contributed to max drawdown and back.
  *
- * This file records ONLY an info line (`PERF-05-heatmap-form-2`) and asserts locally against
- * `PERF_BUDGETS['PERF-05']` -- it deliberately never calls `commands.recordMeasurement`.
- * `bench/heatmap-repaint.bench.test.ts` (form 1) already owns the run's single PERF-05
- * `MeasurementRow`; a second row with the same budget id would collide in the run's own
- * accumulator. Per finding F-02 (06-RESEARCH.md), the four per-form figures are each
- * individually gated against the same 16ms budget, painted at four different D-12 geometries --
- * they are informational, not a ranking between forms.
+ * This file owns the run's single PERF-05 `MeasurementRow`. Form 2 won the Phase 6 comparison
+ * (06-05-SUMMARY.md), so the shipped heatmap is a filled contour and the official PERF-05 number
+ * must be the cost of the form actually being built. Until 06-06 the recorder was
+ * `bench/heatmap-repaint.bench.test.ts` (form 1), purely because form 1 was built first in
+ * 06-01, before there were competing forms; that left the headline PERF-05 reading form 1's
+ * 0.65ms while the heatmap Phase 7 will implement costs 12.81ms. The three losing forms' benches
+ * were removed once the comparison concluded, so only one file records this budget and there is
+ * no second row to collide with.
+ *
+ * Expect this measurement to sit near 80% of budget and therefore to trip the D-20 escalation
+ * flag. That is deliberate: form 2 resamples at DISPLAY resolution rather than upscaling a
+ * 200x50 buffer, and keeping its real cost in the headline is how Phase 7 stays honest about the
+ * work it inherits (see 06-HEATMAP-SPEC.md finding A).
  */
 
 import { commands } from 'vitest/browser'
@@ -55,7 +60,7 @@ function makeDisplayCanvas(): { canvas: HTMLCanvasElement; ctx: CanvasRenderingC
   const canvas = document.createElement('canvas')
   canvas.width = FORM_2_GEOMETRY.widthPx
   canvas.height = FORM_2_GEOMETRY.heightPx
-  // Deliberately never appended to the DOM, mirroring bench/heatmap-repaint.bench.test.ts: a
+  // Deliberately never appended to the DOM: a
   // detached canvas still has a real 2D rendering context and real paint cost.
   const ctx = canvas.getContext('2d')
   if (!ctx) {
@@ -135,8 +140,7 @@ test('PERF-05: form 2 (filled contour) repaint on a metric change, measured on t
     source: 'production',
     verdict: checkBudget({ normalizedMs, budgetMs: budget.thresholdMs }),
   }
-  // Deliberately NOT commands.recordMeasurement(row): form 1 (bench/heatmap-repaint.bench.test.ts)
-  // owns the run's one PERF-05 MeasurementRow. See this file's header comment.
+  await commands.recordMeasurement(row)
 
   await commands.recordInfoLine(
     'PERF-05-heatmap-form-2',

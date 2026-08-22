@@ -1,5 +1,5 @@
 /**
- * bench/sweep-fixture-bridge.ts: the Node-side loader `bench/heatmap-repaint.bench.test.ts` uses
+ * bench/sweep-fixture-bridge.ts: the Node-side loader `bench/heatmap-form-2.bench.test.ts` uses
  * to hand the browser bench context the committed Phase 6 sweep fixture's raw bytes. Mirrors
  * `bench/bundle-bytes.ts`/`bench/kernel-series-bridge.ts`'s Node-only separation: this module
  * imports `node:fs`, so it must never be imported by a `*.bench.test.ts` file directly, only
