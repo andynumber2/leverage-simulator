@@ -160,10 +160,16 @@ the D-17 CI baseline.
 | 3: small multiples | 0.69 | 0.4030 | 200 | 16ms (PERF-05) |
 | 4: grid + contour overlay | 0.98 | 0.5700 | 200 | 16ms (PERF-05) |
 
-All four pass individually. Only form 1's row is recorded as the run's one official PERF-05
-`MeasurementRow`; forms 2-4 are info lines only (`PERF-05-heatmap-form-2`,
-`PERF-05-heatmap-form-3`, `PERF-05-heatmap-form-4`), per the convention `bench/heatmap-repaint.bench.test.ts`'s
-own file header states.
+All four passed individually when measured. The table records the figures AS JUDGED, so it is
+left as the record the decision was made against. Form 2's row is since superseded twice: on the
+authoritative ubuntu-latest CI baseline it first measured 23.92ms and FAILED the 16ms budget, and
+an allocation fix then brought it to 12.80ms, which is the current figure. See Finding A.
+
+Also superseded after this section was first written: the
+comparison concluded, so the benches for the three losing forms were deleted and
+`bench/heatmap-form-2.bench.test.ts` now records the run's one official PERF-05 `MeasurementRow`.
+The headline PERF-05 figure in CI is therefore the winning form's cost, not a rejected form's.
+Forms 1, 3 and 4's figures survive only in this table.
 
 Form 2 costs roughly 20x form 1 at these geometries. See Finding A below for why this is not a
 form-2-is-worse conclusion but an O(display area) cost the winner's own geometry creates, and the
@@ -236,15 +242,41 @@ Forms 1, 3 and 4 build their pixel buffer at FIXTURE resolution (200x50 = 10,000
 GPU upscale via `drawImage`, so their cost is constant in panel size. Form 2 calls `resampleField`
 at DISPLAY resolution (171,136 px at this document's own §7 geometry, 764x224, 17x the fixture's
 10,000 cells) because smooth curved bands cannot be produced by upscaling a 200x50 buffer.
-Measured 14.12ms of the 16ms PERF-05 budget at that geometry (§8). Because this cost scales
-linearly with panel area, a display field roughly 1200x400 (a plausible shipped panel size) would
-land near 40ms, breaching both the 16ms PERF-05 budget and the 60fps pan/zoom criterion Phase 7
-must hit.
+Measured **12.80ms** of the 16ms PERF-05 budget at that geometry on the authoritative
+ubuntu-latest baseline. That figure is already the product of one round of optimisation and
+replaces the 14.12ms this section originally carried: the first CI run measured 23.92ms and FAILED
+the budget, because the sampler allocated roughly seven objects per display pixel (about 1.2M
+allocations per repaint) and blended via a `Math.log10` per stencil corner per pixel (about
+684,000 logarithms per repaint). Making the hot loop allocation-free and caching one ramp position
+per fixture cell cut it to 12.80ms. Phase 7 should not read 12.80ms as a floor.
 
-**Mitigation Phase 7 must implement, created by choosing form 2:** resample once, to an offscreen
-canvas, per data/metric change, not per frame, then serve pan and zoom as `drawImage` transforms of
-that cached bitmap. This matches the roadmap's own "re-colors the cached grid" language. This is
-the single most important obligation Phase 7 inherits from this decision.
+Because this cost scales linearly with panel area, a display field roughly 1200x400 (a plausible
+shipped panel size) lands near 36ms, breaching both the 16ms PERF-05 budget and the 60fps pan/zoom
+criterion.
+
+**Mitigation, and its limit.** Resample once to an offscreen canvas per data/metric change rather
+than per frame, then serve pan and zoom as `drawImage` transforms of that cached bitmap. This
+matches the roadmap's own "re-colors the cached grid" language. But be clear about what it does
+NOT solve: a metric change invalidates the cache by definition, so switching the displayed metric
+at full panel size still forces a full resample and still breaches 16ms. The cache fixes pan and
+zoom. It does not fix metric switching.
+
+**The lead Phase 7 should chase first, before accepting any of the above.** The per-pixel resample
+may be the wrong algorithm rather than an expensive one. A filled-contour renderer conventionally
+builds band POLYGONS from its iso-line geometry and fills them, which is GPU work proportional to
+cells, not JS work proportional to display pixels. Form 2 already computes marching-squares
+segments at every band edge for its strokes (`mockups/shared/iso-lines.ts`) and then discards that
+geometry, brute-forcing the fill per pixel instead. If the fill is rebuilt on those polygons, form
+2's cost plausibly collapses to the same O(cells) class as the other three forms, and this entire
+finding, the offscreen cache and the metric-switch constraint alike, may simply evaporate.
+
+The supporting observation, from the owner during the Phase 6 review: form 2's output is visibly
+CHUNKY (ten quantised bands), so per-pixel expense to produce large flat regions of uniform colour
+is on its face suspicious. Sub-cell precision is only needed near band boundaries, which is
+precisely what the iso-line geometry already locates.
+
+Rank this above the mitigation. The mitigation is the fallback if the polygon rebuild does not pan
+out; it is not the first thing to try.
 
 ### Finding B: the contour levels are not yet labelled
 
