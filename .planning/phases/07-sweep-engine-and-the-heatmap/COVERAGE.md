@@ -1,0 +1,3 @@
+No external API integration: Phase 7 is entirely client-side compute and rendering over the build-time bundled data assets, with no SDK, endpoint, webhook, or third-party service in scope (APP-03 forbids a backend and any runtime external API call).
+
+The detector was run over this phase's ROADMAP section and returned `{"detected":false,"signals":[]}`. This declaration is recorded anyway because the plan bodies use ordinary integration vocabulary (wiring the Worker pool into the app, the Comlink RPC boundary, the permalink codec) that the seal-time re-scan could read as an external-API signal. The reason above is the audit trail; there is no capability surface to enumerate because there is no external service.

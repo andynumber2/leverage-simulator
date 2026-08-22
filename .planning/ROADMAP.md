@@ -312,7 +312,34 @@ Plans:
   4. Changing the heatmap's displayed metric re-colors the cached grid in under 16ms and never triggers a re-sweep, because the sweep computes every display metric per cell in a single pass.
   5. Changing a parameter mid-sweep cancels the in-flight sweep within one frame and discards its superseded results rather than painting them, and heatmap pan and zoom sustain 60fps at full cell count. Both figures come from measurement, not from watching the screen.
 
-**Plans**: TBD
+**Plans:** 10 plans
+
+Plans:
+**Wave 1**
+
+- [ ] 07-01-PLAN.md: Tracer. Graduate the Phase 6 geometry into `src/heatmap/`, then wire one real sweep over the real bundle through the real kernel onto a painted filled-contour field
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 07-02-PLAN.md: D-25's sequential drawdown ramp, a stops-parameterized interpolator, and three fixed per-metric colour domains under the VIZ-07 perceptual and colourblind bars
+- [ ] 07-03-PLAN.md: METR-06's one-pass per-cell record (multiple, drawdown, annualized, flags), and PERF-03 repointed at the production pool over the real bundle
+- [ ] 07-04-PLAN.md: D-05's polygon fill and ring stitcher, the D-07 equivalence-and-repaint gate, the D-06 escalation checkpoint, and PERF-05 repointed at the shipped renderer
+- [ ] 07-05-PLAN.md: D-12's coarse-to-fine progressive paint and generation-token cancellation, with PERF-04 and PERF-06 measured
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [ ] 07-06-PLAN.md: D-15's Single run and Sweep switch, D-23's metric toggle, and D-04's two new permalink keys
+- [ ] 07-07-PLAN.md: D-16's two marginal slice charts, the two-variant legend, and D-30's caption strip carrying the VIZ-04 mode statement and the VIZ-10 caveat
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
+- [ ] 07-08-PLAN.md: D-19's ghost and committed crosshairs, D-20's per-cell hover readout, and D-22's drill-down
+- [ ] 07-09-PLAN.md: The named ruin verification sweep closing Finding F-02, D-29's short-horizon boundary rule, and D-33's inline breakeven label
+
+**Wave 5** *(blocked on Wave 4 completion)*
+
+- [ ] 07-10-PLAN.md: D-34's pan and zoom over the already-rendered field, with PERF-09 measured at full cell count
+
 **UI hint**: yes
 
 ### Phase 8: Export and the Canonical Arguments
