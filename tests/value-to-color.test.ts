@@ -14,6 +14,7 @@ import {
   DOMAIN_LOG_MIN,
   INCOMPLETE_RGBA,
   RUIN_BASE_RGBA,
+  buildRampInterpolator,
   interpolateRamp,
   oklabToSrgb,
   rampPositionFor,
@@ -153,5 +154,55 @@ describe('srgbToOklab / oklabToSrgb: round-trip (T-06-04)', () => {
       const roundTripped = oklabToSrgb(srgbToOklab(colour))
       expect(roundTripped).toEqual(colour)
     }
+  })
+})
+
+// -------------------------------------------------------------------------------------------
+// 07-02-PLAN.md Task 1: buildRampInterpolator's mechanical refactor must not move a single
+// existing diverging-ramp output. Every assertion above this line is UNCHANGED from before this
+// plan (git diff on this file shows additions only below).
+// -------------------------------------------------------------------------------------------
+
+describe('buildRampInterpolator: equivalence with the pre-refactor interpolateRamp', () => {
+  const equivalenceT = [0, 0.001, 0.25, 0.5, 0.75, 0.999, 1]
+
+  test('buildRampInterpolator(RAMP_STOPS)(t) equals interpolateRamp(t) at seven fixed points', () => {
+    const rebuilt = buildRampInterpolator([
+      { t: 0.0, hex: '#08519C' },
+      { t: 0.25, hex: '#3182BD' },
+      { t: 0.5, hex: '#A9A29A' },
+      { t: 0.75, hex: '#E6550D' },
+      { t: 1.0, hex: '#A63603' },
+    ])
+    for (const t of equivalenceT) {
+      expect(rebuilt(t)).toEqual(interpolateRamp(t))
+    }
+  })
+
+  test('buildRampInterpolator(RAMP_STOPS)(t) equals interpolateRamp(t) across 33 evenly spaced samples', () => {
+    const rebuilt = buildRampInterpolator([
+      { t: 0.0, hex: '#08519C' },
+      { t: 0.25, hex: '#3182BD' },
+      { t: 0.5, hex: '#A9A29A' },
+      { t: 0.75, hex: '#E6550D' },
+      { t: 1.0, hex: '#A63603' },
+    ])
+    for (let i = 0; i < 33; i++) {
+      const t = i / 32
+      expect(rebuilt(t)).toEqual(interpolateRamp(t))
+    }
+  })
+
+  test('a stops array with fewer than two entries throws', () => {
+    expect(() => buildRampInterpolator([{ t: 0, hex: '#000000' }])).toThrow()
+  })
+
+  test('a two-element stops array with descending t throws', () => {
+    expect(() =>
+      buildRampInterpolator([
+        { t: 1, hex: '#ffffff' },
+        { t: 0, hex: '#000000' },
+      ]),
+    ).toThrow()
   })
 })

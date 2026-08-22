@@ -20,6 +20,13 @@
  * D-18/D-20: `ruined` wins over `incomplete` when both are set (checked in that order below);
  * neither categorical branch is ever blended with the continuous ramp.
  *
+ * 07-02-PLAN.md Task 1 (Research Pattern 6): `interpolateRamp` is no longer THE ramp -- it is one
+ * instantiation of `buildRampInterpolator`, a factory that converts an explicit `RampStop[]`
+ * array to Oklab once and returns a closure performing the same piecewise-linear interpolation
+ * this module always has. This is a mechanical refactor: every value `interpolateRamp` produced
+ * before this change is byte-identical after it (`tests/value-to-color.test.ts`'s equivalence
+ * block asserts this explicitly). Plan 07-02's Task 2 adds the second instantiation.
+ *
  * Oklab conversion coefficients are Björn Ottosson's published sRGB<->Oklab matrices
  * (https://bottosson.github.io/posts/oklab/, "Oklab" 2020), transcribed once here (T-06-04):
  * `tests/value-to-color.test.ts` asserts a round-trip (`oklabToSrgb(srgbToOklab(c))` returns `c`)
@@ -162,43 +169,82 @@ export function oklabToSrgb(oklab: OklabColor): Rgba {
   return [r, g, b, 255]
 }
 
-const RAMP_STOPS_OKLAB: readonly { t: number; oklab: OklabColor }[] = RAMP_STOPS.map((stop) => ({
-  t: stop.t,
-  oklab: srgbToOklab(hexToRgba(stop.hex)),
-}))
-
-/**
- * Piecewise-linear interpolation of `RAMP_STOPS` in Oklab space, at ramp position `t` (0 to 1
- * inclusive, clamped otherwise). Converts back to sRGB with per-channel clamping and rounding
- * (via `oklabToSrgb`). `interpolateRamp(0.5)` is exactly the midpoint stop's own colour, since
- * `t=0.5` is itself one of `RAMP_STOPS`' declared positions.
- */
-export function interpolateRamp(t: number): Rgba {
-  const clampedT = clamp(t, 0, 1)
-
-  let lower = RAMP_STOPS_OKLAB[0]!
-  let upper = RAMP_STOPS_OKLAB[RAMP_STOPS_OKLAB.length - 1]!
-  for (let i = 0; i < RAMP_STOPS_OKLAB.length - 1; i++) {
-    const a = RAMP_STOPS_OKLAB[i]!
-    const b = RAMP_STOPS_OKLAB[i + 1]!
-    if (clampedT >= a.t && clampedT <= b.t) {
-      lower = a
-      upper = b
-      break
+/** Fail-loud validation for `buildRampInterpolator`'s `stops` argument (07-02-PLAN.md Task 1):
+ * names both the offending value and the expectation, matching this module's existing
+ * fail-loud convention (`tests/*.test.ts` T-06-01/T-06-02 style). Requires at least two stops,
+ * the first at `t=0`, the last at `t=1`, and every interior `t` strictly ascending -- exactly the
+ * shape `RAMP_STOPS` already has. */
+function validateRampStops(stops: readonly RampStop[]): void {
+  if (stops.length < 2) {
+    throw new Error(`buildRampInterpolator: stops must contain at least two entries, got ${stops.length}`)
+  }
+  const first = stops[0]!
+  if (first.t !== 0) {
+    throw new Error(`buildRampInterpolator: stops[0].t must be 0, got ${first.t}`)
+  }
+  const last = stops[stops.length - 1]!
+  if (last.t !== 1) {
+    throw new Error(`buildRampInterpolator: stops[${stops.length - 1}].t must be 1, got ${last.t}`)
+  }
+  for (let i = 1; i < stops.length; i++) {
+    const prev = stops[i - 1]!
+    const curr = stops[i]!
+    if (curr.t <= prev.t) {
+      throw new Error(
+        `buildRampInterpolator: stops must have strictly ascending t values, but stops[${i}].t (${curr.t}) is not greater than stops[${i - 1}].t (${prev.t})`,
+      )
     }
   }
-
-  const span = upper.t - lower.t
-  const localT = span === 0 ? 0 : (clampedT - lower.t) / span
-
-  const oklab: OklabColor = {
-    L: lower.oklab.L + (upper.oklab.L - lower.oklab.L) * localT,
-    a: lower.oklab.a + (upper.oklab.a - lower.oklab.a) * localT,
-    b: lower.oklab.b + (upper.oklab.b - lower.oklab.b) * localT,
-  }
-
-  return oklabToSrgb(oklab)
 }
+
+/**
+ * 07-02-PLAN.md Task 1 (Research Pattern 6): the factory `interpolateRamp` is now one
+ * instantiation of. Converts `stops` to Oklab once, at factory-call time (never per call in the
+ * returned closure's hot loop), and returns a function performing piecewise-linear interpolation
+ * between the precomputed Oklab stops, converting back to sRGB with per-channel clamping and
+ * rounding (`oklabToSrgb`). The returned function clamps its own `t` argument into `[0, 1]`.
+ * Throws via `validateRampStops` on a malformed `stops` array, naming the offending value.
+ */
+export function buildRampInterpolator(stops: readonly RampStop[]): (t: number) => Rgba {
+  validateRampStops(stops)
+
+  const stopsOklab: readonly { t: number; oklab: OklabColor }[] = stops.map((stop) => ({
+    t: stop.t,
+    oklab: srgbToOklab(hexToRgba(stop.hex)),
+  }))
+
+  return function interpolate(t: number): Rgba {
+    const clampedT = clamp(t, 0, 1)
+
+    let lower = stopsOklab[0]!
+    let upper = stopsOklab[stopsOklab.length - 1]!
+    for (let i = 0; i < stopsOklab.length - 1; i++) {
+      const a = stopsOklab[i]!
+      const b = stopsOklab[i + 1]!
+      if (clampedT >= a.t && clampedT <= b.t) {
+        lower = a
+        upper = b
+        break
+      }
+    }
+
+    const span = upper.t - lower.t
+    const localT = span === 0 ? 0 : (clampedT - lower.t) / span
+
+    const oklab: OklabColor = {
+      L: lower.oklab.L + (upper.oklab.L - lower.oklab.L) * localT,
+      a: lower.oklab.a + (upper.oklab.a - lower.oklab.a) * localT,
+      b: lower.oklab.b + (upper.oklab.b - lower.oklab.b) * localT,
+    }
+
+    return oklabToSrgb(oklab)
+  }
+}
+
+/** The diverging ramp (D-13/D-14), now one instantiation of `buildRampInterpolator` rather than
+ * its own bespoke closure -- byte-identical output to every value it produced before this
+ * refactor (`tests/value-to-color.test.ts`'s equivalence block asserts this explicitly). */
+export const interpolateRamp = buildRampInterpolator(RAMP_STOPS)
 
 /**
  * Maps a positive `multiple` to its ramp position `t` (0 to 1), the same symlog transform
