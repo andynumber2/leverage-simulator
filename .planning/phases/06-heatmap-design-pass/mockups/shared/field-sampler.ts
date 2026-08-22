@@ -125,7 +125,25 @@ interface StencilCorner {
  * at a grid edge, `col0 === col1` (or `row0 === row1`) and the duplicated corner's weight simply
  * adds together, which degrades gracefully to nearest-value sampling rather than needing a
  * special case. */
-function stencilCorners(colF: number, rowF: number, cols: number, rows: number): readonly StencilCorner[] {
+/**
+ * Allocation-free scratch for the resample hot loop. `resampleField` paints up to a few hundred
+ * thousand display pixels per repaint, so the object-per-pixel shape this module used to build
+ * (a position object, a four-element corner array, four corner objects and a `FieldSample`) cost
+ * roughly a million allocations per frame, and the resulting GC pressure is what pushed form 2's
+ * CI measurement to 23.92ms against a 16ms budget while the same code measured 13.64ms on a
+ * developer machine. These module-level slots let the hot path compute the identical result
+ * writing nothing to the heap.
+ *
+ * Safe as module state because the sampler is synchronous and single-threaded by construction:
+ * nothing yields between `fillStencil` writing these and `sampleFieldInto` reading them.
+ */
+const stencilCol = new Int32Array(4)
+const stencilRow = new Int32Array(4)
+const stencilWeight = new Float64Array(4)
+let outCategorical: CategoricalMask = null
+let outRampPosition = 0
+
+function fillStencil(colF: number, rowF: number, cols: number, rows: number): void {
   const clampedColF = clampIndex(colF, cols - 1)
   const clampedRowF = clampIndex(rowF, rows - 1)
   const col0 = clampIndex(Math.floor(clampedColF), cols - 1)
@@ -134,12 +152,18 @@ function stencilCorners(colF: number, rowF: number, cols: number, rows: number):
   const row1 = clampIndex(row0 + 1, rows - 1)
   const fx = clampedColF - col0
   const fy = clampedRowF - row0
-  return [
-    { col: col0, row: row0, weight: (1 - fx) * (1 - fy) },
-    { col: col1, row: row0, weight: fx * (1 - fy) },
-    { col: col0, row: row1, weight: (1 - fx) * fy },
-    { col: col1, row: row1, weight: fx * fy },
-  ]
+  stencilCol[0] = col0
+  stencilRow[0] = row0
+  stencilWeight[0] = (1 - fx) * (1 - fy)
+  stencilCol[1] = col1
+  stencilRow[1] = row0
+  stencilWeight[1] = fx * (1 - fy)
+  stencilCol[2] = col0
+  stencilRow[2] = row1
+  stencilWeight[2] = (1 - fx) * fy
+  stencilCol[3] = col1
+  stencilRow[3] = row1
+  stencilWeight[3] = fx * fy
 }
 
 /**
@@ -158,80 +182,102 @@ function stencilCorners(colF: number, rowF: number, cols: number, rows: number):
  * (`rampPositionFor` of each corner's `metric` value) and returns the interpolated ramp
  * position, unquantised.
  */
-export function sampleField(fixture: SweepFixture, metric: Metric, colF: number, rowF: number): FieldSample {
-  const { cols, rows } = fixture
-  const values = metric === 'multiple' ? fixture.multiples : fixture.drawdowns
-  const corners = stencilCorners(colF, rowF, cols, rows)
+function sampleFieldInto(
+  fixture: SweepFixture,
+  values: Float32Array | Float64Array | readonly number[],
+  rampCache: Float64Array | null,
+  colF: number,
+  rowF: number,
+): void {
+  const { cols } = fixture
+  fillStencil(colF, rowF, cols, fixture.rows)
 
   let nearestCol = -1
   let nearestRow = -1
   let nearestMask: CategoricalMask = null
   let nearestDistSq = Number.POSITIVE_INFINITY
 
-  for (const corner of corners) {
-    const index = corner.row * cols + corner.col
+  for (let i = 0; i < 4; i++) {
+    const cornerCol = stencilCol[i]!
+    const cornerRow = stencilRow[i]!
+    const index = cornerRow * cols + cornerCol
     const mask = categoricalFor(fixture.flags[index] ?? 0)
     if (mask === null) continue
 
-    const dRow = corner.row - rowF
-    const dCol = corner.col - colF
+    const dRow = cornerRow - rowF
+    const dCol = cornerCol - colF
     const distSq = dRow * dRow + dCol * dCol
 
     const closer =
       nearestMask === null ||
       distSq < nearestDistSq ||
-      (distSq === nearestDistSq && (corner.row < nearestRow || (corner.row === nearestRow && corner.col < nearestCol)))
+      (distSq === nearestDistSq && (cornerRow < nearestRow || (cornerRow === nearestRow && cornerCol < nearestCol)))
 
     if (closer) {
-      nearestCol = corner.col
-      nearestRow = corner.row
+      nearestCol = cornerCol
+      nearestRow = cornerRow
       nearestMask = mask
       nearestDistSq = distSq
     }
   }
 
   if (nearestMask !== null) {
-    return { categorical: nearestMask, rampPosition: 0 }
+    outCategorical = nearestMask
+    outRampPosition = 0
+    return
   }
 
   let interpolatedT = 0
-  for (const corner of corners) {
-    const index = corner.row * cols + corner.col
-    const value = values[index] ?? 0
-    interpolatedT += corner.weight * rampPositionFor(value)
+  for (let i = 0; i < 4; i++) {
+    const index = stencilRow[i]! * cols + stencilCol[i]!
+    if (rampCache === null) {
+      interpolatedT += stencilWeight[i]! * rampPositionFor(values[index] ?? 0)
+    } else {
+      interpolatedT += stencilWeight[i]! * rampCache[index]!
+    }
   }
-  return { categorical: null, rampPosition: interpolatedT }
+  outCategorical = null
+  outRampPosition = interpolatedT
 }
 
-/**
- * Converts a display pixel centre (`px`, `py`, both display-pixel coordinates) into a
- * fractional source-grid position, applying the same A-E5 vertical flip
- * `form-1-dense-grid.ts`'s `cellDisplayCenter` uses: fixture row 0 (1.00x) paints at the BOTTOM
- * of the display. `sampleField` itself carries no flip or geometry constant of its own (mirroring
- * `iso-lines.ts`'s "the caller converts grid coordinates to display coordinates" convention) --
- * this is the one place in this module that does.
- */
-function pixelToGridPosition(
-  px: number,
-  py: number,
-  widthPx: number,
-  heightPx: number,
-  cols: number,
-  rows: number,
-): { colF: number; rowF: number } {
-  const cellWidthPx = widthPx / cols
-  const cellHeightPx = heightPx / rows
-  const colF = (px + 0.5) / cellWidthPx - 0.5
-  const imgRowF = (py + 0.5) / cellHeightPx - 0.5
-  const rowF = rows - 1 - imgRowF
-  return { colF, rowF }
+export function sampleField(fixture: SweepFixture, metric: Metric, colF: number, rowF: number): FieldSample {
+  const values = metric === 'multiple' ? fixture.multiples : fixture.drawdowns
+  sampleFieldInto(fixture, values, null, colF, rowF)
+  return { categorical: outCategorical, rampPosition: outRampPosition }
 }
+
 
 /** The display resolution `resampleField` paints at. Only the display pixel size: the source
  * grid's own `cols`/`rows` come from `fixture`, never duplicated here. */
 export interface ResampleGeometry {
   widthPx: number
   heightPx: number
+}
+
+/**
+ * One ramp position per FIXTURE cell, recomputed at the head of every `resampleField` call.
+ *
+ * Without it the bilinear blend calls `rampPositionFor` (and therefore `Math.log10`) once per
+ * stencil corner per display pixel: at form 2's 764x224 field that is roughly 684,000 logarithms
+ * per repaint for a field that only holds 10,000 distinct values. Caching per cell makes it
+ * 10,000. The arithmetic is unchanged: the blend still sums `weight * rampPositionFor(value)`
+ * over the same four corners, it just reads each corner's ramp position instead of recomputing it.
+ */
+let cachedRampPositions: Float64Array | undefined
+let cachedRampCells = -1
+
+function getRampPositions(
+  values: Float32Array | Float64Array | readonly number[],
+  cellCount: number,
+): Float64Array {
+  if (cachedRampPositions === undefined || cachedRampCells !== cellCount) {
+    cachedRampPositions = new Float64Array(cellCount)
+    cachedRampCells = cellCount
+  }
+  for (let i = 0; i < cellCount; i++) {
+    cachedRampPositions[i] = rampPositionFor(values[i] ?? 0)
+  }
+  return cachedRampPositions
 }
 
 let cachedBuffer: Uint8ClampedArray<ArrayBuffer> | undefined
@@ -278,25 +324,35 @@ export function resampleField(
   const { widthPx, heightPx } = geometry
   const buffer = getBuffer(cols, rows, widthPx, heightPx)
 
+  // Hoisted out of the pixel loop: `pixelToGridPosition` recomputed both divisions for every
+  // pixel, and `sampleField` re-selected the metric array for every pixel. Neither varies.
+  const values = metric === 'multiple' ? fixture.multiples : fixture.drawdowns
+  const rampCache = getRampPositions(values, cols * rows)
+  const cellWidthPx = widthPx / cols
+  const cellHeightPx = heightPx / rows
+  let pixelIndex = 0
+
   for (let py = 0; py < heightPx; py++) {
+    // The A-E5 vertical flip, unchanged: fixture row 0 (1.00x) paints at the BOTTOM.
+    const rowF = rows - 1 - ((py + 0.5) / cellHeightPx - 0.5)
     for (let px = 0; px < widthPx; px++) {
-      const { colF, rowF } = pixelToGridPosition(px, py, widthPx, heightPx, cols, rows)
-      const sample = sampleField(fixture, metric, colF, rowF)
+      const colF = (px + 0.5) / cellWidthPx - 0.5
+      sampleFieldInto(fixture, values, rampCache, colF, rowF)
 
       let color: Rgba
-      if (sample.categorical === 'ruined') {
+      if (outCategorical === 'ruined') {
         color = RUIN_BASE_RGBA
-      } else if (sample.categorical === 'incomplete') {
+      } else if (outCategorical === 'incomplete') {
         color = INCOMPLETE_RGBA
       } else {
-        color = BAND_COLORS[bandIndexFor(sample.rampPosition)]!
+        color = BAND_COLORS[bandIndexFor(outRampPosition)]!
       }
 
-      const pixelIndex = (py * widthPx + px) * 4
       buffer[pixelIndex] = color[0]
       buffer[pixelIndex + 1] = color[1]
       buffer[pixelIndex + 2] = color[2]
       buffer[pixelIndex + 3] = color[3]
+      pixelIndex += 4
     }
   }
 
