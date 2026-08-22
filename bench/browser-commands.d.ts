@@ -10,6 +10,7 @@ import type { BundleBytes } from './bundle-bytes.ts'
 import type { BrowserCapturedEnvironment } from './environment-block.ts'
 import type { ProductionKernelSeriesPayload } from './kernel-series-bridge.ts'
 import type { MeasurementRow } from './report.ts'
+import type { SweepFixtureBytesPayload } from './sweep-fixture-bridge.ts'
 
 /** Task 1 (04-03): the committed answer to RESEARCH.md Open Question 1. Four booleans and one
  * string, plus an optional error message when the probe's body threw. */
@@ -129,6 +130,10 @@ declare module 'vitest/internal/browser' {
      * `runBacktest` against, decoded Node-side from the committed bundle since the browser
      * context has no filesystem access to public/data/'s source directory. */
     readKernelSeries: () => Promise<ProductionKernelSeriesPayload>
+    /** 06-01-PLAN.md Task 1(f): the committed Phase 6 `sweep-fixture.bin`'s raw bytes, decoded
+     * Node-side from disk since the browser context has no filesystem access to
+     * `.planning/`'s source directory. */
+    readSweepFixture: () => Promise<SweepFixtureBytesPayload>
     /** Task 1 (04-03): settles RESEARCH.md Open Question 1 -- whether the `context` object a
      * custom command receives exposes a real, unrestricted Playwright `BrowserContext`. See
      * `BrowserContextProbeReport`'s field comments for what each probed value means. */

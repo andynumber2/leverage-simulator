@@ -179,8 +179,43 @@ export function resetAccumulator(): void {
  * RESEARCH.md Pattern 4's anti-pattern note, a thrown error during measurement must surface as
  * a crash, not silently downgrade to `unmeasured`.
  */
+/**
+ * Resolves the one authoritative row per budget id.
+ *
+ * More than one file can legitimately measure the same budget: PERF-05 is measured both by the
+ * Phase 1 `spike-synthetic` canvas arm (fillRect vs putImageData) and by the `production`
+ * heatmap repaint. A plain `new Map(rows.map(...))` resolved that by last-write-wins, so the
+ * headline number silently depended on test file execution order rather than on which
+ * measurement is authoritative. A `production` measurement of real shipped code always beats a
+ * synthetic spike for the same budget, so encode that instead of leaving it to ordering.
+ *
+ * Two rows with the same budget id AND the same source is a genuine ambiguity with no
+ * principled winner, so it throws rather than silently picking one.
+ */
+function resolveByBudgetId(measured: readonly MeasurementRow[]): Map<string, MeasurementRow> {
+  const byBudgetId = new Map<string, MeasurementRow>()
+  for (const row of measured) {
+    const existing = byBudgetId.get(row.budgetId)
+    if (existing === undefined) {
+      byBudgetId.set(row.budgetId, row)
+      continue
+    }
+    if (existing.source === row.source) {
+      throw new Error(
+        `buildFullRowSet: budget "${row.budgetId}" was recorded twice with the same source ` +
+          `"${row.source}"; there is no principled winner, so one of the two recorders must ` +
+          'downgrade to an info line',
+      )
+    }
+    if (existing.source !== 'production' && row.source === 'production') {
+      byBudgetId.set(row.budgetId, row)
+    }
+  }
+  return byBudgetId
+}
+
 export function buildFullRowSet(measured: readonly MeasurementRow[]): MeasurementRow[] {
-  const byBudgetId = new Map(measured.map((row) => [row.budgetId, row]))
+  const byBudgetId = resolveByBudgetId(measured)
   const budgetIds = Object.keys(PERF_BUDGETS) as BudgetId[]
   return budgetIds.map((id) => {
     const existing = byBudgetId.get(id)

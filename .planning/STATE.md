@@ -2,18 +2,18 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_phase: 6
-current_phase_name: Heatmap Design Pass
-status: "Phase 5 shipped — PR #5"
-stopped_at: Phase 6 UI-SPEC approved
-last_updated: "2026-08-21T04:49:39.558Z"
+current_phase: 06
+current_phase_name: heatmap-design-pass
+status: completed
+stopped_at: Phase 6 complete (verification passed)
+last_updated: "2026-08-21T19:28:37.700Z"
 last_activity: 2026-08-21
-last_activity_desc: Phase 05 execution resumed (wave continue)
+last_activity_desc: Phase 06 execution complete, form-2-filled-contour chosen
 progress:
-  total_phases: 6
-  completed_phases: 5
+  total_phases: 8
+  completed_phases: 6
   total_plans: 43
-  completed_plans: 37
+  completed_plans: 43
 ---
 
 # Project State
@@ -23,19 +23,21 @@ progress:
 See: .planning/PROJECT.md (updated 2026-08-16)
 
 **Core value:** Given a symbol, a leverage level, an entry point, and a contribution schedule, produce a defensible outcome and show which mechanism consumed the money, in a form that can be pasted into an argument.
-**Current focus:** Phase 05 — attribution-and-the-credibility-surface
+**Current focus:** Phase 07 - sweep-engine-and-the-heatmap (not started)
 
 ## Current Position
 
-Phase: 6 — Heatmap Design Pass
-Plan: Not started
-Status: Phase 5 shipped — PR #5
-  Verification passed 22/22. Security audit closed 33 of 34 threats, 0 blocking.
-  Broken-windows ledger at 0 open.
-Next: Phase 05 (attribution-and-the-credibility-surface). Run /gsd-discuss-phase 05 to begin.
-Last activity: 2026-08-21 — Phase 06 planning complete
+Phase: 06 (heatmap-design-pass) - COMPLETE
+Plan: 6 of 6
+Status: Phase 6 complete
+  Verification passed 4/4 roadmap success criteria. 697/697 unit tests pass.
+  Decision: form-2-filled-contour wins. Spec written to 06-HEATMAP-SPEC.md.
+  Carry-forwards: form 2 costs O(display area) and needs an offscreen cache in Phase 7;
+  contour levels not yet labelled; ruin hatch never visually exercised (fixture ruinedCount=0).
+Next: Phase 07 (sweep-engine-and-the-heatmap). Run /gsd-discuss-phase 07 to begin.
+Last activity: 2026-08-21 - Phase 06 execution complete
 
-Progress: [█████░░░░░] 50%  (4 of 8 roadmap phases complete)
+Progress: [████████░░] 75%  (6 of 8 roadmap phases complete)
 
 > `total_phases` read 4 here until 2026-08-20 and the bar read 75%. The field had been
 > overwritten with the current phase number on every phase transition since `c5eefa2`

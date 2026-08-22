@@ -67,9 +67,34 @@ export async function resetAccumulatorStore(): Promise<void> {
   await mkdir(rawDir(), { recursive: true })
 }
 
+/**
+ * One file per (budget id, source) pair, NOT per budget id.
+ *
+ * More than one file can legitimately measure the same budget with different sources: PERF-05 is
+ * measured both by the Phase 1 `spike-synthetic` canvas arm and by the `production` heatmap
+ * repaint. Keying the filename on budget id alone meant the second writer silently overwrote the
+ * first on disk, so the reported headline depended on test file execution order and
+ * `buildFullRowSet` never saw the row it was supposed to choose between. Including the source
+ * keeps both rows, and `buildFullRowSet` resolves them deterministically (production wins).
+ *
+ * Two writes for the SAME budget id and source is a real collision with no principled winner, so
+ * it throws rather than silently dropping a measurement.
+ */
 export async function persistMeasurement(row: MeasurementRow): Promise<void> {
   await mkdir(rawDir(), { recursive: true })
-  await writeFile(join(rawDir(), `row-${row.budgetId}.json`), JSON.stringify(row), 'utf8')
+  const path = join(rawDir(), `row-${row.budgetId}-${row.source}.json`)
+  try {
+    await writeFile(path, JSON.stringify(row), { encoding: 'utf8', flag: 'wx' })
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'EEXIST') {
+      throw new Error(
+        `persistMeasurement: budget "${row.budgetId}" was already recorded this run with source ` +
+          `"${row.source}"; two recorders for the same budget and source have no principled ` +
+          'winner, so one must downgrade to an info line',
+      )
+    }
+    throw err
+  }
 }
 
 /** Persists the run's environment block, filling in the two fields (`os`, `ci`) that are

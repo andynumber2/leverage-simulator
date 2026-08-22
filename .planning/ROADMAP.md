@@ -275,26 +275,26 @@ Plans:
   3. The mockups place the overlapping-windows caveat where it will actually be read: visible copy stating that adjacent entry dates share nearly all their underlying history and that the grid is a sensitivity analysis over one shared past, not thousands of independent trials. A treatment that relegates this to a footnote is rejected on those grounds.
   4. Each mockup repaints its 10,000-cell grid on a metric change in under 16ms on real hardware, so no treatment survives the pass that cannot be built inside the budget locked in Phase 1.
 
-**Plans:** 6 plans
+**Plans:** 6/6 plans executed
 
 Plans:
 **Wave 1**
 
-- [ ] 06-01-PLAN.md: Tracer. The real kernel sweeps 200 entry dates by 50 leverage levels of SPX total return into a committed binary fixture, and a plain HTML page served by `vite dev` paints that 10,000-cell field through the graduated colour function inside PERF-05's 16ms budget
+- [x] 06-01-PLAN.md: Tracer. The real kernel sweeps 200 entry dates by 50 leverage levels of SPX total return into a committed binary fixture, and a plain HTML page served by `vite dev` paints that 10,000-cell field through the graduated colour function inside PERF-05's 16ms budget
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 06-02-PLAN.md: D-17's colourblind legibility check as a live CI assertion, at thresholds fixed before the palette was tested, and any palette change it forces
-- [ ] 06-03-PLAN.md: Forms 2 and 4. Hand-rolled iso-bands by per-pixel resample and hand-rolled iso-lines by unstitched marching squares, with no new dependency
-- [ ] 06-04-PLAN.md: Form 3. Fifty stacked one-dimensional leverage strips, with a criterion-4 figure proven non-vacuous against the whole field
+- [x] 06-02-PLAN.md: D-17's colourblind legibility check as a live CI assertion, at thresholds fixed before the palette was tested, and any palette change it forces
+- [x] 06-03-PLAN.md: Forms 2 and 4. Hand-rolled iso-bands by per-pixel resample and hand-rolled iso-lines by unstitched marching squares, with no new dependency
+- [x] 06-04-PLAN.md: Form 3. Fifty stacked one-dimensional leverage strips, with a criterion-4 figure proven non-vacuous against the whole field
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 06-05-PLAN.md: The four-way comparison page, the max-drawdown stress section, and the blocking decision that picks the winner and records why the other three lost
+- [x] 06-05-PLAN.md: The four-way comparison page, the max-drawdown stress section, and the blocking decision that picks the winner and records why the other three lost
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
-- [ ] 06-06-PLAN.md: The two binding artifacts. `06-HEATMAP-SPEC.md` at implementable precision plus the PROJECT.md Key Decision, carrying forward the unspent PERF-03 lever, VIZ-09's missing mockup and the open hover question
+- [x] 06-06-PLAN.md: The two binding artifacts. `06-HEATMAP-SPEC.md` at implementable precision plus the PROJECT.md Key Decision, carrying forward the unspent PERF-03 lever, VIZ-09's missing mockup and the open hover question
 
 **UI hint**: yes
 
@@ -343,7 +343,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | 3. Simulation Kernel and the UPRO/TQQQ Gate | 6/6 | In Progress|  |
 | 4. First Defensible Backtest in the Browser | 8/8 | In Progress|  |
 | 5. Attribution and the Credibility Surface | 9/9 | Complete    | 2026-08-21 |
-| 6. Heatmap Design Pass | 0/6 | Not started | - |
+| 6. Heatmap Design Pass | 6/6 | Complete    | 2026-08-21 |
 | 7. Sweep Engine and the Heatmap | 0/TBD | Not started | - |
 | 8. Export and the Canonical Arguments | 0/TBD | Not started | - |
 
