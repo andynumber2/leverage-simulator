@@ -10,16 +10,26 @@
 import { describe, expect, test } from 'vitest'
 
 import {
+  ANNUALIZED_DOMAIN_MAX,
+  ANNUALIZED_DOMAIN_MIN,
   DOMAIN_LOG_MAX,
   DOMAIN_LOG_MIN,
+  DRAWDOWN_DOMAIN_MAX,
+  DRAWDOWN_DOMAIN_MIN,
   INCOMPLETE_RGBA,
   RUIN_BASE_RGBA,
+  bandLevelsForMetric,
+  buildRampInterpolator,
   interpolateRamp,
+  interpolateSequentialRamp,
   oklabToSrgb,
   rampPositionFor,
+  rampPositionForMetric,
+  scaleTypeForMetric,
   srgbToOklab,
   valueToColor,
   type Rgba,
+  type SweepMetric,
 } from '../src/colorscale/value-to-color.ts'
 
 const SAMPLE_VALUES = [1e-6, 1e-4, 1e-2, 0.1, 0.5, 1, 2, 5, 10, 100, 1e4, 1e6]
@@ -152,6 +162,135 @@ describe('srgbToOklab / oklabToSrgb: round-trip (T-06-04)', () => {
     for (const colour of colours) {
       const roundTripped = oklabToSrgb(srgbToOklab(colour))
       expect(roundTripped).toEqual(colour)
+    }
+  })
+})
+
+// -------------------------------------------------------------------------------------------
+// 07-02-PLAN.md Task 1: buildRampInterpolator's mechanical refactor must not move a single
+// existing diverging-ramp output. Every assertion above this line is UNCHANGED from before this
+// plan (git diff on this file shows additions only below).
+// -------------------------------------------------------------------------------------------
+
+describe('buildRampInterpolator: equivalence with the pre-refactor interpolateRamp', () => {
+  const equivalenceT = [0, 0.001, 0.25, 0.5, 0.75, 0.999, 1]
+
+  test('buildRampInterpolator(RAMP_STOPS)(t) equals interpolateRamp(t) at seven fixed points', () => {
+    const rebuilt = buildRampInterpolator([
+      { t: 0.0, hex: '#08519C' },
+      { t: 0.25, hex: '#3182BD' },
+      { t: 0.5, hex: '#A9A29A' },
+      { t: 0.75, hex: '#E6550D' },
+      { t: 1.0, hex: '#A63603' },
+    ])
+    for (const t of equivalenceT) {
+      expect(rebuilt(t)).toEqual(interpolateRamp(t))
+    }
+  })
+
+  test('buildRampInterpolator(RAMP_STOPS)(t) equals interpolateRamp(t) across 33 evenly spaced samples', () => {
+    const rebuilt = buildRampInterpolator([
+      { t: 0.0, hex: '#08519C' },
+      { t: 0.25, hex: '#3182BD' },
+      { t: 0.5, hex: '#A9A29A' },
+      { t: 0.75, hex: '#E6550D' },
+      { t: 1.0, hex: '#A63603' },
+    ])
+    for (let i = 0; i < 33; i++) {
+      const t = i / 32
+      expect(rebuilt(t)).toEqual(interpolateRamp(t))
+    }
+  })
+
+  test('a stops array with fewer than two entries throws', () => {
+    expect(() => buildRampInterpolator([{ t: 0, hex: '#000000' }])).toThrow()
+  })
+
+  test('a two-element stops array with descending t throws', () => {
+    expect(() =>
+      buildRampInterpolator([
+        { t: 1, hex: '#ffffff' },
+        { t: 0, hex: '#000000' },
+      ]),
+    ).toThrow()
+  })
+})
+
+// -------------------------------------------------------------------------------------------
+// 07-02-PLAN.md Task 2: the sequential drawdown ramp (D-25) and the three fixed per-metric
+// domains (D-26).
+// -------------------------------------------------------------------------------------------
+
+describe('interpolateSequentialRamp: endpoints and separation from the diverging ramp', () => {
+  test('interpolateSequentialRamp(0) is #EEEBFB and interpolateSequentialRamp(1) is #3B1B7E', () => {
+    expect(interpolateSequentialRamp(0)).toEqual([0xee, 0xeb, 0xfb, 255])
+    expect(interpolateSequentialRamp(1)).toEqual([0x3b, 0x1b, 0x7e, 255])
+  })
+
+  test('interpolateSequentialRamp differs from interpolateRamp at t = 0.25, 0.5 and 0.75', () => {
+    for (const t of [0.25, 0.5, 0.75]) {
+      expect(interpolateSequentialRamp(t)).not.toEqual(interpolateRamp(t))
+    }
+  })
+})
+
+describe('interpolateSequentialRamp: perceptual uniformity (VIZ-07)', () => {
+  test('the ratio of the largest to the smallest Oklab distance between 33 adjacent ramp samples is at most 2.5', () => {
+    const samples: Rgba[] = []
+    for (let i = 0; i < 33; i++) {
+      samples.push(interpolateSequentialRamp(i / 32))
+    }
+    const oklabSamples = samples.map((rgba) => srgbToOklab(rgba))
+    const distances: number[] = []
+    for (let i = 0; i < oklabSamples.length - 1; i++) {
+      const a = oklabSamples[i]!
+      const b = oklabSamples[i + 1]!
+      distances.push(Math.sqrt((a.L - b.L) ** 2 + (a.a - b.a) ** 2 + (a.b - b.b) ** 2))
+    }
+    const max = Math.max(...distances)
+    const min = Math.min(...distances)
+    expect(max / min).toBeLessThanOrEqual(2.5)
+  })
+})
+
+describe('scaleTypeForMetric', () => {
+  test('drawdown is sequential; multiple and annualized are diverging', () => {
+    expect(scaleTypeForMetric('drawdown')).toBe('sequential')
+    expect(scaleTypeForMetric('multiple')).toBe('diverging')
+    expect(scaleTypeForMetric('annualized')).toBe('diverging')
+  })
+})
+
+describe('rampPositionForMetric: diverging centres land at exactly 0.5', () => {
+  test('rampPositionForMetric(1.0, "multiple") is exactly 0.5', () => {
+    expect(rampPositionForMetric(1.0, 'multiple')).toBe(0.5)
+  })
+
+  test('rampPositionForMetric(0, "annualized") is exactly 0.5', () => {
+    expect(rampPositionForMetric(0, 'annualized')).toBe(0.5)
+  })
+
+  test('rampPositionForMetric(0, "drawdown") is exactly 0', () => {
+    expect(rampPositionForMetric(0, 'drawdown')).toBe(0)
+  })
+
+  test('values beyond a metric domain clamp to 0 or 1 rather than throwing or extrapolating', () => {
+    expect(rampPositionForMetric(DRAWDOWN_DOMAIN_MIN - 5, 'drawdown')).toBe(0)
+    expect(rampPositionForMetric(DRAWDOWN_DOMAIN_MAX + 5, 'drawdown')).toBe(1)
+    expect(rampPositionForMetric(ANNUALIZED_DOMAIN_MIN - 5, 'annualized')).toBe(0)
+    expect(rampPositionForMetric(ANNUALIZED_DOMAIN_MAX + 5, 'annualized')).toBe(1)
+  })
+})
+
+describe('bandLevelsForMetric', () => {
+  const metrics: readonly SweepMetric[] = ['multiple', 'drawdown', 'annualized']
+
+  test.each(metrics)('%s: starts at 0, ends at 1, and is strictly ascending', (metric) => {
+    const levels = bandLevelsForMetric(metric)
+    expect(levels[0]).toBe(0)
+    expect(levels[levels.length - 1]).toBe(1)
+    for (let i = 1; i < levels.length; i++) {
+      expect(levels[i]!).toBeGreaterThan(levels[i - 1]!)
     }
   })
 })

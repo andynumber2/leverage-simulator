@@ -20,6 +20,8 @@ import {
   DOMAIN_LOG_MAX,
   DOMAIN_LOG_MIN,
   INCOMPLETE_RGBA,
+  RUIN_BASE_RGBA,
+  interpolateSequentialRamp,
   valueToColor,
   type Rgba,
 } from '../src/colorscale/value-to-color.ts'
@@ -279,3 +281,65 @@ describe('ramp: lightness signal (not hue-only)', () => {
 // of the ramp; D-18 resolves that with the hatch TEXTURE, which is not a colour channel and
 // therefore cannot be measured by this colour-distance test. The hatch, not the hue, is what
 // carries ruin's categorical distinctness.
+
+// -------------------------------------------------------------------------------------------
+// 07-02-PLAN.md Task 2: the same CVD legibility bar, applied to the sequential drawdown ramp
+// (D-25). Sampled through `interpolateSequentialRamp` directly (not `valueToColor`, since
+// `valueToColor` has no metric argument yet) so this test cannot silently assert against the
+// diverging ramp instead (Pitfall 5's exact warning sign).
+// -------------------------------------------------------------------------------------------
+
+function sequentialRampBandColours(bandCount: number): Rgba[] {
+  const colours: Rgba[] = []
+  for (let i = 0; i < bandCount; i++) {
+    const t = (i + 0.5) / bandCount
+    colours.push(interpolateSequentialRamp(t))
+  }
+  return colours
+}
+
+describe('sequential ramp: adjacent-band separability under simulated CVD (D-25, VIZ-07)', () => {
+  const bandColours = sequentialRampBandColours(CVD_BAND_COUNT)
+
+  test(`sample count is exactly CVD_BAND_COUNT (${CVD_BAND_COUNT})`, () => {
+    expect(bandColours).toHaveLength(CVD_BAND_COUNT)
+  })
+
+  test('every adjacent pair stays at least MIN_ADJACENT_DELTA_E apart with no simulation applied', () => {
+    for (let i = 0; i < bandColours.length - 1; i++) {
+      const distance = deltaE76(srgbToLab(bandColours[i]!), srgbToLab(bandColours[i + 1]!))
+      expect(distance).toBeGreaterThanOrEqual(MIN_ADJACENT_DELTA_E)
+    }
+  })
+
+  for (const deficiency of DEFICIENCIES) {
+    test(`every adjacent pair stays at least MIN_ADJACENT_DELTA_E apart under simulated ${deficiency}`, () => {
+      for (let i = 0; i < bandColours.length - 1; i++) {
+        const a = simulateCvd(bandColours[i]!, deficiency)
+        const b = simulateCvd(bandColours[i + 1]!, deficiency)
+        const distance = deltaE76(srgbToLab(a), srgbToLab(b))
+        expect(distance).toBeGreaterThanOrEqual(MIN_ADJACENT_DELTA_E)
+      }
+    })
+  }
+})
+
+describe('sequential ramp: categorical distinctness from INCOMPLETE_RGBA and RUIN_BASE_RGBA (D-20, D-18)', () => {
+  const bandColours = sequentialRampBandColours(CVD_BAND_COUNT)
+
+  test('INCOMPLETE_RGBA is at least MIN_CATEGORICAL_DELTA_E from every sequential-ramp band with no simulation applied', () => {
+    const incompleteLab = srgbToLab(INCOMPLETE_RGBA)
+    for (const band of bandColours) {
+      const distance = deltaE76(incompleteLab, srgbToLab(band))
+      expect(distance).toBeGreaterThanOrEqual(MIN_CATEGORICAL_DELTA_E)
+    }
+  })
+
+  test('RUIN_BASE_RGBA is at least MIN_CATEGORICAL_DELTA_E from every sequential-ramp band with no simulation applied', () => {
+    const ruinLab = srgbToLab(RUIN_BASE_RGBA)
+    for (const band of bandColours) {
+      const distance = deltaE76(ruinLab, srgbToLab(band))
+      expect(distance).toBeGreaterThanOrEqual(MIN_CATEGORICAL_DELTA_E)
+    }
+  })
+})
