@@ -42,19 +42,37 @@
  * provisional, `07-UI-SPEC.md` Color) and mounts `HoverReadout.tsx`; hover moves nothing else
  * (not the slices, not the permalink, not `crosshairCell()`). A click resolves the clicked cell
  * via `crosshairCellFor` and commits it via `setCrosshairCell` (which `SliceChart.tsx`'s
- * `resolveFixedRow`/`resolveFixedCol` already read, 07-07) -- Task 3 (07-08-PLAN.md) extends this
- * same click to also write the parameter column's own `entryDate`/`leverage` fields (D-17/D-22).
+ * `resolveFixedRow`/`resolveFixedCol` already read, 07-07).
+ *
+ * 07-08-PLAN.md Task 3 (D-17/D-22): that same click ALSO writes the parameter column's own
+ * `entryDate`/`leverage` fields via `updateBacktestRequest`, passing `skipSweep: true` so
+ * drilling into an already-computed field never itself re-sweeps (T-07-MUST "committing a cell
+ * must not start a sweep" -- see `src/app/state.ts`'s own `UpdateBacktestRequestOptions` doc
+ * comment for why that option exists; `state.ts` is not in this plan's own declared
+ * `files_modified`, so this is a Rule 3 deviation, documented in this plan's own SUMMARY.md, not
+ * a silent scope change). Switching to Single run then shows the full receipts for exactly that
+ * cell with no new gesture and no new plumbing.
+ *
+ * The committed crosshair also stays in sync in the OTHER direction (D-17): a `createEffect`
+ * below re-resolves `crosshairCell()` from the live `backtestRequest().entryDate`/`leverage`
+ * whenever either changes AND a crosshair is already committed (never summoning one from a bare
+ * keyboard edit, matching E5's "before any pointer interaction, neither renders" -- only an
+ * ALREADY-committed crosshair tracks a keyboard-driven parameter edit). This is also the answer
+ * to Finding F-03: the field canvas stays POINTER-ONLY (D-21 leaves it with no keyboard nudge of
+ * its own -- this is a recorded decision, not an oversight), but the crosshair STATE stays
+ * reachable by keyboard through the existing entry-date and leverage controls, which drive the
+ * identical store fields this effect watches.
  */
 
-import { createEffect, createSignal, onCleanup, Show } from 'solid-js'
+import { createEffect, createSignal, onCleanup, Show, untrack } from 'solid-js'
 
 import { clampLeverageToGrid, crosshairCellFor, type CrosshairCellHit, type FieldRect } from '../../../heatmap/crosshair.ts'
 import { gridColToDisplayX, gridRowToDisplayY, paintSweepField } from '../../../heatmap/paint-contour.ts'
 import type { SweepGrid } from '../../../sweep/sweep-grid.ts'
-import { backtestRequest, crosshairCell, displayedMetric, setCrosshairCell } from '../../state.ts'
+import { backtestRequest, crosshairCell, displayedMetric, setCrosshairCell, updateBacktestRequest } from '../../state.ts'
 import { onThemeChange } from '../../theme.ts'
 import { HoverReadout } from './HoverReadout.tsx'
-import { HorizontalSliceChart, VerticalSliceChart } from './SliceChart.tsx'
+import { nearestColForEntryDate, nearestRowForLeverage, HorizontalSliceChart, VerticalSliceChart } from './SliceChart.tsx'
 import { SweepCaption } from './SweepCaption.tsx'
 import { SweepLegend } from './SweepLegend.tsx'
 
@@ -207,6 +225,28 @@ export function HeatmapPanel(props: HeatmapPanelProps) {
     repaintCrosshair()
   })
 
+  // 07-08-PLAN.md Task 3, D-17 (both directions): once a crosshair is committed, moving the
+  // entry-date or leverage control re-resolves `crosshairCell()` against the CURRENT
+  // `backtestRequest()` fields and the current grid, so the field crosshair and the slice
+  // charts' own fixed row/col (`SliceChart.tsx`'s `resolveFixedRow`/`resolveFixedCol`, which
+  // already read `crosshairCell()`) stay one continuous view of one source of truth.
+  // `crosshairCell()` itself is read untracked so this effect's own writes below do not
+  // re-trigger it -- it re-runs only when `backtestRequest()`'s fields or the grid change, never
+  // on its own output.
+  createEffect(() => {
+    const grid = props.grid
+    const entryDate = backtestRequest().entryDate
+    const leverage = backtestRequest().leverage
+    if (grid === null) return
+    const current = untrack(crosshairCell)
+    if (current === null) return
+    const col = nearestColForEntryDate(grid, entryDate)
+    const row = nearestRowForLeverage(grid, leverage)
+    if (current.col !== col || current.row !== row) {
+      setCrosshairCell({ col, row })
+    }
+  })
+
   onCleanup(() => {
     unsubscribeThemeChange()
   })
@@ -235,12 +275,16 @@ export function HeatmapPanel(props: HeatmapPanelProps) {
     setHoverCell(null)
   }
 
-  // 07-08-PLAN.md Task 2 (D-19): clicking a cell commits it -- `setCrosshairCell` is the SAME
-  // signal `SliceChart.tsx`'s `resolveFixedRow`/`resolveFixedCol` already read (07-07), so the
-  // slice charts pick up the new fixed row/column the instant this fires. At most one committed
-  // cell exists at a time: a second click overwrites the signal rather than accumulating a set.
-  // Task 3 (07-08-PLAN.md) extends this same handler to also write the parameter column's own
-  // `entryDate`/`leverage` fields (D-17/D-22).
+  // 07-08-PLAN.md Task 2/3 (D-19/D-17/D-22): clicking a cell commits it -- `setCrosshairCell` is
+  // the SAME signal `SliceChart.tsx`'s `resolveFixedRow`/`resolveFixedCol` already read (07-07),
+  // so the slice charts pick up the new fixed row/column the instant this fires. At most one
+  // committed cell exists at a time: a second click overwrites the signal rather than
+  // accumulating a set. `updateBacktestRequest` writes the SAME `entryDate`/`leverage` fields the
+  // parameter column owns, so switching to Single run shows the full receipts for exactly this
+  // cell. `skipSweep: true` is load-bearing: the crosshair's position is the cell pointed at
+  // WITHIN an already-computed field, not a new sweep input, so this must not itself schedule a
+  // re-sweep (proven by a `sweepGeneration()`-unchanged browser assertion). No double-click: a
+  // single click is the entire drill-down gesture (D-22) -- no tooltip button, no dblclick.
   function handleClick(e: MouseEvent): void {
     const grid = props.grid
     if (grid === null) return
@@ -248,7 +292,10 @@ export function HeatmapPanel(props: HeatmapPanelProps) {
     if (pos === null) return
     const cell = crosshairCellFor(pos.x, pos.y, FIELD_RECT, grid.cols, grid.rows)
     if (cell === null) return
+    const entryDate = grid.meta.entryDates[cell.col] ?? ''
+    const leverage = grid.meta.leverages[cell.row] ?? backtestRequest().leverage
     setCrosshairCell(cell)
+    updateBacktestRequest({ entryDate, leverage }, { skipSweep: true })
   }
 
   const readoutAnchor = () => {

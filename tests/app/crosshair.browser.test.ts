@@ -19,16 +19,40 @@
  * colour is read directly from `getImageData`, and "dashed vs solid" is read by counting fully
  * transparent samples along a known stretch of the line (a solid 2px stroke has none; a `[4, 3]`
  * dashed 1px stroke has several).
+ *
+ * 07-08-PLAN.md Task 3's coverage (same file per the plan's own `<files>` list): drill-down --
+ * clicking a cell writes the SAME `entryDate`/`leverage` fields the parameter column owns and
+ * switching to Single run computes those exact parameters, without touching `sweepGeneration()`
+ * or leaving a stale permalink -- plus D-17's keyboard path, proven with a REAL, trusted keyboard
+ * interaction (`vitest/browser`'s `userEvent.keyboard`, not a synthetic `dispatchEvent`, since a
+ * native `<input type="range">` only steps its value in response to a browser-trusted key event).
+ * This section mounts the REAL app (`mountApp`), unlike Task 2's synthetic-grid section above --
+ * Single run's own computed result and the permalink URL are both real-app concerns a standalone
+ * `HeatmapPanel` render has no access to.
  */
 
 import { afterEach, beforeEach, expect, test } from 'vitest'
+import { userEvent } from 'vitest/browser'
 import { render } from 'solid-js/web'
 
+import { mountApp } from '../../src/app/main.tsx'
 import { HeatmapPanel } from '../../src/app/components/ResultColumn/HeatmapPanel.tsx'
+import { nearestRowForLeverage } from '../../src/app/components/ResultColumn/SliceChart.tsx'
 import { CELL_FLAG_RUINED } from '../../src/data/sweep-fixture-format.ts'
 import { gridColToDisplayX, gridRowToDisplayY } from '../../src/heatmap/paint-contour.ts'
 import { createSweepGrid, type SweepGrid, type SweepGridMeta } from '../../src/sweep/sweep-grid.ts'
-import { backtestRequest, crosshairCell, resetAppState, updateBacktestRequest } from '../../src/app/state.ts'
+import {
+  backtestRequest,
+  crosshairCell,
+  currentKernelInputs,
+  flushPermalinkUrl,
+  loadStatus,
+  resetAppState,
+  resultMode,
+  sweepGeneration,
+  sweepGrid,
+  updateBacktestRequest,
+} from '../../src/app/state.ts'
 
 const HEATMAP_WIDTH_PX = 800
 const HEATMAP_HEIGHT_PX = 240
@@ -74,6 +98,8 @@ function makeSyntheticGrid(): SweepGrid {
 
 let container: HTMLDivElement | undefined
 let dispose: (() => void) | undefined
+let appContainer: HTMLDivElement | undefined
+let disposeApp: (() => void) | undefined
 
 beforeEach(() => {
   resetAppState()
@@ -84,6 +110,11 @@ afterEach(() => {
   dispose = undefined
   container?.remove()
   container = undefined
+
+  disposeApp?.()
+  disposeApp = undefined
+  appContainer?.remove()
+  appContainer = undefined
 })
 
 function mountPanel(grid: SweepGrid | null): { container: HTMLDivElement; overlay: HTMLCanvasElement; stack: HTMLElement } {
@@ -390,3 +421,158 @@ test('the readout at the field bottom-right corner cell stays entirely inside th
   expect(readoutRect.right).toBeLessThanOrEqual(panelRect.right + EPSILON)
   expect(readoutRect.bottom).toBeLessThanOrEqual(panelRect.bottom + EPSILON)
 })
+
+// -------------------------------------------------------------------------------------------
+// Task 3: drill-down -- click writes entryDate/leverage, no re-sweep, permalink, keyboard sync
+// -------------------------------------------------------------------------------------------
+
+async function waitFor(predicate: () => boolean, timeoutMs = 30_000): Promise<void> {
+  const start = performance.now()
+  while (!predicate()) {
+    if (performance.now() - start > timeoutMs) {
+      throw new Error('crosshair.browser.test: waitFor timed out waiting for a condition')
+    }
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+  }
+}
+
+async function mountRealAppInSweepMode(): Promise<HTMLDivElement> {
+  window.history.replaceState(null, '', window.location.pathname)
+  appContainer = document.createElement('div')
+  document.body.appendChild(appContainer)
+  disposeApp = mountApp(appContainer)
+  await waitFor(() => loadStatus() === 'ready')
+  // `resetAppState` deliberately leaves the last resolved sweep grid in place (see its own
+  // comment in `state.ts`: the grid is a pure function of a subsequent `scheduleSweep`, not
+  // app-load state). This file mounts the real app more than once, so a bare
+  // `sweepGrid()!.cols === 200` wait would resolve instantly against the PREVIOUS test's grid and
+  // let this mount's own sweep land mid-assertion -- which is exactly what made the
+  // `sweepGeneration()`-unchanged assertion below see a spurious bump. `runSweepNow` builds a
+  // fresh `SweepGrid` object per pass, so gating on reference inequality waits for THIS mount's
+  // own full pass and nothing earlier.
+  const staleGrid = sweepGrid()
+  appContainer.querySelector<HTMLInputElement>('[data-testid="sweep-mode-sweep"]')!.click()
+  expect(resultMode()).toBe('sweep')
+  await waitFor(() => {
+    const g = sweepGrid()
+    return g !== null && g !== staleGrid && g.cols === 200 && g.rows === 50
+  }, 35_000)
+  return appContainer
+}
+
+test(
+  'clicking a cell writes entryDate/leverage, and switching to Single run computes those exact parameters',
+  async () => {
+    const el = await mountRealAppInSweepMode()
+    const grid = sweepGrid()!
+    const overlay = el.querySelector<HTMLCanvasElement>('[data-testid="heatmap-crosshair-overlay"]')!
+
+    const col = 40
+    const row = 10
+    const expectedEntryDate = grid.meta.entryDates[col]!
+    const expectedLeverage = grid.meta.leverages[row]!
+    const { x, y } = cellDisplayXY(col, row, grid)
+    dispatchClick(overlay, x, y)
+
+    await waitFor(() => backtestRequest().entryDate === expectedEntryDate)
+    expect(backtestRequest().leverage).toBeCloseTo(expectedLeverage, 6)
+    expect(crosshairCell()).toEqual({ col, row })
+
+    el.querySelector<HTMLInputElement>('[data-testid="sweep-mode-single"]')!.click()
+    expect(resultMode()).toBe('single')
+
+    await waitFor(() => currentKernelInputs()?.window.firstDate === expectedEntryDate, 30_000)
+    expect(currentKernelInputs()!.params.leverage).toBeCloseTo(expectedLeverage, 6)
+    expect(el.querySelector('[data-testid="metrics-panel"]')).not.toBeNull()
+  },
+  40_000,
+)
+
+test(
+  'committing a crosshair cell does not change sweepGeneration()',
+  async () => {
+    const el = await mountRealAppInSweepMode()
+    const grid = sweepGrid()!
+    const overlay = el.querySelector<HTMLCanvasElement>('[data-testid="heatmap-crosshair-overlay"]')!
+
+    const generationBefore = sweepGeneration()
+    const col = 20
+    const row = 30
+    const { x, y } = cellDisplayXY(col, row, grid)
+    dispatchClick(overlay, x, y)
+
+    await waitFor(() => backtestRequest().entryDate === grid.meta.entryDates[col])
+    await nextFrame()
+    await nextFrame()
+
+    expect(sweepGeneration()).toBe(generationBefore)
+  },
+  40_000,
+)
+
+test(
+  'the URL query string carries the clicked cell entryDate/leverage once the permalink sync flushes',
+  async () => {
+    const el = await mountRealAppInSweepMode()
+    const grid = sweepGrid()!
+    const overlay = el.querySelector<HTMLCanvasElement>('[data-testid="heatmap-crosshair-overlay"]')!
+
+    const col = 90
+    const row = 25
+    const expectedEntryDate = grid.meta.entryDates[col]!
+    const expectedLeverage = grid.meta.leverages[row]!
+    const { x, y } = cellDisplayXY(col, row, grid)
+    dispatchClick(overlay, x, y)
+
+    await waitFor(() => backtestRequest().entryDate === expectedEntryDate)
+    // The permalink is written on the trailing edge of a COMPLETED run (`storeSuccessfulRun` ->
+    // `schedulePermalinkSync`), and `updateBacktestRequest`'s store write is synchronous while
+    // its `scheduleRun` is rAF-coalesced -- so the wait above resolves before any run has been
+    // recomputed. Flushing there would find nothing pending and leave the URL untouched. Wait for
+    // the run that carries the clicked entry date to actually resolve, then flush.
+    await waitFor(() => currentKernelInputs()?.window.firstDate === expectedEntryDate, 30_000)
+    flushPermalinkUrl()
+
+    const params = new URLSearchParams(window.location.search)
+    expect(params.get('entryDate')).toBe(expectedEntryDate)
+    expect(Number(params.get('leverage'))).toBeCloseTo(expectedLeverage, 2)
+  },
+  40_000,
+)
+
+test(
+  'no double-click affordance exists anywhere in the result column',
+  () => {
+    expect(document.querySelectorAll('[ondblclick]').length).toBe(0)
+  },
+)
+
+test(
+  'a keyboard-driven leverage change moves an already-committed crosshair to the corresponding row',
+  async () => {
+    const el = await mountRealAppInSweepMode()
+    const grid = sweepGrid()!
+    const overlay = el.querySelector<HTMLCanvasElement>('[data-testid="heatmap-crosshair-overlay"]')!
+
+    // A low starting row leaves headroom for several ArrowUp presses to cross at least one row
+    // boundary (row spacing is (LEVERAGE_MAX - LEVERAGE_MIN) / (SWEEP_ROWS - 1) =~ 0.0816x; the
+    // slider's own step is 0.01x, so ten presses comfortably crosses it).
+    const col = 60
+    const row = 5
+    const { x, y } = cellDisplayXY(col, row, grid)
+    dispatchClick(overlay, x, y)
+    await waitFor(() => crosshairCell() !== null && crosshairCell()!.col === col && crosshairCell()!.row === row)
+
+    const leverageSlider = el.querySelector<HTMLInputElement>('[data-testid="leverage-slider"]')!
+    await userEvent.click(leverageSlider)
+    await userEvent.keyboard('{ArrowUp}{ArrowUp}{ArrowUp}{ArrowUp}{ArrowUp}{ArrowUp}{ArrowUp}{ArrowUp}{ArrowUp}{ArrowUp}')
+
+    await waitFor(() => backtestRequest().leverage > grid.meta.leverages[row]!, 10_000)
+
+    const currentGrid = sweepGrid()!
+    const expectedRow = nearestRowForLeverage(currentGrid, backtestRequest().leverage)
+    await waitFor(() => crosshairCell() !== null && crosshairCell()!.row === expectedRow, 10_000)
+    expect(crosshairCell()!.row).not.toBe(row)
+  },
+  40_000,
+)
