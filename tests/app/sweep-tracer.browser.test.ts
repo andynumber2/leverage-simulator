@@ -88,8 +88,11 @@ test(
 
     // Waits for the real sweep (200x50 backtests over the real bundle, across a real Worker
     // pool) to resolve -- generously timed, this is the one genuinely slow assertion in this
-    // file.
-    await waitFor(() => sweepGrid() !== null, 30_000)
+    // file. 07-05-PLAN.md Task 2: sweepGrid() now resolves in two stages, the coarse pass's
+    // narrower grid first, then the full 200x50 grid replacing it whole -- this waits
+    // specifically for the full grid, which is what this test's own cell-count/canvas assertions
+    // below are about.
+    await waitFor(() => sweepGrid() !== null && sweepGrid()!.cols === 200 && sweepGrid()!.rows === 50, 30_000)
 
     const grid = sweepGrid()!
     expect(grid.cols).toBe(200)
