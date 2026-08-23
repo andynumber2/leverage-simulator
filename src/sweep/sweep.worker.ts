@@ -23,14 +23,13 @@
  * so `tests/sweep/metrics-one-pass.test.ts` can call it directly in the fast Node `unit` project,
  * against a `LoadedBundle` from `loadBundleFromDisk`, without a real Worker/postMessage boundary.
  *
- * Scope note: `computeChunkMetrics`'s `annualized` output does NOT yet cross the `runChunk`
- * transferable-buffer boundary (`chunkBufferByteLength`'s 3-segment `multiples`/`drawdowns`/
- * `flags` wire layout, shared with `src/sweep/sweep-pool.ts`'s hardcoded parse offsets, is left
- * byte-for-byte unchanged by this plan so a concurrently-executing sibling plan touching
- * `sweep-pool.ts` is not destabilized). Wiring `grid.annualized` from this one-pass computation
- * into the live `SweepGrid` is explicitly out of this plan's `files_modified` and remains, per
- * `sweep-grid.ts`'s own header note, plan 07-06's territory (the metric-toggle plan that first
- * needs `grid.annualized` populated for real).
+ * 07-06-PLAN.md (orchestrator-authorized scope extension): `computeChunkMetrics`'s `annualized`
+ * output now DOES cross the `runChunk` transferable-buffer boundary -- `chunkBufferByteLength`'s
+ * wire layout is 4 contiguous segments (`multiples`/`drawdowns`/`annualized`/`flags`), matching
+ * `src/sweep/sweep-pool.ts`'s updated parse offsets. Plan 07-03 (which added `computeChunkMetrics`
+ * itself) deliberately left this buffer layout at 3 segments so it would not destabilize plan
+ * 07-05's concurrently-executing edits to `sweep-pool.ts`'s merge loop in the same wave; wiring
+ * the 4th segment through is this plan's territory, per `sweep-grid.ts`'s own prior header note.
  *
  * `Comlink.expose(sweepWorkerApi)` below is guarded to run only when `self` exists (a real Worker
  * or browser global context): the Node `unit` test project has no `self`, and `Comlink.expose`'s
@@ -91,12 +90,13 @@ export interface SweepChunkRequest {
   rowIndices: number[]
 }
 
-// The transferred result buffer's layout: three contiguous segments, ordered
+// The transferred result buffer's layout: four contiguous segments, ordered
 // (`columnIndices.length * rowIndices.length` cells each, column-major WITHIN the chunk --
 // `cellsInChunk = colPos * rowIndices.length + rowPos`, mirroring the columns-outside/rows-inside
 // compute order above so the merge back into the grid needs no re-sort): `multiples` (Float32),
-// `drawdowns` (Float32), `flags` (Uint8). `chunkBufferByteLength` (imported from `sweep-grid.ts`,
-// shared with `sweep-pool.ts`) computes this layout's total byte length.
+// `drawdowns` (Float32), `annualized` (Float32), `flags` (Uint8). `chunkBufferByteLength`
+// (imported from `sweep-grid.ts`, shared with `sweep-pool.ts`) computes this layout's total byte
+// length.
 
 let cachedBundle: Promise<LoadedBundle> | null = null
 
@@ -251,9 +251,9 @@ export function computeChunkMetrics(bundle: LoadedBundle, request: SweepChunkReq
 
 const sweepWorkerApi = {
   /**
-   * Writes `computeChunkMetrics`'s `multiples`/`drawdowns`/`flags` into a `ArrayBuffer` view per
-   * this file's own `chunkBufferByteLength` layout, and returns the same buffer, transferred
-   * rather than cloned. See this file's header for why `annualized` does not yet cross this wire.
+   * Writes `computeChunkMetrics`'s `multiples`/`drawdowns`/`annualized`/`flags` into a
+   * `ArrayBuffer` view per this file's own `chunkBufferByteLength` layout, and returns the same
+   * buffer, transferred rather than cloned.
    */
   async runChunk(request: SweepChunkRequest, buffer: ArrayBuffer): Promise<ArrayBuffer> {
     const bundle = await getBundle()
@@ -272,9 +272,11 @@ const sweepWorkerApi = {
 
     const multiplesView = new Float32Array(buffer, 0, cellCount)
     const drawdownsView = new Float32Array(buffer, cellCount * 4, cellCount)
-    const flagsView = new Uint8Array(buffer, cellCount * 4 + cellCount * 4, cellCount)
+    const annualizedView = new Float32Array(buffer, cellCount * 4 * 2, cellCount)
+    const flagsView = new Uint8Array(buffer, cellCount * 4 * 3, cellCount)
     multiplesView.set(metrics.multiples)
     drawdownsView.set(metrics.drawdowns)
+    annualizedView.set(metrics.annualized)
     flagsView.set(metrics.flags)
 
     return Comlink.transfer(buffer, [buffer])

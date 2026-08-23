@@ -20,16 +20,34 @@
  * booting the whole app (`tests/app/parameter-defaults.test.ts`); `PARAMETER_DEFAULTS.entryDate`
  * is a thin wrapper over them that reads the live `loadedBundle()`/`backtestRequest()` signals, the
  * same way every other entry reads `backtestRequest()` directly.
+ *
+ * 07-06-PLAN.md Task 2 (Rule 2/3 auto-fix, not in this plan's declared `files_modified`):
+ * `resultMode` is an eleventh registry entry, added because `SweepModeToggle.tsx`'s own acceptance
+ * criteria requires it to carry "the shared `PARAMETER_DEFAULTS` default-badge and reset
+ * affordance every parameter control in this app carries" -- the same CRED-05 discipline as every
+ * other control, even though `resultMode` is UI-chrome (D-18's result-column mount), not a
+ * `BacktestRequest` field, mirroring how `tier` already lives here despite the same distinction
+ * (`activeTier`'s own doc comment). Its default is `'single'` (D-18's fresh-visit seed).
  */
 
 import type { Manifest } from '../../tools/bundle-compiler/src/manifest.ts'
 import { resolveEntryDateBounds, type EntryDateBoundsResult } from './bounds.ts'
-import { activeTier, backtestRequest, DEFAULT_REQUEST, loadedBundle, setActiveTier, updateBacktestRequest } from './state.ts'
+import {
+  activeTier,
+  backtestRequest,
+  DEFAULT_REQUEST,
+  loadedBundle,
+  resultMode,
+  setActiveTier,
+  setResultMode,
+  updateBacktestRequest,
+} from './state.ts'
 
 /** D-22's ten defaulted parameters: leverage, entry date, holding mode, initial investment,
  * contribution amount, contribution frequency, tier, dividend mode, expense ratio and financing
- * spread -- every parameter D-22 names, none more, none fewer. `Record<ParameterId, ...>` below
- * makes TypeScript reject a missing or extra member if this union ever changes. */
+ * spread -- every parameter D-22 names, none more, none fewer -- plus 07-06-PLAN.md Task 2's
+ * `resultMode` (see module header). `Record<ParameterId, ...>` below makes TypeScript reject a
+ * missing or extra member if this union ever changes. */
 export type ParameterId =
   | 'leverage'
   | 'entryDate'
@@ -41,6 +59,7 @@ export type ParameterId =
   | 'dividendMode'
   | 'expenseRatio'
   | 'financingSpread'
+  | 'resultMode'
 
 export interface ParameterDefaultEntry {
   /** True when the live store currently holds this parameter's shipped default. */
@@ -145,6 +164,10 @@ export const PARAMETER_DEFAULTS: Record<ParameterId, ParameterDefaultEntry> = {
   financingSpread: {
     isDefault: () => backtestRequest().financingSpreadPercent === DEFAULT_REQUEST.financingSpreadPercent,
     reset: () => updateBacktestRequest({ financingSpreadPercent: DEFAULT_REQUEST.financingSpreadPercent }),
+  },
+  resultMode: {
+    isDefault: () => resultMode() === 'single',
+    reset: () => setResultMode('single'),
   },
 }
 

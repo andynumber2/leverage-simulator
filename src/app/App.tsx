@@ -24,8 +24,10 @@ import { ExtendedTierWarning } from './components/ResultColumn/ExtendedTierWarni
 import { HeatmapPanel } from './components/ResultColumn/HeatmapPanel.tsx'
 import { LogScaleToggle } from './components/ResultColumn/LogScaleToggle.tsx'
 import { MetricsPanel } from './components/ResultColumn/MetricsPanel.tsx'
+import { MetricToggle } from './components/ResultColumn/MetricToggle.tsx'
 import { ProvenanceStrip } from './components/ResultColumn/ProvenanceStrip.tsx'
 import { RuinBanner } from './components/ResultColumn/RuinBanner.tsx'
+import { SweepModeToggle } from './components/ResultColumn/SweepModeToggle.tsx'
 import { ValidationExplanation, type ExplanationVariant } from './components/ResultColumn/ValidationExplanation.tsx'
 import { MethodologyOverlay } from './components/MethodologyOverlay.tsx'
 import { ThemeToggle } from './components/ThemeToggle.tsx'
@@ -47,7 +49,6 @@ import {
   loadStatus,
   resultMode,
   scaleMode,
-  setResultMode,
   setScaleMode,
   sweepGrid,
 } from './state.ts'
@@ -83,11 +84,24 @@ export function App() {
     void initializeApp()
   })
 
+  // 07-06-PLAN.md Task 2/3: same disabled formula ParameterColumn.tsx already uses for its own
+  // controls -- SweepModeToggle/MetricToggle follow "every other control's existing loading
+  // treatment" (disabled, never absent, while the manifest has not decoded).
+  const disabled = () => loadStatus() !== 'ready'
+
   return (
     <>
     <div class="app-layout">
       <ParameterColumn />
       <main class="result-column" data-testid="result-slot">
+        {/* 07-06-PLAN.md Task 2 (D-15/D-21): mounted at the TOP of the result column, above the
+            panel it switches, replacing plan 07-01's minimal reachability button. Rendered
+            unconditionally (not gated on loadStatus() === 'ready') so it is present-but-disabled
+            during load, matching D-18: a permalink that already resolved to sweep mode
+            (`applyPermalinkFromLocation`) must show the sweep branch below the instant the
+            manifest decodes, not one tick later. */}
+        <SweepModeToggle disabled={disabled()} />
+
         <Show when={loadStatus() === 'loading'}>
           <p class="loading-notice">Loading market data...</p>
         </Show>
@@ -101,22 +115,16 @@ export function App() {
           </div>
         </Show>
 
-        <Show when={loadStatus() === 'ready'}>
-          {/* 07-01-PLAN.md Task 2: a minimal, unstyled control to reach sweep mode -- the styled
-              segmented control (SweepModeToggle) is plan 07-06's job and replaces this. */}
-          <button
-            type="button"
-            data-testid="sweep-mode-toggle"
-            onClick={() => setResultMode(resultMode() === 'single' ? 'sweep' : 'single')}
-          >
-            {resultMode() === 'single' ? 'Show sweep' : 'Show single run'}
-          </button>
+        {/* 07-06-PLAN.md Task 3: mounted in the sweep branch, above the field, styled as a
+            control and never inside it. This branch is independent of loadStatus() for the same
+            D-18 reason SweepModeToggle above is -- HeatmapPanel already handles grid={null}
+            gracefully (repaint no-ops until a real grid resolves). */}
+        <Show when={resultMode() === 'sweep'}>
+          <MetricToggle disabled={disabled()} />
+          <HeatmapPanel grid={sweepGrid()} />
+        </Show>
 
-          <Show when={resultMode() === 'sweep'}>
-            <HeatmapPanel grid={sweepGrid()} />
-          </Show>
-
-          <Show when={resultMode() === 'single'}>
+        <Show when={loadStatus() === 'ready' && resultMode() === 'single'}>
           {/* D-11: an invalid parameter combination clears chart and metrics and shows only the
               explanation. D-10: a cross-field caveat renders here too, but alongside the still-
               computed chart and metrics below -- ValidationExplanation itself decides the
@@ -185,7 +193,6 @@ export function App() {
                 </div>
               </Show>
             </Show>
-          </Show>
           </Show>
         </Show>
       </main>

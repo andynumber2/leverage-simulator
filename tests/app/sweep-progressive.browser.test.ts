@@ -85,8 +85,14 @@ async function mountAndEnterSweepMode(): Promise<HTMLDivElement> {
   document.body.appendChild(el)
   disposeApp = mountApp(el)
 
-  await waitFor(() => el.querySelector('[data-testid="sweep-mode-toggle"]') !== null)
-  const toggle = el.querySelector<HTMLButtonElement>('[data-testid="sweep-mode-toggle"]')
+  // 07-06-PLAN.md Task 2: SweepModeToggle now renders unconditionally (present-but-disabled
+  // while loading, D-18), so this waits for the "Sweep" radio specifically to become enabled --
+  // its mere presence in the DOM no longer implies the manifest has decoded.
+  await waitFor(() => {
+    const toggle = el.querySelector<HTMLInputElement>('[data-testid="sweep-mode-sweep"]')
+    return toggle !== null && !toggle.disabled
+  })
+  const toggle = el.querySelector<HTMLInputElement>('[data-testid="sweep-mode-sweep"]')
   expect(toggle).not.toBeNull()
   toggle!.click()
   expect(resultMode()).toBe('sweep')

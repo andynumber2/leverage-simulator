@@ -9,8 +9,15 @@
  * `SweepGrid` structurally extends `src/data/sweep-fixture-format.ts`'s `SweepFixture` (same
  * `cols`, `rows`, `meta`, `multiples`, `drawdowns`, `flags` field names and the same row-major
  * indexing), so `src/heatmap/field-sampler.ts` and `iso-lines.ts` -- built against `SweepFixture`
- * -- accept a live `SweepGrid` with no adaptation. It adds `annualized` (a third metric, plan
- * 07-06's territory) and `generation` (plan 07-05's staleness check).
+ * -- accept a live `SweepGrid` with no adaptation. It adds `annualized` (a third metric) and
+ * `generation` (plan 07-05's staleness check).
+ *
+ * 07-06-PLAN.md (orchestrator-authorized scope extension): `chunkBufferByteLength`'s wire layout
+ * carries `annualized` as a fourth segment, so `grid.annualized` is populated for real by a live
+ * sweep -- plan 07-03 computed `annualized` correctly in `computeChunkMetrics` but deliberately
+ * left this buffer layout at 3 segments so it would not destabilize `sweep-pool.ts`'s
+ * concurrently-edited merge loop (plan 07-05, same wave); wiring the 4th segment through was
+ * always this plan's territory, per this file's own prior header note.
  */
 
 import type { SweepFixture, SweepFixtureMeta } from '../data/sweep-fixture-format.ts'
@@ -54,16 +61,18 @@ export function cellIndex(col: number, row: number, cols: number = SWEEP_COLS): 
 
 /**
  * The byte length of a `sweep.worker.ts`/`sweep-pool.ts` chunk result buffer for `cellCount`
- * cells: three contiguous segments, `multiples` (Float32, 4 bytes/cell), `drawdowns` (Float32, 4
- * bytes/cell), `flags` (Uint8, 1 byte/cell). Declared here, in the shared geometry module both
- * `sweep.worker.ts` (the Worker side) and `sweep-pool.ts` (the main-thread side) already import
- * safely -- neither imports the other's module as a VALUE (only as a type), since a value import
- * of `sweep.worker.ts` from the main thread would pull `Comlink.expose(...)`'s module-load side
- * effect into the wrong global scope. One shared definition here is what keeps the two sides'
- * buffer layouts from drifting apart.
+ * cells: four contiguous segments, `multiples` (Float32, 4 bytes/cell), `drawdowns` (Float32, 4
+ * bytes/cell), `annualized` (Float32, 4 bytes/cell), `flags` (Uint8, 1 byte/cell). Declared here,
+ * in the shared geometry module both `sweep.worker.ts` (the Worker side) and `sweep-pool.ts` (the
+ * main-thread side) already import safely -- neither imports the other's module as a VALUE (only
+ * as a type), since a value import of `sweep.worker.ts` from the main thread would pull
+ * `Comlink.expose(...)`'s module-load side effect into the wrong global scope. One shared
+ * definition here is what keeps the two sides' buffer layouts from drifting apart.
  */
 export function chunkBufferByteLength(cellCount: number): number {
-  return cellCount * 4 /* multiples */ + cellCount * 4 /* drawdowns */ + cellCount /* flags */
+  return (
+    cellCount * 4 /* multiples */ + cellCount * 4 /* drawdowns */ + cellCount * 4 /* annualized */ + cellCount /* flags */
+  )
 }
 
 /**

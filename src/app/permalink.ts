@@ -3,11 +3,11 @@
  *
  * D-13 through D-16: the one canonical serialization format for a shared run, used by both
  * directions -- no field is ever formatted or parsed a second, different way anywhere else in the
- * app (Pitfall 5). Checkpoint-resolved schema (04-07-PLAN.md Task 1, decided): fifteen query-param
- * keys in one fixed emission order, all present except `holdingPeriodBars`, which is emitted only
- * when `holdMode` is "fixed". `resolvedEndDate` alone carries the frozen end date in "end-of-data"
- * mode (D-14); emitting both would encode the same fact twice with nothing in the contract saying
- * which one wins if a data refresh ever made them disagree.
+ * app (Pitfall 5). Checkpoint-resolved schema (04-07-PLAN.md Task 1, decided): seventeen
+ * query-param keys in one fixed emission order, all present except `holdingPeriodBars`, which is
+ * emitted only when `holdMode` is "fixed". `resolvedEndDate` alone carries the frozen end date in
+ * "end-of-data" mode (D-14); emitting both would encode the same fact twice with nothing in the
+ * contract saying which one wins if a data refresh ever made them disagree.
  *
  * `holdMode`'s wire value is "end-of-data", never "today": the UI now names the resolved end date
  * rather than promising a wall-clock refresh a manually-updated bundle cannot deliver
@@ -19,12 +19,25 @@
  * same leveraged equity curve on a linear axis when the sender saw log is not seeing the same
  * picture (PITFALLS E6), and this tool exists precisely to settle arguments like that one.
  *
+ * 07-06-PLAN.md Task 1: D-04 says "full sweep state joins the permalink" and names the sweep mode,
+ * holding period, displayed metric, tier, symbol and cost parameters -- but thirteen of those
+ * fields were already encoded (everything above except `mode`/`metric`). D-04's actual delta is
+ * therefore exactly two keys, `mode` (D-15's result-mode switch) and `metric` (D-23's displayed
+ * sweep metric), added here rather than the eleven fields D-04's own wording might suggest are
+ * still missing. Both are UNCONDITIONALLY optional on decode, defaulting to `'single'`/`'multiple'`
+ * respectively when absent (D-18): `decodeParams` rejects the WHOLE query string on any single
+ * missing required key, so if either were required, every permalink shared before this plan
+ * shipped -- none of which carry `mode` or `metric` at all -- would fail to decode entirely,
+ * evicting a perfectly valid single-run link. Unlike `holdingPeriodBars` (conditionally required
+ * BY `holdMode`), `mode`/`metric` are simply always-optional: present-and-valid, present-and-
+ * invalid (rejected by name), or absent (defaulted).
+ *
  * `decodeParams` is a TOTAL function over arbitrary `URLSearchParams` (T-04-01/T-04-03): every
  * field is read through `PERMALINK_KEYS` as an allow-list (an unknown key, a duplicated key --
  * read via `getAll`, since `get` silently returns the first -- or a missing key is rejected by
  * name), no dynamic property assignment from a URL-derived key ever happens (every field is
- * assigned by its own literal name), and an unrecognized `holdMode` value is rejected loudly
- * rather than silently defaulted.
+ * assigned by its own literal name), and an unrecognized `holdMode`/`mode`/`metric` value is
+ * rejected loudly rather than silently defaulted.
  */
 
 import type { BacktestRequest, ContributionFrequency } from '../data/kernel-inputs.ts'
@@ -38,15 +51,31 @@ export type HoldMode = 'fixed' | 'end-of-data'
  * comparing the same run see the same picture. */
 export type PermalinkScale = 'log' | 'linear'
 
+/** D-15's result-mode switch, wire values only. Mirrors `state.ts`'s `ResultMode` exactly, but is
+ * declared locally rather than imported: `state.ts` imports FROM this module, so an import the
+ * other way would be a cycle, and this file's own near-zero-import discipline (module header,
+ * `HoldMode`/`PermalinkScale` above) already treats this as the house style for a wire-only
+ * union. */
+export type PermalinkMode = 'single' | 'sweep'
+
+/** D-23's displayed sweep metric, wire values only. Mirrors `src/heatmap/field-sampler.ts`'s
+ * `Metric`/`SweepMetric` values exactly (multiple/drawdown/annualized), for the same
+ * local-alias-not-an-import reason as `PermalinkMode` above. */
+export type PermalinkMetric = 'multiple' | 'drawdown' | 'annualized'
+
 const CONTRIBUTION_FREQUENCIES: readonly ContributionFrequency[] = ['none', 'daily', 'monthly', 'quarterly', 'yearly']
 const HOLD_MODES: readonly HoldMode[] = ['fixed', 'end-of-data']
 const TIERS: readonly Tier[] = ['strict', 'extended']
 const SCALES: readonly PermalinkScale[] = ['log', 'linear']
+const MODES: readonly PermalinkMode[] = ['single', 'sweep']
+const METRICS: readonly PermalinkMetric[] = ['multiple', 'drawdown', 'annualized']
 
 /**
- * The fifteen query-param keys, in the fixed emission order the Task 1 checkpoint decided. Both
- * `encodeParams` and `decodeParams` read this array rather than repeating the key list, so an
- * added or renamed key cannot drift between the two directions.
+ * The seventeen query-param keys, in the fixed emission order the Task 1 checkpoint decided (plus
+ * 07-06-PLAN.md Task 1's `mode`/`metric` extension, appended at the end so every link encoded
+ * before this plan shipped is a strict prefix of what this plan now emits). Both `encodeParams`
+ * and `decodeParams` read this array rather than repeating the key list, so an added or renamed
+ * key cannot drift between the two directions.
  */
 export const PERMALINK_KEYS = [
   'symbol',
@@ -64,19 +93,23 @@ export const PERMALINK_KEYS = [
   'tier',
   'scale',
   'bundleVersion',
+  'mode',
+  'metric',
 ] as const
 
 export type PermalinkKey = (typeof PERMALINK_KEYS)[number]
 
 /** `BacktestRequest`'s ten fields (symbol through financingSpreadPercent, `src/data/
- * kernel-inputs.ts` lines 34-46) plus the five permalink-only fields the checkpoint's schema
- * adds. */
+ * kernel-inputs.ts` lines 34-46) plus the five checkpoint-schema fields and 07-06's `mode`/
+ * `metric` extension. */
 export interface PermalinkParams extends BacktestRequest {
   holdMode: HoldMode
   resolvedEndDate: string
   tier: Tier
   scale: PermalinkScale
   bundleVersion: string
+  mode: PermalinkMode
+  metric: PermalinkMetric
 }
 
 const LEVERAGE_DECIMALS = 2
@@ -153,6 +186,12 @@ function encodeField(key: PermalinkKey, params: PermalinkParams): string | null 
       return params.scale
     case 'bundleVersion':
       return params.bundleVersion
+    case 'mode':
+      // 07-06-PLAN.md Task 1: always emitted, unconditional -- the app itself always has a live
+      // resultMode() value to encode. Only DECODE treats this key as optional (see decodeParams).
+      return params.mode
+    case 'metric':
+      return params.metric
   }
 }
 
@@ -273,6 +312,10 @@ export function decodeParams(qs: URLSearchParams): DecodeParamsResult {
 
   for (const key of PERMALINK_KEYS) {
     if (key === 'holdingPeriodBars') continue // conditional key, already resolved above
+    // 07-06-PLAN.md Task 1: mode/metric are UNCONDITIONALLY optional, never required -- see this
+    // module's header for why (a link shared before this plan shipped carries neither key at
+    // all, and this required-key sweep would otherwise reject the whole query string over it).
+    if (key === 'mode' || key === 'metric') continue
     if (!presentKeys.has(key)) {
       return decodeError(`permalink: missing required query parameter "${key}"`)
     }
@@ -354,6 +397,31 @@ export function decodeParams(qs: URLSearchParams): DecodeParamsResult {
     return decodeError('permalink: query parameter "bundleVersion" must be a 12-character hex string')
   }
 
+  // 07-06-PLAN.md Task 1 (D-18): absent -> 'single', the default landing mode -- a link shared
+  // before this plan shipped carries no `mode` key at all and must keep decoding successfully,
+  // landing on exactly the same result column a pre-07-06 build would have shown.
+  let mode: PermalinkMode = 'single'
+  if (presentKeys.has('mode')) {
+    const rawMode = qs.get('mode')!
+    if (!(MODES as readonly string[]).includes(rawMode)) {
+      return decodeError(`permalink: unknown mode "${rawMode}"; supported values are "single", "sweep"`)
+    }
+    mode = rawMode as PermalinkMode
+  }
+
+  // Absent -> 'multiple' (multiple-of-contributed), the MetricToggle's own default segment --
+  // same backward-compatibility reasoning as `mode` above.
+  let metric: PermalinkMetric = 'multiple'
+  if (presentKeys.has('metric')) {
+    const rawMetric = qs.get('metric')!
+    if (!(METRICS as readonly string[]).includes(rawMetric)) {
+      return decodeError(
+        `permalink: unknown metric "${rawMetric}"; supported values are "multiple", "drawdown", "annualized"`,
+      )
+    }
+    metric = rawMetric as PermalinkMetric
+  }
+
   const params: PermalinkParams = {
     symbol,
     dividendReinvest,
@@ -370,6 +438,8 @@ export function decodeParams(qs: URLSearchParams): DecodeParamsResult {
     tier,
     scale,
     bundleVersion,
+    mode,
+    metric,
   }
 
   return { status: 'ok', params }

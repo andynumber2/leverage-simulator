@@ -191,10 +191,19 @@ export function resultMode(): ResultMode {
  * mounts; leaving it does not clear `sweepGrid()` -- the last resolved grid stays available so a
  * user flipping back and forth does not repay the sweep cost every toggle (a later plan may add
  * cache invalidation on a parameter change; this task's own scope is the single click-to-paint
- * path). */
+ * path).
+ *
+ * 07-06-PLAN.md Task 1 (D-04): also marks the permalink dirty through the SAME trailing-edge sync
+ * every other field uses (`schedulePermalinkSync`/`writePermalinkUrl`), so a mode switch flows
+ * into the address bar exactly like an ordinary parameter edit -- no second write path, no direct
+ * `history.replaceState` call here. A no-op before the first run has ever completed
+ * (`kernelInputs()` still `null`): there is nothing yet to re-serialize, and the next completed
+ * run's own `storeSuccessfulRun` call schedules the sync with the current mode regardless. */
 export function setResultMode(mode: ResultMode): void {
   setResultModeSignal(mode)
   if (mode === 'sweep') scheduleSweep()
+  const inputs = kernelInputs()
+  if (inputs !== null) schedulePermalinkSync(inputs)
 }
 
 /** The most recently resolved live sweep grid, or `null` before any sweep has ever completed.
@@ -266,8 +275,13 @@ export function displayedMetric(): Metric {
   return displayedMetricSignal()
 }
 
+/** 07-06-PLAN.md Task 1 (D-04): same trailing-edge permalink sync `setResultMode` uses above --
+ * never `scheduleSweep`, never `sweepGeneration` (D-23/D-24: a metric change re-colors the cached
+ * grid, it does not re-run the sweep). */
 export function setDisplayedMetric(metric: Metric): void {
   setDisplayedMetricSignalInternal(metric)
+  const inputs = kernelInputs()
+  if (inputs !== null) schedulePermalinkSync(inputs)
 }
 
 /** 07-05-PLAN.md Task 2 (D-19 through D-22): the sweep grid cell the crosshair is currently
@@ -753,6 +767,11 @@ function writePermalinkUrl(inputs: KernelInputs): void {
     tier: activeTier(),
     scale: scale(),
     bundleVersion: BUNDLE_VERSION,
+    // 07-06-PLAN.md Task 1 (D-04): read live, same discipline as every other field above -- the
+    // only way either changes is through setResultMode/setDisplayedMetric, both of which
+    // reschedule this same sync with fresh values before a stale call could ever fire.
+    mode: resultMode(),
+    metric: displayedMetric(),
   }
   const qs = encodeParams(params)
   // T-05-20: re-adds the methodology flag when the overlay is currently open -- this is the
@@ -1048,6 +1067,16 @@ function applyPermalinkFromLocation(): void {
     })
     setScaleSignal(params.scale)
     setActiveTier(params.tier)
+    // 07-06-PLAN.md Task 1 (D-04/D-18): raw signal writes, not `setResultMode`/
+    // `setDisplayedMetric` -- those exported setters also mark the permalink dirty
+    // (`schedulePermalinkSync`), which would be a no-op here anyway (no run has completed yet)
+    // but is pointless work at boot, and `setResultMode`'s own `scheduleSweep()` call would fire
+    // before the bundle has loaded (`runSweepNow`'s own guard bails out while `status()` is still
+    // 'loading'). `applyLoadedBundle` (below) is what actually schedules the sweep once the
+    // bundle is ready, for a decoded `mode: 'sweep'` link exactly as it does for `mode: 'single'`
+    // via `scheduleRun()`.
+    setResultModeSignal(params.mode)
+    setDisplayedMetricSignalInternal(params.metric)
   } else if (decoded.status === 'error') {
     permalinkDecodeFailedAtBoot = true
     clearForEviction(decoded.error)
@@ -1160,6 +1189,14 @@ function applyLoadedBundle(loaded: LoadedBundle): void {
     return
   }
   scheduleRun()
+  // 07-06-PLAN.md Task 1 (D-04/D-18): a decoded permalink that already resolved to sweep mode
+  // (`applyPermalinkFromLocation`, which runs before this, at the top of `initializeApp`) needs
+  // its own sweep scheduled once the bundle is actually ready -- a `scheduleSweep()` call made at
+  // decode time would have been a harmless no-op, since `runSweepNow`'s own guard bails out while
+  // `status()` is still 'loading'. Mirrors `updateBacktestRequest`'s own `resultModeSignal() ===
+  // 'sweep'` check (D-32), applied here to the one path a parameter EDIT never covers: landing
+  // directly on sweep mode from a link, with no edit ever firing.
+  if (resultModeSignal() === 'sweep') scheduleSweep()
 }
 
 async function runInitialLoad(): Promise<void> {
