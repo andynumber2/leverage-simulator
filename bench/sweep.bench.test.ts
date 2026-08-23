@@ -411,6 +411,32 @@ test('PERF-03: a full 10,000-cell sweep on the real production Worker pool stays
   expect(() => assertWithinBudget(row)).not.toThrow()
 })
 
+/**
+ * 07.1-03-PLAN.md Task 2: the ceiling this arm's own contribution to bench runtime must not
+ * exceed -- the 7,303.90ms raw the arm cost at `sampleCount=1` on the D-17 baseline (CI run
+ * 32654061079, `hardwareConcurrency=4`). Criterion 4 wants a larger sample count on this arm;
+ * criterion 5 wants the whole bench suite back under `BENCH_TOTAL_RUNTIME_CAP_MS`. This constant
+ * is the resolution: raising the sample count may not cost this arm more of the suite's runtime
+ * than it already spent, full stop.
+ */
+const IRR_CONTRIBUTION_SCHEDULE_BASELINE_CEILING_MS = 7303.9
+
+/**
+ * 07.1-03-PLAN.md Task 2's own required derivation, before it was run: Task 1's local measurement
+ * (`measureMinOfN(1, ...)`, min-of-3 repeat samples on this executor's own dev sandbox,
+ * `hardwareConcurrency=9`) at BEFORE=2003.00ms raw and AFTER=1097.60ms raw -- a measured 1.83x
+ * reduction, not the 3.14x 07.1-PERF-03-PROFILE.md section 5 projected from the iteration-count
+ * ratio alone (that projection assumed nearly all of the branch's cost was `npv` evaluations; the
+ * measured reduction is smaller because `buildCashFlows`, `runBacktest` and pool/dispatch overhead
+ * do not shrink with Lever A). Scaled by the ratio between this host and the D-17 baseline on the
+ * SAME pre-change code (2010.20ms local against 7303.90ms baseline, both `hardwareConcurrency=9`
+ * vs `hardwareConcurrency=4`, run 32654061079 -- PROJECT.md's own recorded pair): ratio = 7303.90 /
+ * 2010.20 = 3.6334. Projected D-17-baseline raw cost after Task 1's changes = 1097.60 * 3.6334 ~=
+ * 3987.6ms. This is a derived SELECTION figure, never presented as a measurement -- plan 07.1-06's
+ * CI run reports the real cost.
+ */
+const IRR_CONTRIBUTION_SCHEDULE_PROJECTED_BASELINE_PER_SWEEP_MS = 3987.6
+
 test(
   'PERF-03 info (F-06): the contribution-schedule sweep (D-24 solveIrr branch) cost is on the ' +
     'record, not estimated',
@@ -420,22 +446,22 @@ test(
     const contributionParams = baseParams({ contributionAmount: 250, contributionFrequency: 'monthly' })
     const grid = makeGrid()
 
-    // Single-sample measurement, not REPEAT_COUNT's usual 5 (07-03-PLAN.md Task 2: "reduce
-    // repeat counts on the info-line arm before touching the headline arm" when the real-bundle
-    // sweep pushes the suite toward BENCH_TOTAL_RUNTIME_CAP_MS). The monthly-contribution
-    // solveIrr branch, over this file's full-extended-tier entry-date axis, is measurably more
-    // expensive per cell than the CAGR branch: bounded bisection over a cash-flow list with
-    // roughly one entry per elapsed month, up to ~98 years / ~1,176 flows for the earliest
-    // columns, versus one closed-form Math.pow call. This is disclosure, not a budget gate (no
-    // MeasurementRow is recorded for this arm), so a single sample is an honest trade -- disclosed
-    // explicitly as sampleCount=1 below, never presented as a REPEAT_COUNT minimum-of-N figure it
-    // is not.
-    const rawMs = await measureMinOfN(1, async () => {
+    // 07.1-03-PLAN.md Task 2: sampleCount raised from 1 to 2, the largest value this task could
+    // honestly justify against its own stated ceiling. Applying the derivation above at N=2:
+    // 2 * 3987.6 = 7975.2ms projected, ~671ms (9.2%) OVER the 7,303.90ms ceiling -- N=3 and N=5
+    // (the other candidates in the plan's own {2,3,5} set) project to 11,962.8ms and 19,938.0ms,
+    // 64% and 173% over respectively, so N=2 is the only candidate close to the ceiling, not a
+    // free pass. This is disclosed, not absorbed: 07.1-03-SUMMARY.md carries this finding to the
+    // Task 3 checkpoint, because Task 1's measured reduction (1.83x) fell short of the profile's
+    // projected one (3.14x) by enough that even the smallest raise this task's own acceptance
+    // criteria requires (N>=2) cannot cleanly honor the ceiling from a local-host projection alone
+    // -- plan 07.1-06's CI run is what settles it for real.
+    const rawMs = await measureMinOfN(2, async () => {
       await pool.runSweep(grid, { generation: 900, params: contributionParams, entryDates })
     })
 
     // Correctness before disclosure: a coprime-stride sample (not the full 10,000 cells, for the
-    // same cost reason the measured sample count above is 1) proves the sweep this figure
+    // same cost reason the measured sample count above is small) proves the sweep this figure
     // describes actually computed something, before the figure is recorded.
     for (let i = 0; i < SERIAL_REFERENCE_SAMPLE_COUNT; i++) {
       const cell = (i * SERIAL_REFERENCE_STRIDE) % CELL_COUNT
@@ -446,13 +472,24 @@ test(
     }
 
     const normalizedMs = normalize(rawMs, score)
+    const irrBudgetMs = PERF_BUDGETS['PERF-03'].thresholdMs
+    const irrBudgetRatio = normalizedMs / irrBudgetMs
+    const irrBudgetDisposition = normalizedMs <= irrBudgetMs ? 'inside' : 'outside'
+    const sampleCount = 2
+    const projectedBaselineTotalMs = sampleCount * IRR_CONTRIBUTION_SCHEDULE_PROJECTED_BASELINE_PER_SWEEP_MS
+    const ceilingDisposition =
+      projectedBaselineTotalMs <= IRR_CONTRIBUTION_SCHEDULE_BASELINE_CEILING_MS ? 'inside' : 'outside'
 
     await commands.recordInfoLine(
       'PERF-03-irr-contribution-schedule',
-      'PERF-03 with a monthly contribution schedule (F-06, D-24 solveIrr branch), sampleCount=1 ' +
-        "(not REPEAT_COUNT minimum-of-N, see this test's own comment): " +
+      'PERF-03 with a monthly contribution schedule (F-06, D-24 solveIrr branch): ' +
+        `sampleCount=${sampleCount} (not REPEAT_COUNT minimum-of-N, see this test's own comment): ` +
         `measuredMs=${formatMeasured(rawMs)} normalizedMs=${formatMeasured(normalizedMs)} ` +
-        `hardwareConcurrency=${navigator.hardwareConcurrency} workerCount=${pool.workerCount}`,
+        `hardwareConcurrency=${navigator.hardwareConcurrency} workerCount=${pool.workerCount} ` +
+        `budgetMs=${irrBudgetMs} ratioToBudget=${formatMeasured(irrBudgetRatio)} disposition=${irrBudgetDisposition} ` +
+        `runtimeCeilingMs=${IRR_CONTRIBUTION_SCHEDULE_BASELINE_CEILING_MS} ` +
+        `projectedBaselineTotalMs=${formatMeasured(projectedBaselineTotalMs)} ` +
+        `runtimeCeilingDisposition=${ceilingDisposition} (a SELECTION derivation, not a measurement -- see this test's own comment)`,
     )
   },
   30_000,
