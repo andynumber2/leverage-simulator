@@ -604,11 +604,25 @@ export function backtestRequest(): BacktestRequest {
   return request
 }
 
+/** 07-08-PLAN.md Task 3 (Rule 3 deviation, documented in this plan's own SUMMARY.md): `state.ts`
+ * is not in 07-08-PLAN.md's declared `files_modified`, but committing a crosshair cell click
+ * needs a write path that patches `entryDate`/`leverage` WITHOUT re-sweeping, which no existing
+ * exported function provided. Adding an optional, default-`false` option here is the smallest
+ * change that satisfies that requirement without altering any existing call site's behavior. */
+export interface UpdateBacktestRequestOptions {
+  /** True for a crosshair-cell commit (`HeatmapPanel.tsx`'s click handler, D-19/D-22): the click
+   * moves the crosshair to a cell WITHIN an already-computed field, it is not a sweep input
+   * change, so it must not itself schedule a re-sweep (proven by a `sweepGeneration()`-unchanged
+   * browser assertion). Every other caller (the parameter column controls) omits this and keeps
+   * today's behavior of re-sweeping live while in sweep mode (D-32). */
+  skipSweep?: boolean
+}
+
 /** Writes a partial patch onto the reactive request store and schedules the coalesced recompute
  * (D-03). No parameter control exists yet in this plan (04-04/04-05 fill the parameter column);
  * this is the one write path both those future controls and this plan's browser test use to
  * change what `scheduleRun` computes against. */
-export function updateBacktestRequest(patch: Partial<BacktestRequest>): void {
+export function updateBacktestRequest(patch: Partial<BacktestRequest>, options?: UpdateBacktestRequestOptions): void {
   setRequestStore(patch)
   scheduleRun()
   // 07-05-PLAN.md Task 2, D-32: a parameter change made while sweep mode is active re-sweeps
@@ -617,8 +631,9 @@ export function updateBacktestRequest(patch: Partial<BacktestRequest>): void {
   // drag position: `scheduleSweep`'s own requestAnimationFrame coalescing (the same coalescing
   // `scheduleRun` above already uses) is the only rate limiting -- deliberately no debounce and
   // no commit-on-release, so the cancellation path this exercises is the one D-32 calls out as
-  // the hardest test of PERF-06/PERF-07.
-  if (resultModeSignal() === 'sweep') scheduleSweep()
+  // the hardest test of PERF-06/PERF-07. 07-08-PLAN.md Task 3: skipped entirely when
+  // `options.skipSweep` is true (a crosshair-cell commit).
+  if (resultModeSignal() === 'sweep' && options?.skipSweep !== true) scheduleSweep()
 }
 
 export function scaleMode(): ScaleMode {
