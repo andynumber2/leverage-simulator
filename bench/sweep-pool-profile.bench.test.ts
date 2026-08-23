@@ -36,7 +36,7 @@ import {
 } from '../src/sweep/sweep-grid.ts'
 import { createSweepPool, type SweepBaseParams, type SweepPool } from '../src/sweep/sweep-pool.ts'
 import { computeChunkMetrics, type SweepChunkRequest } from '../src/sweep/sweep.worker.ts'
-import { buildCashFlows, npv, solveIrr, type CashFlow } from '../src/metrics/irr.ts'
+import { buildCashFlows, npv, solveIrr, type CashFlows } from '../src/metrics/irr.ts'
 import { fromDaysSinceEpoch, indexOfDate, toDaysSinceEpoch } from '../tools/bundle-compiler/src/calendar.ts'
 import { measureMinOfN, normalize } from './calibration.ts'
 import { resolveRunCalibration } from './canonical-calibration.ts'
@@ -169,7 +169,7 @@ function chunkRequestFor(params: SweepBaseParams, columnEntryDates: readonly str
 /** Resolves one column and runs the backtest for REPRESENTATIVE_ROW, returning the cash-flow
  * sequence buildCashFlows produces for it -- exactly the two calls src/sweep/sweep.worker.ts's
  * computeChunkMetrics makes inside each pool worker for the solveIrr branch. */
-function buildFlowsFor(bundle: LoadedBundle, params: SweepBaseParams, entryDate: string): CashFlow[] {
+function buildFlowsFor(bundle: LoadedBundle, params: SweepBaseParams, entryDate: string): CashFlows {
   const resolution = resolveColumnSeries(bundle, columnRequestFor(params, entryDate))
   if (resolution.incomplete) {
     throw new Error(
@@ -302,7 +302,7 @@ test('sweep-pool-profile: attributed breakdown, D-24 solveIrr contribution-sched
   const lastEntryDate = irrEntryDates[irrEntryDates.length - 1]!
   const firstFlows = buildFlowsFor(bundle, params, firstEntryDate)
   const lastFlows = buildFlowsFor(bundle, params, lastEntryDate)
-  const cashFlowCountRatio = lastFlows.length / firstFlows.length
+  const cashFlowCountRatio = lastFlows.count / firstFlows.count
 
   // npvEvaluationsPerSolve: measured, not counted from source. A batch of npv() calls against the
   // FIRST column's flows gives npvMs; the same batch of solveIrr() calls (over the same flows)
@@ -332,8 +332,8 @@ test('sweep-pool-profile: attributed breakdown, D-24 solveIrr contribution-sched
       `idealParallelMs=${formatMeasured(serialKernelMs / pool.workerCount)} (derived, serialKernelMs / workerCount) ` +
       `poolOverheadMs=${formatMeasured(warmSweepMs - serialKernelMs / pool.workerCount)} (derived, warmSweepMs - idealParallelMs) ` +
       `representativeRow=${REPRESENTATIVE_ROW} representativeLeverage=${leverage.toFixed(4)} ` +
-      `cashFlowCountFirst=${firstFlows.length} cashFlowCountFirstEntryDate=${firstEntryDate} ` +
-      `cashFlowCountLast=${lastFlows.length} cashFlowCountLastEntryDate=${lastEntryDate} ` +
+      `cashFlowCountFirst=${firstFlows.count} cashFlowCountFirstEntryDate=${firstEntryDate} ` +
+      `cashFlowCountLast=${lastFlows.count} cashFlowCountLastEntryDate=${lastEntryDate} ` +
       `cashFlowCountRatio=${formatMeasured(cashFlowCountRatio)} ` +
       `npvEvaluationsPerSolve=${formatMeasured(npvEvaluationsPerSolve)} batchSize=${NPV_SOLVE_BATCH_SIZE} ` +
       `npvMs=${formatMeasured(npvMs)} solveIrrMs=${formatMeasured(solveIrrMs)}`,
