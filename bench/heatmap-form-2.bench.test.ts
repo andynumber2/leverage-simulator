@@ -87,8 +87,24 @@ const PHASE_6_HEIGHT_PX = 224
 
 /** Tuned empirically, per the file this replaces: form 2's repaint does far more per-pixel work
  * at 1200x400 than the Phase 6 mockup's own 764x224 measurement did, so a correspondingly smaller
- * batch than the mockup file's own 50 still clears `MIN_MEASUREMENT_MS`. */
+ * batch than the mockup file's own 50 still clears `MIN_MEASUREMENT_MS`. Governs ONLY the
+ * shipped/gated 'resample' PERF-05 measurement below (and its own phase6-geometry info arm),
+ * which records a real `MeasurementRow` and is therefore NOT eligible for sampling-cost
+ * reduction under 07-11-PLAN.md Task 1's rule. */
 const REPAINT_BATCH_SIZE = 20
+
+/** 07-11-PLAN.md Task 1 (gap-closure): the informational 'polygon' (REJECTED) repaint arm below
+ * records no `MeasurementRow` (`recordInfoLine` only, see this file's own header), making its
+ * sampling cost eligible for reduction. At this arm's own measured ~92ms/call raw cost on this
+ * dev sandbox, `REPAINT_BATCH_SIZE=20` costs roughly 10.7s of wall clock on its own -- the single
+ * largest contributor to a full-suite `BENCH_TOTAL_RUNTIME_CAP_MS` breach found while establishing
+ * the PERF-03 baseline (see `07-PERF-03-BASELINE.md` section 1 for the measured per-file costs).
+ * A batch of 2 still clears `MIN_MEASUREMENT_MS`'s 10ms floor with an order-of-magnitude margin
+ * (2 calls at ~92ms/call is ~184ms, roughly 18x the floor) while cutting this arm's own cost by
+ * about 90%. The figure stays fully disclosed (`batchSize` is printed alongside it, same as
+ * before); only sampling cost is cut, never disclosure, and the shipped/gated PERF-05 row's own
+ * `REPAINT_BATCH_SIZE` above is untouched. */
+const REJECTED_POLYGON_BATCH_SIZE = 2
 
 let fixture: SweepFixture
 let grid: SweepGrid
@@ -306,7 +322,7 @@ test('informational: form 2 (filled contour, polygon FillPath, REJECTED) repaint
   paintSweepField(ctx, grid, { metric: 'multiple', fillPath: 'polygon' })
 
   let metric: 'multiple' | 'drawdown' = 'multiple'
-  const rawMs = await measureBatchedMinOfN(REPEAT_COUNT, REPAINT_BATCH_SIZE, () => {
+  const rawMs = await measureBatchedMinOfN(REPEAT_COUNT, REJECTED_POLYGON_BATCH_SIZE, () => {
     metric = metric === 'multiple' ? 'drawdown' : 'multiple'
     paintSweepField(ctx, grid, { metric, fillPath: 'polygon' })
   })
@@ -315,11 +331,14 @@ test('informational: form 2 (filled contour, polygon FillPath, REJECTED) repaint
   await commands.recordInfoLine(
     'PERF-05-heatmap-form-2-polygon-rejected',
     `PERF-05-heatmap-form-2-polygon-rejected: fillPath=polygon normalizedMs=${normalizedMs.toFixed(2)} ` +
-      `rawMs=${rawMs.toFixed(4)} batchSize=${REPAINT_BATCH_SIZE} ` +
+      `rawMs=${rawMs.toFixed(4)} batchSize=${REJECTED_POLYGON_BATCH_SIZE} ` +
       `geometry={widthPx:${MEASUREMENT_WIDTH_PX},heightPx:${MEASUREMENT_HEIGHT_PX}} budget=16ms ` +
       '(informational only, NOT the official PERF-05 row -- 07-04-PLAN.md Task 3 rejected this ' +
       'path; the historical figure the decision was made against was 149.71ms on the same dev ' +
-      'sandbox, recorded in this file own header and the Task 2 commit message)',
+      'sandbox, recorded in this file own header and the Task 2 commit message; batchSize reduced ' +
+      'from the shipped arm\'s REPAINT_BATCH_SIZE=20 to 2 by 07-11-PLAN.md Task 1, a sampling-cost ' +
+      'reduction on an arm that records no MeasurementRow, to clear a full-suite ' +
+      'BENCH_TOTAL_RUNTIME_CAP_MS breach -- see this file\'s own REJECTED_POLYGON_BATCH_SIZE comment)',
   )
 })
 
