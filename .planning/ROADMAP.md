@@ -38,6 +38,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 5: Attribution and the Credibility Surface** - Name which mechanism consumed the money, and let a skeptic check every assumption (completed 2026-08-21)
 - [ ] **Phase 6: Heatmap Design Pass** - Argue the entry-date x leverage treatment from throwaway mockups, since there is no prior art to copy
 - [ ] **Phase 7: Sweep Engine and the Heatmap** - 10,000 backtests fanned across workers and painted progressively without stalling the UI
+- [ ] **Phase 7.1: Sweep Pool Tuning** (INSERTED) - Bring PERF-03's 10,000-cell sweep inside its 1000ms budget on the declared 4-core baseline, without relaxing anything
 - [ ] **Phase 8: Export and the Canonical Arguments** - Get the result out of the app as a picture, a CSV, or a curated permalink
 
 ## Phase Details
@@ -350,6 +351,26 @@ Plans:
 
 **UI hint**: yes
 
+### Phase 7.1: Sweep Pool Tuning (INSERTED)
+
+**Goal**: The 10,000-cell sweep completes inside its 1000ms budget on the declared 4-core baseline, closing Phase 7's third success criterion by making the number true rather than by moving the number
+**Mode:** mvp
+**Depends on**: Phase 7 (tunes `src/sweep/sweep-pool.ts` and `src/sweep/sweep.worker.ts` as shipped there, and re-runs the same `bench/sweep.bench.test.ts` recorder)
+**Requirements**: PERF-03 (re-measurement; primary mapping stays Phase 7), PERF-01a (no-relaxation constraint)
+**Inserted because**: 07-VERIFICATION.md closed 4/5 success criteria and left criterion 3 measured-failing: the zero-contribution headline row recorded normalizedMs=1168.59 against a 1000ms budget on the D-17 baseline (CI run 32654061079, hardwareConcurrency=4, workerCount=3, source=production, verdict=fail), and the contribution-schedule (`solveIrr`) branch recorded normalizedMs=8961.84. PROJECT.md's "PERF-03 D-17 baseline escalation (Phase 7)" row names pool tuning as the lever to spend and defers implementation to a follow-up phase. This is that phase.
+
+**Success Criteria** (what must be TRUE):
+
+  1. Where the 4-core baseline sweep actually spends its wall clock is a measured breakdown, not an inference. The current PROJECT.md row states outright that a shared worker-pool root cause for the two overruns is "an inference from the pool configuration, not a profiled finding"; this phase replaces that inference with attributed figures covering at least worker startup, chunk dispatch and transfer, per-cell kernel time, and idle time at `workerCount=3`, so the tuning that follows is aimed rather than guessed.
+  2. The zero-contribution headline PERF-03 row measures at or under its 1000ms budget on the declared D-17 baseline (GitHub Actions `ubuntu-latest`, `hardwareConcurrency=4`), reported by `npm run bench` with `source=production` and `verdict=pass`, and the verdict is real rather than withheld. The figure covers the same fixed 200x50 default grid Phase 7 measured, so it stays comparable to 1168.59ms.
+  3. Nothing was relaxed to get there. `PERF-03.thresholdMs` stays 1000, `NOMINAL_REFERENCE_MS` stays 40, D-19's lock holds on all eight budgets, D-03's coarser default grid stays unspent and in reserve, and `git diff` proves no calibration constant, run-level cap, or budget value moved in response to a measurement. Any relaxation instead escalates as a Key Decision under PERF-01a rather than being edited in.
+  4. The contribution-schedule (`solveIrr`) branch is re-measured on the same baseline at a sample count large enough to carry a verdict rather than an anecdote, and its result is either inside the same 1000ms budget or recorded as a PROJECT.md Key Decision naming the specific remaining lever and why pool tuning alone could not reach it. It is not left as an unresolved informational row a second time.
+  5. The bench suite's own total runtime is back inside `BENCH_TOTAL_RUNTIME_CAP_MS` (30,000ms) on the baseline host, and `assertRunInvariants` reports a cap breach independently of whether a verdict-fail fires first, so the 43,259ms breach that 07-VERIFICATION.md carried forward can no longer be masked.
+  6. The sweep still computes what it computed before. The Phase 7 correctness suite (per-cell one-pass metrics, cancellation, pool-versus-serial equality, ruin and short-horizon rules) passes unchanged, and pool-versus-serial equality is asserted against the tuned partition shape so a faster wrong answer cannot pass as an improvement.
+
+**Plans:** TBD
+**UI hint**: no
+
 ### Phase 8: Export and the Canonical Arguments
 
 **Goal**: A result leaves the app in whatever form the argument needs: a picture, the raw numbers, or a curated link
@@ -369,7 +390,7 @@ Plans:
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
+Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 7.1 → 8
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -380,11 +401,15 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | 5. Attribution and the Credibility Surface | 9/9 | Complete    | 2026-08-21 |
 | 6. Heatmap Design Pass | 6/6 | Complete    | 2026-08-21 |
 | 7. Sweep Engine and the Heatmap | 12/12 | In Progress|  |
+| 7.1. Sweep Pool Tuning (INSERTED) | 0/TBD | Not started | - |
 | 8. Export and the Canonical Arguments | 0/TBD | Not started | - |
 
 ## Coverage
 
 All 72 v1 requirements map to exactly one phase. No orphans, no duplicates.
+
+Phase 7.1 (INSERTED) adds no new requirement mapping. It re-measures PERF-03, whose primary
+mapping stays Phase 7, and works under PERF-01a, whose primary mapping stays Phase 1.
 
 | Category | Total | Phase mapping |
 |----------|-------|---------------|
