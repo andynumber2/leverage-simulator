@@ -29,6 +29,14 @@
  * This section mounts the REAL app (`mountApp`), unlike Task 2's synthetic-grid section above --
  * Single run's own computed result and the permalink URL are both real-app concerns a standalone
  * `HeatmapPanel` render has no access to.
+ *
+ * 07-10-PLAN.md Task 2's coverage (same file, per that plan's own `<files>` list): pan/zoom
+ * (D-34/D-35) -- a wheel gesture zooms toward the pointer without touching `sweepGeneration()`; a
+ * pointer drag at fit scale is a genuine no-op (pixel-identical canvas); the field's own new
+ * zoom-aware axis ticks always name a real `grid.meta.entryDates`/leverage value; a committed
+ * crosshair survives a zoom (same grid cell, repainted at the transformed screen position); the
+ * permalink carries no viewport key and a full pan-then-zoom-then-pan sequence leaves the URL
+ * byte-identical.
  */
 
 import { afterEach, beforeEach, expect, test } from 'vitest'
@@ -38,6 +46,7 @@ import { render } from 'solid-js/web'
 import { mountApp } from '../../src/app/main.tsx'
 import { HeatmapPanel } from '../../src/app/components/ResultColumn/HeatmapPanel.tsx'
 import { nearestRowForLeverage } from '../../src/app/components/ResultColumn/SliceChart.tsx'
+import { PERMALINK_KEYS } from '../../src/app/permalink.ts'
 import { CELL_FLAG_RUINED } from '../../src/data/sweep-fixture-format.ts'
 import { gridColToDisplayX, gridRowToDisplayY } from '../../src/heatmap/paint-contour.ts'
 import { createSweepGrid, type SweepGrid, type SweepGridMeta } from '../../src/sweep/sweep-grid.ts'
@@ -148,6 +157,62 @@ function dispatchClick(el: HTMLElement, xPx: number, yPx: number): void {
       bubbles: true,
       clientX: rect.left + xPx,
       clientY: rect.top + yPx,
+    }),
+  )
+}
+
+/** A real wheel notch at `(xPx, yPx)` in the overlay's own field-rect (screen) space --
+ * `deltaY < 0` zooms in, `deltaY > 0` zooms out, matching `HeatmapPanel.tsx`'s own `handleWheel`. */
+function dispatchWheel(el: HTMLElement, xPx: number, yPx: number, deltaY: number): void {
+  const rect = el.getBoundingClientRect()
+  el.dispatchEvent(
+    new WheelEvent('wheel', {
+      bubbles: true,
+      cancelable: true,
+      clientX: rect.left + xPx,
+      clientY: rect.top + yPx,
+      deltaY,
+    }),
+  )
+}
+
+/** A full pointerdown -> N pointermoves -> pointerup drag from `(fromX, fromY)` to `(toX, toY)`,
+ * in the overlay's own field-rect (screen) space -- `buttons: 1` throughout, matching a real
+ * primary-button press, so `HeatmapPanel.tsx`'s own pan-drag tracking (armed on pointerdown, only
+ * a genuine pan once movement exceeds `PAN_DRAG_THRESHOLD_PX`) engages exactly as it would for a
+ * real user drag. */
+function dispatchPointerDrag(el: HTMLElement, fromX: number, fromY: number, toX: number, toY: number, steps = 10): void {
+  const rect = el.getBoundingClientRect()
+  const pointerId = 1
+  el.dispatchEvent(
+    new PointerEvent('pointerdown', {
+      bubbles: true,
+      clientX: rect.left + fromX,
+      clientY: rect.top + fromY,
+      pointerId,
+      buttons: 1,
+    }),
+  )
+  for (let i = 1; i <= steps; i++) {
+    const x = fromX + ((toX - fromX) * i) / steps
+    const y = fromY + ((toY - fromY) * i) / steps
+    el.dispatchEvent(
+      new PointerEvent('pointermove', {
+        bubbles: true,
+        clientX: rect.left + x,
+        clientY: rect.top + y,
+        pointerId,
+        buttons: 1,
+      }),
+    )
+  }
+  el.dispatchEvent(
+    new PointerEvent('pointerup', {
+      bubbles: true,
+      clientX: rect.left + toX,
+      clientY: rect.top + toY,
+      pointerId,
+      buttons: 0,
     }),
   )
 }
@@ -545,6 +610,185 @@ test(
   () => {
     expect(document.querySelectorAll('[ondblclick]').length).toBe(0)
   },
+)
+
+// -------------------------------------------------------------------------------------------
+// 07-10-PLAN.md Task 2: pan/zoom (D-34/D-35)
+// -------------------------------------------------------------------------------------------
+
+function buffersIdentical(a: Uint8ClampedArray, b: Uint8ClampedArray): boolean {
+  if (a.length !== b.length) return false
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] !== b[i]) return false
+  }
+  return true
+}
+
+test('the permalink carries no viewport key: PERMALINK_KEYS still has exactly seventeen entries', () => {
+  expect(PERMALINK_KEYS.length).toBe(17)
+})
+
+test('a pan drag at fit scale leaves the field canvas pixel content unchanged', async () => {
+  const grid = makeSyntheticGrid()
+  const { container: el, overlay } = mountPanel(grid)
+  await nextFrame()
+
+  const canvas = el.querySelector<HTMLCanvasElement>('[data-testid="heatmap-canvas"]')!
+  const ctx = canvas.getContext('2d')!
+  const before = ctx.getImageData(0, 0, HEATMAP_WIDTH_PX, HEATMAP_HEIGHT_PX).data
+
+  dispatchPointerDrag(overlay, 400, 120, 250, 60)
+  await nextFrame()
+
+  const after = ctx.getImageData(0, 0, HEATMAP_WIDTH_PX, HEATMAP_HEIGHT_PX).data
+  expect(buffersIdentical(before, after)).toBe(true)
+})
+
+test('a pan drag at fit scale never commits a crosshair cell (a drag is not a click)', async () => {
+  const grid = makeSyntheticGrid()
+  const { overlay } = mountPanel(grid)
+  await nextFrame()
+
+  expect(crosshairCell()).toBeNull()
+  dispatchPointerDrag(overlay, 400, 120, 250, 60)
+  await nextFrame()
+  expect(crosshairCell()).toBeNull()
+})
+
+test('zooming in renders entry-date axis tick labels that all appear in the grid own meta.entryDates', async () => {
+  const grid = makeSyntheticGrid()
+  const { container: el, overlay } = mountPanel(grid)
+  await nextFrame()
+
+  dispatchWheel(overlay, 400, 120, -100)
+  await nextFrame()
+  dispatchWheel(overlay, 400, 120, -100)
+  await nextFrame()
+
+  // 07-10-PLAN.md Task 2's own D-14 fixed-slot-count discipline: the tick strip always renders a
+  // constant element count, padding empty (zero-width, no-op) placeholders when there is no real
+  // tick to show -- filter those out before asserting on rendered TEXT content.
+  const tickEls = Array.from(el.querySelectorAll('[data-testid="heatmap-axis-tick-entry-date"]')).filter(
+    (tickEl) => (tickEl.textContent ?? '') !== '',
+  )
+  expect(tickEls.length).toBeGreaterThan(0)
+  for (const tickEl of tickEls) {
+    const text = tickEl.textContent ?? ''
+    expect(grid.meta.entryDates).toContain(text)
+  }
+})
+
+test('zooming in renders leverage axis tick labels that all lie within the 1x to 5x range', async () => {
+  const grid = makeSyntheticGrid()
+  const { container: el, overlay } = mountPanel(grid)
+  await nextFrame()
+
+  dispatchWheel(overlay, 400, 120, -100)
+  await nextFrame()
+  dispatchWheel(overlay, 400, 120, -100)
+  await nextFrame()
+
+  const tickEls = Array.from(el.querySelectorAll('[data-testid="heatmap-axis-tick-leverage"]')).filter(
+    (tickEl) => (tickEl.textContent ?? '') !== '',
+  )
+  expect(tickEls.length).toBeGreaterThan(0)
+  for (const tickEl of tickEls) {
+    const text = tickEl.textContent ?? ''
+    const value = Number.parseFloat(text.replace('x', ''))
+    expect(Number.isFinite(value)).toBe(true)
+    expect(value).toBeGreaterThanOrEqual(1)
+    expect(value).toBeLessThanOrEqual(5)
+  }
+})
+
+test('a committed crosshair survives a zoom centred on its own screen position: same grid cell, same on-screen pixel', async () => {
+  const grid = makeSyntheticGrid()
+  const { overlay } = mountPanel(grid)
+  await nextFrame()
+
+  // A roughly-central cell so zooming toward its own position never runs into clampViewport's
+  // pan-bound clamp at any scale this test reaches.
+  const col = 100
+  const row = 25
+  const committed = cellDisplayXY(col, row, grid)
+  dispatchClick(overlay, committed.x, committed.y)
+  await nextFrame()
+  expect(crosshairCell()).toEqual({ col, row })
+
+  const beforeGaps = countTransparentAlongVertical(overlay, committed.x, committed.y - 20, committed.y - 4)
+  expect(beforeGaps).toBe(0) // solid, matching the existing "committed crosshair is solid" assertion
+
+  // Zoom in several times, centred EXACTLY on the committed cell's own screen position --
+  // zoomViewportAt's own guarantee ("zooming toward a pointer keeps the grid cell under that
+  // pointer fixed") means this cell's own screen pixel should not move.
+  dispatchWheel(overlay, committed.x, committed.y, -100)
+  await nextFrame()
+  dispatchWheel(overlay, committed.x, committed.y, -100)
+  await nextFrame()
+  dispatchWheel(overlay, committed.x, committed.y, -100)
+  await nextFrame()
+
+  // Same grid cell: zoom never touches crosshairCell().
+  expect(crosshairCell()).toEqual({ col, row })
+
+  // Same on-screen pixel: the vertical (entry-date) guide line is a straight line at constant
+  // screen x regardless of y, so any y still inside the field after the zoom finds it here.
+  const afterPixel = readPixel(overlay, committed.x, committed.y - 4)
+  expect(afterPixel.a).toBeGreaterThan(200)
+  expect(colorClose({ r: afterPixel.r, g: afterPixel.g, b: afterPixel.b }, ACCENT_RGB)).toBe(true)
+})
+
+test(
+  'a zoom gesture does not change sweepGeneration() and does change the field canvas pixel content',
+  async () => {
+    const el = await mountRealAppInSweepMode()
+    const canvas = el.querySelector<HTMLCanvasElement>('[data-testid="heatmap-canvas"]')!
+    const overlay = el.querySelector<HTMLCanvasElement>('[data-testid="heatmap-crosshair-overlay"]')!
+    const ctx = canvas.getContext('2d')!
+    await nextFrame()
+
+    const before = ctx.getImageData(0, 0, HEATMAP_WIDTH_PX, HEATMAP_HEIGHT_PX).data
+    const generationBefore = sweepGeneration()
+
+    dispatchWheel(overlay, 400, 120, -100)
+    dispatchWheel(overlay, 400, 120, -100)
+    dispatchWheel(overlay, 400, 120, -100)
+    await nextFrame()
+
+    expect(sweepGeneration()).toBe(generationBefore)
+
+    const after = ctx.getImageData(0, 0, HEATMAP_WIDTH_PX, HEATMAP_HEIGHT_PX).data
+    expect(buffersIdentical(before, after)).toBe(false)
+  },
+  40_000,
+)
+
+test(
+  'a full pan-then-zoom-then-pan sequence leaves the URL query string byte-identical',
+  async () => {
+    const el = await mountRealAppInSweepMode()
+    const overlay = el.querySelector<HTMLCanvasElement>('[data-testid="heatmap-crosshair-overlay"]')!
+
+    // Settle any pending trailing-edge permalink write from the initial sweep before capturing
+    // the baseline -- otherwise that unrelated write firing mid-test (its own 200ms timer) could
+    // be mistaken for one caused by the gestures below.
+    flushPermalinkUrl()
+    const before = window.location.search
+
+    dispatchPointerDrag(overlay, 400, 120, 300, 80)
+    await nextFrame()
+    dispatchWheel(overlay, 400, 120, -100)
+    await nextFrame()
+    dispatchPointerDrag(overlay, 300, 80, 450, 150)
+    await nextFrame()
+
+    // Idempotent: a no-op unless the gestures above scheduled a new write, which they must not.
+    flushPermalinkUrl()
+    const after = window.location.search
+
+    expect(after).toBe(before)
+  },
+  40_000,
 )
 
 test(
