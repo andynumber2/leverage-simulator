@@ -113,8 +113,14 @@ interface ColumnChunk {
  * column ranges (never more than `SWEEP_COLS` chunks, and never fewer than 1) -- mirrors
  * `bench/sweep-pool.ts`'s own cell-partitioning arithmetic, applied to columns instead of cells
  * so each chunk stays a column-aligned unit `sweep.worker.ts` can resolve one `KernelSeries` per
- * column against. */
-function partitionColumns(entryDates: readonly string[], workerCount: number): ColumnChunk[] {
+ * column against.
+ *
+ * 07.1-02: exported so its exactly-once column coverage (every column belongs to exactly one
+ * chunk, with no gap and no duplicate) can be proven directly, at every worker count, in the
+ * fast Node `unit` project -- see `tests/sweep/partition.test.ts`. `bench/sweep.bench.test.ts`'s
+ * pool-versus-serial equality check only samples 50 of the grid's 10,000 cells on a coprime
+ * stride, which is not enough to catch a partition that skips or double-counts a column. */
+export function partitionColumns(entryDates: readonly string[], workerCount: number): ColumnChunk[] {
   const totalCols = entryDates.length
   const rawChunkCount = workerCount * CHUNKS_PER_WORKER
   const chunkCount = Math.max(1, Math.min(rawChunkCount, totalCols))
