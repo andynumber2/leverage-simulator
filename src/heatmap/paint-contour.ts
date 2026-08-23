@@ -68,7 +68,15 @@
  */
 
 import { CELL_FLAG_INCOMPLETE, CELL_FLAG_RUINED } from '../data/sweep-fixture-format.ts'
-import { INCOMPLETE_RGBA, RUIN_BASE_RGBA, interpolateRamp, rampPositionFor, type Rgba } from '../colorscale/value-to-color.ts'
+import {
+  bandLevelsForMetric,
+  emphasizedBandLevelFor,
+  INCOMPLETE_RGBA,
+  interpolateRamp,
+  rampPositionForMetric,
+  RUIN_BASE_RGBA,
+  type Rgba,
+} from '../colorscale/value-to-color.ts'
 import { makeHatchPattern } from './hatch-pattern.ts'
 import { BAND_LEVELS, resampleField, type Metric } from './field-sampler.ts'
 import { marchingSquaresSegments } from './iso-lines.ts'
@@ -87,11 +95,6 @@ export interface SweepPaintOptions {
   /** Defaults to `'resample'` -- the shipped default 07-04-PLAN.md Task 3 decided on. */
   fillPath?: FillPath
 }
-
-/** The BREAKEVEN band boundary's own ramp position: `rampPositionFor(1.0)`, which
- * `field-sampler.ts`'s `BAND_LEVELS` construction guarantees is exactly `0.5`. Stroked heavier
- * and in the text colour (D-13), matching the mockup's own emphasis. */
-const BREAKEVEN_RAMP_POSITION = rampPositionFor(1.0)
 
 function getCssVar(name: string, fallback: string): string {
   const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim()
@@ -131,15 +134,49 @@ export function gridRowToDisplayY(rowF: number, heightPx: number, rows: number):
 let cachedRampValues: Float64Array | undefined
 let cachedRampValuesLength = -1
 
-function getRampValues(grid: SweepGrid, metric: Metric): Float64Array {
+/** Orchestrator-routed fix (originating from 07-07-SUMMARY.md's known-defect report): the
+ * metric-to-array selection, exhaustive over `Metric`'s three members so a future fourth metric
+ * is a compile-time error here rather than a silent wrong-array read -- the same exhaustiveness
+ * discipline `paintFill`'s own `FillPath` switch already documents. Exported for direct,
+ * DOM-free unit testing (`tests/heatmap/paint-contour.test.ts`), mirroring this file's own
+ * `gridColToDisplayX`/`gridRowToDisplayY` precedent of exporting an internal helper specifically
+ * so a regression is checkable without mounting a canvas. */
+export function valuesForContourMetric(grid: SweepGrid, metric: Metric): Float32Array {
+  switch (metric) {
+    case 'multiple':
+      return grid.multiples
+    case 'drawdown':
+      return grid.drawdowns
+    case 'annualized':
+      return grid.annualized
+    default: {
+      const exhaustive: never = metric
+      throw new Error(`paint-contour: unknown metric "${String(exhaustive)}"`)
+    }
+  }
+}
+
+/** Orchestrator-routed fix: `rampPositionFor` alone is the `multiple` metric's own symlog
+ * transform -- calling it unconditionally for every metric (the prior code) mapped `drawdown`'s
+ * `[0, 0.8]` fraction and `annualized`'s `[-0.3, 0.3]` fraction through the WRONG domain
+ * (`DOMAIN_LOG_MIN/MAX`, a log10 window meant for a return multiple), producing band-crossing
+ * geometry that could not agree with `field-sampler.ts`'s own per-metric fill (`rampPositionForMetric`,
+ * `resampleField`'s `getRampPositions`). Both the array selection and the ramp-position transform
+ * must be metric-aware together -- swapping only the array while still calling the multiple-only
+ * transform would still be wrong for `drawdown`/`annualized`. Exported (like
+ * `valuesForContourMetric` above) so `tests/heatmap/paint-contour.test.ts` can assert the full
+ * fixed pipeline directly, without mounting a canvas -- this function touches no DOM. Reuses the
+ * module-level `cachedRampValues` buffer exactly as `paintSweepField` does; safe for sequential
+ * test calls since each call fully overwrites the buffer before returning. */
+export function getRampValues(grid: SweepGrid, metric: Metric): Float64Array {
   const cellCount = grid.cols * grid.rows
   if (cachedRampValues === undefined || cachedRampValuesLength !== cellCount) {
     cachedRampValues = new Float64Array(cellCount)
     cachedRampValuesLength = cellCount
   }
-  const values = metric === 'multiple' ? grid.multiples : grid.drawdowns
+  const values = valuesForContourMetric(grid, metric)
   for (let i = 0; i < cellCount; i++) {
-    cachedRampValues[i] = rampPositionFor(values[i] ?? 0)
+    cachedRampValues[i] = rampPositionForMetric(values[i] ?? 0, metric)
   }
   return cachedRampValues
 }
@@ -347,11 +384,20 @@ function paintFill(ctx: CanvasRenderingContext2D, grid: SweepGrid, metric: Metri
 /**
  * Paints `grid`'s `options.metric` array onto `ctx`'s full canvas as smooth filled iso-contour
  * bands (D-02 form 2): the base pass fills via `options.fillPath` (`paintFill`); the annotation
- * pass strokes every `BAND_LEVELS` boundary via `marchingSquaresSegments` over the ramp-position
- * field, with the breakeven boundary emphasised (2px, `var(--color-text)`) over every other
- * boundary (1px, `var(--color-border)`); the ruin-hatch pass fills the union of `CELL_FLAG_RUINED`
- * cells under a clip path, exactly as the mockup does it. Reads `grid.cols`/`grid.rows` for every
- * dimension (F-07): never a hardcoded `200`/`50`.
+ * pass strokes every `bandLevelsForMetric(options.metric)` boundary via `marchingSquaresSegments`
+ * over the ramp-position field, with the metric's own emphasised boundary
+ * (`emphasizedBandLevelFor`, `null` for `drawdown`) drawn at 2px `var(--color-text)` over every
+ * other boundary (1px, `var(--color-border)`); the ruin-hatch pass fills the union of
+ * `CELL_FLAG_RUINED` cells under a clip path, exactly as the mockup does it. Reads
+ * `grid.cols`/`grid.rows` for every dimension (F-07): never a hardcoded `200`/`50`.
+ *
+ * Orchestrator-routed fix (07-07-SUMMARY.md's known-defect report): band levels and the
+ * emphasised boundary are now resolved per `options.metric` (`bandLevelsForMetric`/
+ * `emphasizedBandLevelFor`) rather than the prior hardcoded, `multiple`-only `BAND_LEVELS`/
+ * `BREAKEVEN_RAMP_POSITION` -- the array swap in `getRampValues` alone was not sufficient,
+ * since `drawdown`'s own band levels include a boundary that lands at ramp position 0.5 by
+ * construction (its own 40%-drawdown band edge), which the old hardcoded breakeven check would
+ * have wrongly emphasised as if it were a multiple-of-contributed breakeven.
  */
 export function paintSweepField(ctx: CanvasRenderingContext2D, grid: SweepGrid, options: SweepPaintOptions): void {
   const { cols, rows } = grid
@@ -362,15 +408,17 @@ export function paintSweepField(ctx: CanvasRenderingContext2D, grid: SweepGrid, 
   paintFill(ctx, grid, options.metric, fillPath, widthPx, heightPx)
 
   const rampValues = getRampValues(grid, options.metric)
+  const bandLevels = bandLevelsForMetric(options.metric)
+  const emphasizedLevel = emphasizedBandLevelFor(options.metric)
 
   const borderColor = getCssVar('--color-border', '#d0d3d8')
   const textColor = getCssVar('--color-text', '#14161a')
 
-  for (const level of BAND_LEVELS) {
+  for (const level of bandLevels) {
     const segments = marchingSquaresSegments(rampValues, cols, rows, level, grid.flags)
     if (segments.length === 0) continue
 
-    const isBreakeven = Math.abs(level - BREAKEVEN_RAMP_POSITION) < 1e-9
+    const isEmphasized = emphasizedLevel !== null && Math.abs(level - emphasizedLevel) < 1e-9
     ctx.save()
     ctx.beginPath()
     for (const segment of segments) {
@@ -381,8 +429,8 @@ export function paintSweepField(ctx: CanvasRenderingContext2D, grid: SweepGrid, 
       ctx.moveTo(x1, y1)
       ctx.lineTo(x2, y2)
     }
-    ctx.lineWidth = isBreakeven ? 2 : 1
-    ctx.strokeStyle = isBreakeven ? textColor : borderColor
+    ctx.lineWidth = isEmphasized ? 2 : 1
+    ctx.strokeStyle = isEmphasized ? textColor : borderColor
     ctx.stroke()
     ctx.restore()
   }
