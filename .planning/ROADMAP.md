@@ -312,7 +312,7 @@ Plans:
   4. Changing the heatmap's displayed metric re-colors the cached grid in under 16ms and never triggers a re-sweep, because the sweep computes every display metric per cell in a single pass.
   5. Changing a parameter mid-sweep cancels the in-flight sweep within one frame and discards its superseded results rather than painting them, and heatmap pan and zoom sustain 60fps at full cell count. Both figures come from measurement, not from watching the screen.
 
-**Plans:** 1/10 plans executed
+**Plans:** 5/10 plans executed
 
 Plans:
 **Wave 1**
@@ -321,10 +321,10 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 07-02-PLAN.md: D-25's sequential drawdown ramp, a stops-parameterized interpolator, and three fixed per-metric colour domains under the VIZ-07 perceptual and colourblind bars
-- [ ] 07-03-PLAN.md: METR-06's one-pass per-cell record (multiple, drawdown, annualized, flags), and PERF-03 repointed at the production pool over the real bundle
-- [ ] 07-04-PLAN.md: D-05's polygon fill and ring stitcher, the D-07 equivalence-and-repaint gate, the D-06 escalation checkpoint, and PERF-05 repointed at the shipped renderer
-- [ ] 07-05-PLAN.md: D-12's coarse-to-fine progressive paint and generation-token cancellation, with PERF-04 and PERF-06 measured
+- [x] 07-02-PLAN.md: D-25's sequential drawdown ramp, a stops-parameterized interpolator, and three fixed per-metric colour domains under the VIZ-07 perceptual and colourblind bars
+- [x] 07-03-PLAN.md: METR-06's one-pass per-cell record (multiple, drawdown, annualized, flags), and PERF-03 repointed at the production pool over the real bundle
+- [x] 07-04-PLAN.md: D-05's polygon fill and ring stitcher, the D-07 equivalence-and-repaint gate, the D-06 escalation checkpoint, and PERF-05 repointed at the shipped renderer
+- [x] 07-05-PLAN.md: D-12's coarse-to-fine progressive paint and generation-token cancellation, with PERF-04 and PERF-06 measured
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
@@ -371,7 +371,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | 4. First Defensible Backtest in the Browser | 8/8 | In Progress|  |
 | 5. Attribution and the Credibility Surface | 9/9 | Complete    | 2026-08-21 |
 | 6. Heatmap Design Pass | 6/6 | Complete    | 2026-08-21 |
-| 7. Sweep Engine and the Heatmap | 1/10 | In Progress|  |
+| 7. Sweep Engine and the Heatmap | 5/10 | In Progress|  |
 | 8. Export and the Canonical Arguments | 0/TBD | Not started | - |
 
 ## Coverage
