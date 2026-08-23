@@ -21,9 +21,14 @@ import { describe, expect, test } from 'vitest'
 // having already loaded this stylesheet for the same reason).
 import '../../src/app/styles.css'
 
+import { mountApp } from '../../src/app/main.tsx'
+import { loadStatus, setActiveTier, setResultMode, sweepGrid, updateBacktestRequest } from '../../src/app/state.ts'
+import type { Tier } from '../../src/app/bounds.ts'
 import { paintSweepField } from '../../src/heatmap/paint-contour.ts'
 import { SHORT_HORIZON_LABEL, shortHorizonColumn } from '../../src/heatmap/short-horizon.ts'
-import { createSweepGrid, type SweepGrid, type SweepGridMeta } from '../../src/sweep/sweep-grid.ts'
+import { interpolateRamp, interpolateSequentialRamp } from '../../src/colorscale/value-to-color.ts'
+import { CELL_FLAG_INCOMPLETE, CELL_FLAG_RUINED } from '../../src/data/sweep-fixture-format.ts'
+import { createSweepGrid, leverageForRow, type SweepGrid, type SweepGridMeta } from '../../src/sweep/sweep-grid.ts'
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000
 
@@ -249,5 +254,238 @@ describe('Task 1: short-horizon rule (D-29)', () => {
     // the flip actually produced VISIBLE label pixels (foundToLeft), rather than the label having
     // silently rendered mostly off-canvas.
     expect(foundToLeft).toBe(true)
+  })
+})
+
+// -------------------------------------------------------------------------------------------
+// Task 2: the named verification sweep, and ruin proven categorical on it
+// -------------------------------------------------------------------------------------------
+
+async function waitFor(predicate: () => boolean, timeoutMs = 40_000): Promise<void> {
+  const start = performance.now()
+  while (!predicate()) {
+    if (performance.now() - start > timeoutMs) {
+      throw new Error('ruin-and-horizon.browser.test: waitFor timed out waiting for a condition')
+    }
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+  }
+}
+
+/**
+ * The named verification sweep this plan resolves Finding F-02 with (07-CONTEXT.md): SPX,
+ * dividend-reinvested, EXTENDED tier (entry-date axis begins 1927-12-30, including the 1929
+ * entries roadmap criterion 2 names), open-ended (hold-to-end-of-data) mode, the app's default
+ * initial investment and zero contribution amount, at the fixed D-01/D-03 grid shape (leverage
+ * 1x-5x over 50 rows, entry-date axis 200 columns).
+ */
+const VERIFICATION_SYMBOL = 'SPX'
+const VERIFICATION_DIVIDEND_REINVEST = true
+const VERIFICATION_TIER: Tier = 'extended'
+const VERIFICATION_HOLDING_PERIOD_BARS = null // open-ended (hold to end of data)
+const VERIFICATION_INITIAL_INVESTMENT = 10_000
+const VERIFICATION_CONTRIBUTION_AMOUNT = 0
+// Leverage axis: fixed 1x-5x over 50 rows (D-01/D-03, src/sweep/sweep-grid.ts's SWEEP_ROWS).
+// Entry-date axis: fixed 200 columns (D-01/D-03, src/sweep/sweep-grid.ts's SWEEP_COLS).
+
+/** A fixed 10-year holding period, re-run against the identical verification-sweep parameters,
+ * to prove D-31: ruin renders identically in both sweep modes. `2520` bars matches this
+ * codebase's own established 10-year fixture value (`tests/app/sweep-caption.browser.test.ts`'s
+ * "Every cell held for 10.0 years." case). */
+const FIXED_HOLDING_PERIOD_BARS = 2520
+
+/** 33 evenly spaced samples of `ramp`, `t = 0, 1/32, ..., 1` -- the exact sampling VIZ-06's own
+ * must-have specifies for proving a ruined cell is categorically different from every point on
+ * the active continuous ramp, never merely its darkest end. */
+function rampSamples(ramp: (t: number) => readonly [number, number, number, number]): Array<readonly [number, number, number, number]> {
+  return Array.from({ length: 33 }, (_, i) => ramp(i / 32))
+}
+
+function matchesAnySample(pixel: readonly [number, number, number, number], samples: readonly (readonly [number, number, number, number])[]): boolean {
+  return samples.some((s) => s[0] === pixel[0] && s[1] === pixel[1] && s[2] === pixel[2] && s[3] === pixel[3])
+}
+
+let describeApp: HTMLDivElement | undefined
+let describeDispose: (() => void) | undefined
+
+describe('Task 2: ruin proven categorical on the named verification sweep', () => {
+  test(
+    'ruinedCount > 0, every ruined cell is a high-leverage row, a ruined pixel matches none of 33 ramp samples on either ramp, texture varies within one ruined cell, and D-31 holds under the fixed-period re-run',
+    async () => {
+      describeApp = document.createElement('div')
+      document.body.appendChild(describeApp)
+      describeDispose = mountApp(describeApp)
+
+      try {
+        await waitFor(() => loadStatus() === 'ready')
+
+        updateBacktestRequest({
+          symbol: VERIFICATION_SYMBOL,
+          dividendReinvest: VERIFICATION_DIVIDEND_REINVEST,
+          initialInvestment: VERIFICATION_INITIAL_INVESTMENT,
+          contributionAmount: VERIFICATION_CONTRIBUTION_AMOUNT,
+          holdingPeriodBars: VERIFICATION_HOLDING_PERIOD_BARS,
+        })
+        setActiveTier(VERIFICATION_TIER)
+        setResultMode('sweep')
+
+        await waitFor(() => sweepGrid() !== null && sweepGrid()!.cols === 200 && sweepGrid()!.rows === 50, 40_000)
+        const openEndedGrid = sweepGrid()!
+
+        // --- ruinedCount > 0, on a sweep where ruin genuinely occurs (closes Finding C) ---
+        const cellCount = openEndedGrid.cols * openEndedGrid.rows
+        let ruinedCount = 0
+        let firstRuinedIndex = -1
+        for (let i = 0; i < cellCount; i++) {
+          if (((openEndedGrid.flags[i] ?? 0) & CELL_FLAG_RUINED) !== 0) {
+            ruinedCount++
+            if (firstRuinedIndex === -1) firstRuinedIndex = i
+          }
+        }
+        expect(ruinedCount).toBeGreaterThan(0)
+        expect(firstRuinedIndex).toBeGreaterThanOrEqual(0)
+
+        // --- every ruined cell's leverage is at least 4.5 (confined to high-leverage rows) ---
+        for (let i = 0; i < cellCount; i++) {
+          if (((openEndedGrid.flags[i] ?? 0) & CELL_FLAG_RUINED) === 0) continue
+          const row = Math.floor(i / openEndedGrid.cols)
+          expect(leverageForRow(row)).toBeGreaterThanOrEqual(4.5)
+        }
+
+        // --- pixel sampling: a ruined cell's colour is categorical, and its hatch is a texture ---
+        const ruinedRow = Math.floor(firstRuinedIndex / openEndedGrid.cols)
+        const ruinedCol = firstRuinedIndex % openEndedGrid.cols
+        const sampleWidthPx = 2400 // cellWidthPx = 12, 2x the hatch's own 6px tile period
+        const sampleHeightPx = 600 // cellHeightPx = 12, same margin
+        const cellWidthPx = sampleWidthPx / openEndedGrid.cols
+        const cellHeightPx = sampleHeightPx / openEndedGrid.rows
+        const imgRow = openEndedGrid.rows - 1 - ruinedRow
+        const cellX0 = ruinedCol * cellWidthPx
+        const cellY0 = imgRow * cellHeightPx
+
+        for (const metric of ['multiple', 'drawdown'] as const) {
+          const canvas = document.createElement('canvas')
+          canvas.width = sampleWidthPx
+          canvas.height = sampleHeightPx
+          const ctx = canvas.getContext('2d')!
+          paintSweepField(ctx, openEndedGrid, { metric })
+          const data = ctx.getImageData(0, 0, sampleWidthPx, sampleHeightPx).data
+
+          function pixelAt(x: number, y: number): readonly [number, number, number, number] {
+            const idx = (Math.floor(y) * sampleWidthPx + Math.floor(x)) * 4
+            return [data[idx]!, data[idx + 1]!, data[idx + 2]!, data[idx + 3]!]
+          }
+
+          const centerPixel = pixelAt(cellX0 + cellWidthPx / 2, cellY0 + cellHeightPx / 2)
+          const divergingSamples = rampSamples(interpolateRamp)
+          const sequentialSamples = rampSamples(interpolateSequentialRamp)
+          expect(matchesAnySample(centerPixel, divergingSamples), `metric=${metric}: ruined pixel must never match a diverging-ramp sample`).toBe(false)
+          expect(matchesAnySample(centerPixel, sequentialSamples), `metric=${metric}: ruined pixel must never match a sequential-ramp sample`).toBe(false)
+
+          // Two pixels at different offsets within this single ruined cell's own rectangle
+          // differ from each other -- a flat fill cannot pass this, a hatch texture can.
+          const cornerA = pixelAt(cellX0 + 2, cellY0 + 2)
+          const cornerB = pixelAt(cellX0 + cellWidthPx - 2, cellY0 + cellHeightPx - 2)
+          expect(cornerA, `metric=${metric}: two offsets within one ruined cell must differ (texture, not a flat fill)`).not.toEqual(cornerB)
+        }
+
+        // --- D-31: ruin renders identically in both modes ---
+        //
+        // The two modes evaluate windows of very different lengths for the SAME entry-date
+        // column (the extended tier's earliest columns hold for many decades open-ended, vs a
+        // fixed 2520-bar/10-year window), so a full flag-equality comparison is the WRONG claim:
+        // a position that survives its full 10-year fixed window can still go on to ruin later
+        // in a much longer open-ended continuation, and that later ruin is a legitimate
+        // difference, not a bug. The sound, mode-invariant claim is one-directional: `backtest.ts`
+        // writes the ruin bar and every subsequent bar as exactly 0 (a permanent state), so a
+        // position that ruins WITHIN the fixed window's own first `FIXED_HOLDING_PERIOD_BARS`
+        // bars must ALSO show as ruined in the open-ended run, whose window is a strict superset
+        // of those same first bars for every entry-date column. This is exactly "a position that
+        // reached zero after eight months is a real, complete, categorical outcome" (07-09-PLAN.md
+        // Task 2's own framing): ruin that happens early does not un-happen because the window
+        // being asked about is longer.
+        updateBacktestRequest({ holdingPeriodBars: FIXED_HOLDING_PERIOD_BARS })
+        await waitFor(() => {
+          const g = sweepGrid()
+          return g !== null && g !== openEndedGrid && g.cols === 200 && g.rows === 50 && g.meta.holdMode === 'fixed'
+        }, 40_000)
+        const fixedGrid = sweepGrid()!
+
+        let fixedRuinedCompleteCount = 0
+        for (let i = 0; i < cellCount; i++) {
+          const fixedFlags = fixedGrid.flags[i] ?? 0
+          if ((fixedFlags & CELL_FLAG_INCOMPLETE) !== 0) continue // only complete-window cells compare
+          if ((fixedFlags & CELL_FLAG_RUINED) === 0) continue // only cells ruined WITHIN the fixed window assert anything
+          fixedRuinedCompleteCount++
+          const openEndedRuined = ((openEndedGrid.flags[i] ?? 0) & CELL_FLAG_RUINED) !== 0
+          expect(
+            openEndedRuined,
+            `cell ${i}: ruined within the fixed ${FIXED_HOLDING_PERIOD_BARS}-bar window, so the open-ended run's strictly longer window covering the same bars must show it ruined too (D-31)`,
+          ).toBe(true)
+        }
+        // Sanity: this sweep genuinely produced fixed-window ruin to compare (an empty set would
+        // make the loop above vacuously true and prove nothing).
+        expect(fixedRuinedCompleteCount).toBeGreaterThan(0)
+      } finally {
+        describeDispose?.()
+        describeDispose = undefined
+        describeApp?.remove()
+        describeApp = undefined
+      }
+    },
+    120_000,
+  )
+
+  test('if the hatch pattern cannot be constructed for any reason, a ruined cell still renders categorically rather than falling through to the continuous ramp', () => {
+    const cols = 4
+    const rows = 4
+    const grid = createSweepGrid(
+      cols,
+      rows,
+      ({
+        bundleVersion: 'test',
+        symbol: 'TEST',
+        dividendReinvest: true,
+        entryDates: Array.from({ length: cols }, (_, i) => `2000-01-0${i + 1}`),
+        leverages: [1, 2, 3, 4],
+        holdingYears: 0,
+        initialInvestment: 10_000,
+        expenseRatioPercent: 0.9,
+        financingSpreadPercent: 0.5,
+        ruinedCount: 1,
+        incompleteCount: 0,
+        minMultiple: 0,
+        maxMultiple: 0,
+        clippedBelowCount: 0,
+        clippedAboveCount: 0,
+        holdMode: 'end-of-data',
+        endOfDataDate: '2020-01-01',
+      }) satisfies SweepGridMeta,
+    )
+    grid.multiples.fill(2)
+    grid.flags[0] = CELL_FLAG_RUINED
+
+    const widthPx = 400
+    const heightPx = 400
+    const ctx = document.createElement('canvas').getContext('2d')!
+    ctx.canvas.width = widthPx
+    ctx.canvas.height = heightPx
+
+    // Forces pattern construction to fail: the injected factory returns null, exactly the
+    // scenario this plan's own acceptance criteria names.
+    paintSweepField(ctx, grid, { metric: 'multiple', hatchPatternFactory: () => null })
+
+    const cellWidthPx = widthPx / cols
+    const cellHeightPx = heightPx / rows
+    const imgRow = rows - 1 - 0 // cell (row 0, col 0) is the ruined one
+    const data = ctx.getImageData(0, 0, widthPx, heightPx).data
+    const x = Math.floor(0 * cellWidthPx + cellWidthPx / 2)
+    const y = Math.floor(imgRow * cellHeightPx + cellHeightPx / 2)
+    const idx = (y * widthPx + x) * 4
+    const pixel: readonly [number, number, number, number] = [data[idx]!, data[idx + 1]!, data[idx + 2]!, data[idx + 3]!]
+
+    const divergingSamples = rampSamples(interpolateRamp)
+    const sequentialSamples = rampSamples(interpolateSequentialRamp)
+    expect(matchesAnySample(pixel, divergingSamples)).toBe(false)
+    expect(matchesAnySample(pixel, sequentialSamples)).toBe(false)
   })
 })

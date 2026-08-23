@@ -95,6 +95,13 @@ export interface SweepPaintOptions {
   metric: Metric
   /** Defaults to `'resample'` -- the shipped default 07-04-PLAN.md Task 3 decided on. */
   fillPath?: FillPath
+  /** 07-09-PLAN.md Task 2: defaults to the real `makeHatchPattern`. Overridable so a test can
+   * force pattern construction to fail (return `null`, or throw) and assert the categorical
+   * fallback below still renders instead of falling through to the continuous ramp, without
+   * mocking `hatch-pattern.ts`'s module (no `vi.mock` precedent exists in this project's browser
+   * test suite; this mirrors `SweepCaption.tsx`'s own `failedCellCount` override-prop pattern for
+   * deterministic testability of a hard-to-simulate failure). Production code never sets this. */
+  hatchPatternFactory?: (ctx: CanvasRenderingContext2D, rgba: Rgba) => CanvasPattern | null
 }
 
 function getCssVar(name: string, fallback: string): string {
@@ -455,8 +462,19 @@ export function paintSweepField(ctx: CanvasRenderingContext2D, grid: SweepGrid, 
   }
   if (anyRuined) {
     ctx.clip()
-    const pattern = makeHatchPattern(ctx, RUIN_BASE_RGBA)
-    ctx.fillStyle = pattern
+    // 07-09-PLAN.md Task 2: if the hatch pattern cannot be constructed for any reason (the real
+    // makeHatchPattern throws rather than returning null, but a caught error falls through the
+    // same path as an injected null factory), the ruined region still renders categorically -- a
+    // flat RUIN_BASE_RGBA fill -- rather than leaving the clip unfilled and falling through to
+    // whatever the continuous ramp painted underneath (T-07-19).
+    const hatchFactory = options.hatchPatternFactory ?? makeHatchPattern
+    let pattern: CanvasPattern | null
+    try {
+      pattern = hatchFactory(ctx, RUIN_BASE_RGBA)
+    } catch {
+      pattern = null
+    }
+    ctx.fillStyle = pattern ?? rgbaToCss(RUIN_BASE_RGBA)
     ctx.fillRect(0, 0, widthPx, heightPx)
   }
   ctx.restore()
