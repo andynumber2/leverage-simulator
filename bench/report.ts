@@ -345,6 +345,17 @@ export function renderTable(
  *   denominated differently from the recorded environment block, turning that divergence into a
  *   failed run rather than a silently divergent report.
  * - totalRuntimeMs must not exceed BENCH_TOTAL_RUNTIME_CAP_MS.
+ *
+ * 07.1-02: the verdict-fail check and the runtime-cap check are collected into one `violations`
+ * list and reported together rather than first-wins. A run can be both over budget and over its
+ * total runtime cap at once (CI run 32654061079 was), and a `throw` on the first check used to
+ * make the second one invisible for the rest of the run -- 07-VERIFICATION.md carried the
+ * 43,259ms cap breach forward as an unreported observation for exactly this reason. Every other
+ * gate (PERF-08 coverage, score coherence, the PERF-03 host-width guard) still throws
+ * immediately at its own point in the function, in the same relative order as before; if any
+ * violation was already collected by that point, its text is folded into that gate's own thrown
+ * message rather than lost, so a self-test that trips both the verdict-fail check and a later
+ * gate still reports the verdict-fail reason.
  */
 export function assertRunInvariants(
   rows: readonly MeasurementRow[],
@@ -374,6 +385,11 @@ export function assertRunInvariants(
     }
   }
 
+  // 07.1-02: collected here, joined into whichever throw fires first (this check's own, a later
+  // gate's, or the runtime-cap check at the end), rather than thrown immediately -- see this
+  // function's doc comment above.
+  const violations: string[] = []
+
   // The authoritative gate (WR-03/D-09): this check has visibility into every row's verdict
   // independent of any single bench file's own assertion, so removing or weakening one bench
   // file's `expect()` can no longer let a breach exit 0. Sorted ascending by budget id because
@@ -383,9 +399,7 @@ export function assertRunInvariants(
   const failing = rows.filter((r) => r.verdict === 'fail')
   if (failing.length > 0) {
     const failingIds = failing.map((r) => r.budgetId).sort((a, b) => a.localeCompare(b))
-    throw new Error(
-      `assertRunInvariants: ${failing.length} row(s) failed budget: ${failingIds.join(', ')}`,
-    )
+    violations.push(`${failing.length} row(s) failed budget: ${failingIds.join(', ')}`)
   }
 
   // PERF-08 coverage (04-03): reads the "due" set from PERF_BUDGETS itself (requirementId ===
@@ -408,10 +422,11 @@ export function assertRunInvariants(
     const ids = stillUnmeasuredPerf08
       .map((r) => r.budgetId)
       .sort((a, b) => a.localeCompare(b))
-    throw new Error(
-      `assertRunInvariants: PERF-08 budget id(s) due for measurement by phase ` +
-        `${PERF_08_COVERAGE_PHASE} are still unmeasured: ${ids.join(', ')}`,
+    violations.push(
+      `PERF-08 budget id(s) due for measurement by phase ${PERF_08_COVERAGE_PHASE} are still ` +
+        `unmeasured: ${ids.join(', ')}`,
     )
+    throw new Error(`assertRunInvariants: ${violations.join('; ')}`)
   }
 
   // Score coherence (quick-260816-p8z): only runs when a caller supplies an environment block.
@@ -428,19 +443,22 @@ export function assertRunInvariants(
     if (!hostMatchesPerf03Baseline(environment)) {
       const perf03Row = rows.find((r) => r.budgetId === 'PERF-03')
       if (environment.ci) {
-        throw new Error(
-          `assertRunInvariants: this run recorded hardwareConcurrency ${environment.hardwareConcurrency}, ` +
-            `not the declared PERF-03 baseline of ${PERF_03_BASELINE_HARDWARE_CONCURRENCY}: a CI run on a ` +
-            'host that is not the declared baseline cannot be presented as an authoritative D-17 baseline run',
+        violations.push(
+          `this run recorded hardwareConcurrency ${environment.hardwareConcurrency}, not the ` +
+            `declared PERF-03 baseline of ${PERF_03_BASELINE_HARDWARE_CONCURRENCY}: a CI run on ` +
+            'a host that is not the declared baseline cannot be presented as an authoritative ' +
+            'D-17 baseline run',
         )
+        throw new Error(`assertRunInvariants: ${violations.join('; ')}`)
       }
       if (perf03Row && perf03Row.verdict !== 'unmeasured') {
-        throw new Error(
-          `assertRunInvariants: this run recorded hardwareConcurrency ${environment.hardwareConcurrency}, ` +
-            `not the declared PERF-03 baseline of ${PERF_03_BASELINE_HARDWARE_CONCURRENCY}, but PERF-03 ` +
-            `carries verdict "${perf03Row.verdict}" instead of "unmeasured": a bench file cannot restore a ` +
-            'verdict the host does not support',
+        violations.push(
+          `this run recorded hardwareConcurrency ${environment.hardwareConcurrency}, not the ` +
+            `declared PERF-03 baseline of ${PERF_03_BASELINE_HARDWARE_CONCURRENCY}, but PERF-03 ` +
+            `carries verdict "${perf03Row.verdict}" instead of "unmeasured": a bench file cannot ` +
+            'restore a verdict the host does not support',
         )
+        throw new Error(`assertRunInvariants: ${violations.join('; ')}`)
       }
     }
 
@@ -469,18 +487,23 @@ export function assertRunInvariants(
             `${environment.calibrationScore})`
         })
         .join(', ')
-      throw new Error(
-        `assertRunInvariants: ${divergent.length} row(s) diverge from the recorded ` +
-          `environment.calibrationScore: ${details}`,
+      violations.push(
+        `${divergent.length} row(s) diverge from the recorded environment.calibrationScore: ` +
+          details,
       )
+      throw new Error(`assertRunInvariants: ${violations.join('; ')}`)
     }
   }
 
   if (totalRuntimeMs > BENCH_TOTAL_RUNTIME_CAP_MS) {
-    throw new Error(
-      `assertRunInvariants: total bench runtime ${totalRuntimeMs}ms exceeds the declared cap ` +
-        `of ${BENCH_TOTAL_RUNTIME_CAP_MS}ms (D-08): repeat cost has crept; raising the cap ` +
-        'requires a recorded decision, not a silent edit',
+    violations.push(
+      `total bench runtime ${totalRuntimeMs}ms exceeds the declared cap of ` +
+        `${BENCH_TOTAL_RUNTIME_CAP_MS}ms (D-08): repeat cost has crept; raising the cap requires ` +
+        'a recorded decision, not a silent edit',
     )
+  }
+
+  if (violations.length > 0) {
+    throw new Error(`assertRunInvariants: ${violations.join('; ')}`)
   }
 }
