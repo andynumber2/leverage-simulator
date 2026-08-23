@@ -1,67 +1,126 @@
 /**
- * bench/heatmap-form-2.bench.test.ts: 06-03-PLAN.md Task 2, criterion 4's form-2 arm.
+ * bench/heatmap-form-2.bench.test.ts: 07-04-PLAN.md Task 2, the D-07 gate.
  *
- * Proves paint equivalence
- * BEFORE trusting any timing, then measure. Reads the committed `sweep-fixture.bin`'s bytes
- * through the `readSweepFixture` browser command, decodes it with the real `decodeSweepFixture`,
- * and measures `paintFilledContour` -- the actual paint function `form-2-filled-contour.html`
- * uses, not a copy.
+ * Proves equivalence BEFORE trusting any timing, then measures the shipped renderer
+ * (`src/heatmap/paint-contour.ts`'s `paintSweepField`), not the Phase 6 mockup: `06-06`'s own
+ * header note already recorded that this file must record the cost of the form actually being
+ * built, and this task closes Finding F-05 (repointing the recorder at shipped code) at the same
+ * time it runs D-07's own gate for the `'polygon'` `FillPath` this task adds.
  *
- * Criterion 4 names a METRIC CHANGE, so the measured operation is a repaint that switches the
- * displayed metric array from multiple-of-contributed to max drawdown and back.
+ * This file owns the run's single PERF-05 `MeasurementRow` (06-06's own header note, unchanged by
+ * this task). It no longer imports anything from `.planning/phases/06-heatmap-design-pass/
+ * mockups/` -- the graduated `src/heatmap/` modules (07-01) and the live `SweepGrid` container
+ * (07-01's `src/sweep/sweep-grid.ts`) fully replace the mockup's own `SweepFixture`-shaped API for
+ * this purpose, adapted here from the committed fixture bytes via `toSweepGrid`.
  *
- * This file owns the run's single PERF-05 `MeasurementRow`. Form 2 won the Phase 6 comparison
- * (06-05-SUMMARY.md), so the shipped heatmap is a filled contour and the official PERF-05 number
- * must be the cost of the form actually being built. Until 06-06 the recorder was
- * `bench/heatmap-repaint.bench.test.ts` (form 1), purely because form 1 was built first in
- * 06-01, before there were competing forms; that left the headline PERF-05 reading form 1's
- * 0.65ms while the heatmap Phase 7 will implement costs 12.81ms. The three losing forms' benches
- * were removed once the comparison concluded, so only one file records this budget and there is
- * no second row to collide with.
+ * Two gate criteria, in this order (D-07):
  *
- * Expect this measurement to sit near 80% of budget and therefore to trip the D-20 escalation
- * flag. That is deliberate: form 2 resamples at DISPLAY resolution rather than upscaling a
- * 200x50 buffer, and keeping its real cost in the headline is how Phase 7 stays honest about the
- * work it inherits (see 06-HEATMAP-SPEC.md finding A).
+ * 1. Equivalence: `paintSweepField` painted through the `'polygon'` `FillPath` (this task's new
+ *    band-polygon fill) must match the `'resample'` `FillPath` (D-08's permanent, per-pixel
+ *    oracle) within three named tolerances, checked BEFORE any timing figure below is trusted.
+ * 2. The repaint budget: a metric-change repaint through `'polygon'` at a declared 1200x400
+ *    display geometry (D-07's own "plausible shipped panel size", per 06-HEATMAP-SPEC.md Finding
+ *    A's own prediction) must hold PERF-05's 16ms budget. The Phase 6 geometry (764x224) is
+ *    recorded as an info line only, so the shipped number stays comparable to the prior recorded
+ *    12.80ms without being the geometry the gate itself is judged against.
+ *
+ * If either criterion misses, this file records the measured figures and the specific failure
+ * without relaxing any tolerance, budget, or geometry (07-04-PLAN.md's own prohibition): Task 3's
+ * checkpoint is what decides what happens next, not this file.
  */
 
 import { commands } from 'vitest/browser'
 import { beforeAll, expect, test } from 'vitest'
 
 import { decodeSweepFixture, type SweepFixture } from '../src/data/sweep-fixture-format.ts'
-import type { Rgba } from '../src/colorscale/value-to-color.ts'
-import { resampleField } from '../src/heatmap/field-sampler.ts'
+import { rampPositionFor } from '../src/colorscale/value-to-color.ts'
+import { BAND_LEVELS } from '../src/heatmap/field-sampler.ts'
+import { marchingSquaresSegments } from '../src/heatmap/iso-lines.ts'
 import {
-  fieldRect,
-  FORM_2_GEOMETRY,
-  paintFilledContour,
-} from '../.planning/phases/06-heatmap-design-pass/mockups/forms/form-2-filled-contour.ts'
+  gridColToDisplayX,
+  gridRowToDisplayY,
+  paintSweepField,
+  type FillPath,
+} from '../src/heatmap/paint-contour.ts'
+import type { SweepGrid, SweepGridMeta } from '../src/sweep/sweep-grid.ts'
 import { PERF_BUDGETS } from '../perf-budgets.ts'
 import { measureBatchedMinOfN, normalize, REPEAT_COUNT } from './calibration.ts'
 import { resolveRunCalibration } from './canonical-calibration.ts'
 import { captureEnvironment } from './environment-block.ts'
 import { assertWithinBudget, checkBudget, type MeasurementRow } from './report.ts'
 
-/** Tuned empirically per Task 1's own instruction to pick a batch size that clears
- * `MIN_MEASUREMENT_MS`; form 2's repaint does far more per-pixel work than form 1's (a 764x224
- * bilinear resample plus eleven marching-squares passes, versus form 1's 200x50 flat lookup), so
- * a smaller batch than form 1's 200 already clears the floor. */
-const REPAINT_BATCH_SIZE = 50
+// --- Named tolerances and geometry (D-07/D-04) --------------------------------------------------
+
+/** Gate criterion 1a: the maximum fraction of field pixels the two fill paths may disagree on. */
+const MAX_DIFFERING_PIXEL_RATIO = 0.02
+
+/** Gate criterion 1b: a differing pixel must lie within this many pixels (Chebyshev distance,
+ * `max(|dx|, |dy|)`) of a band boundary as located by `marchingSquaresSegments` over the same
+ * ramp-position field, so the disagreement is confined to interpolation near a boundary rather
+ * than a mis-stitched region. */
+const MAX_BOUNDARY_DISTANCE_PX = 2
+
+/** Gate criterion 1c: pixels inside a ruined or incomplete cell are categorical, never
+ * interpolated, so the two paths must match EXACTLY there -- any disagreement is a stitching bug,
+ * not an interpolation difference. */
+const MAX_CATEGORICAL_DIFFERING_PIXELS = 0
+
+/** The declared measurement geometry (D-07): 1200x400 display pixels over the 200x50 grid. Not
+ * arbitrary -- 06-HEATMAP-SPEC.md Finding A names this as the plausible shipped panel size where
+ * the per-pixel path was predicted to land near 36ms, so a polygon path proven here has actually
+ * solved Finding A rather than dodged it by measuring at the smaller Phase 6 mockup geometry. */
+const MEASUREMENT_WIDTH_PX = 1200
+const MEASUREMENT_HEIGHT_PX = 400
+
+/** The Phase 6 mockup's own geometry (06-HEATMAP-SPEC.md §7's `FORM_2_GEOMETRY` field rectangle),
+ * recorded as an info line only (never the gated measurement) so the shipped 1200x400 number
+ * stays comparable to the previously recorded 12.80ms figure at the geometry that number was
+ * itself measured at. */
+const PHASE_6_WIDTH_PX = 764
+const PHASE_6_HEIGHT_PX = 224
+
+/** Tuned empirically, per the file this replaces: form 2's repaint does far more per-pixel work
+ * at 1200x400 than the Phase 6 mockup's own 764x224 measurement did, so a correspondingly smaller
+ * batch than the mockup file's own 50 still clears `MIN_MEASUREMENT_MS`. */
+const REPAINT_BATCH_SIZE = 20
 
 let fixture: SweepFixture
+let grid: SweepGrid
 
 beforeAll(async () => {
   const payload = await commands.readSweepFixture()
   const bytes = new Uint8Array(payload.bytes)
   fixture = decodeSweepFixture(bytes.buffer)
+  grid = toSweepGrid(fixture)
 })
 
-function makeDisplayCanvas(): { canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D } {
+/** Adapts the committed, static `SweepFixture` into a `SweepGrid`: same `cols`/`rows`/
+ * `multiples`/`drawdowns`/`flags` fields (`SweepGrid` structurally extends `SweepFixture`'s own
+ * shape, 07-01-PLAN.md Task 2), plus the two fields a live grid carries that a fixture does not.
+ * `holdMode: 'fixed'` matches the fixture's own real, positive `holdingYears` (06-HEATMAP-SPEC.md
+ * §9); `endOfDataDate` is contractually unused in fixed mode, so it is left empty rather than
+ * invented. `generation` starts at `0` so the "never triggers a sweep" assertion below has a
+ * known baseline to compare against. */
+function toSweepGrid(source: SweepFixture): SweepGrid {
+  const meta: SweepGridMeta = { ...source.meta, holdMode: 'fixed', endOfDataDate: '' }
+  return {
+    cols: source.cols,
+    rows: source.rows,
+    meta,
+    multiples: source.multiples,
+    drawdowns: source.drawdowns,
+    annualized: new Float32Array(source.cols * source.rows),
+    flags: source.flags,
+    generation: 0,
+  }
+}
+
+function makeCanvas(widthPx: number, heightPx: number): { canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D } {
   const canvas = document.createElement('canvas')
-  canvas.width = FORM_2_GEOMETRY.widthPx
-  canvas.height = FORM_2_GEOMETRY.heightPx
-  // Deliberately never appended to the DOM: a
-  // detached canvas still has a real 2D rendering context and real paint cost.
+  canvas.width = widthPx
+  canvas.height = heightPx
+  // Deliberately never appended to the DOM: a detached canvas still has a real 2D rendering
+  // context and real paint cost.
   const ctx = canvas.getContext('2d')
   if (!ctx) {
     throw new Error('heatmap-form-2 bench: 2D context unavailable in this browser instance')
@@ -70,61 +129,174 @@ function makeDisplayCanvas(): { canvas: HTMLCanvasElement; ctx: CanvasRenderingC
   return { canvas, ctx }
 }
 
-function samplePixelAtDisplayPoint(ctx: CanvasRenderingContext2D, x: number, y: number): Rgba {
-  const pixel = ctx.getImageData(x, y, 1, 1).data
-  return [pixel[0] ?? -1, pixel[1] ?? -1, pixel[2] ?? -1, pixel[3] ?? -1]
+function paintToBuffer(fillPath: FillPath, widthPx: number, heightPx: number): Uint8ClampedArray {
+  const { ctx } = makeCanvas(widthPx, heightPx)
+  paintSweepField(ctx, grid, { metric: 'multiple', fillPath })
+  return ctx.getImageData(0, 0, widthPx, heightPx).data
 }
 
-// --- Equivalence proof: must pass before the timing below is trusted -----------------------
+function pixelsEqual(a: Uint8ClampedArray, b: Uint8ClampedArray, index: number): boolean {
+  return a[index] === b[index] && a[index + 1] === b[index + 1] && a[index + 2] === b[index + 2] && a[index + 3] === b[index + 3]
+}
 
-test('equivalence: paintFilledContour writes resampleField-s own output into the field, proven before timing', () => {
-  const field = fieldRect(FORM_2_GEOMETRY.widthPx, FORM_2_GEOMETRY.heightPx)
+interface DisplaySegment {
+  x1: number
+  y1: number
+  x2: number
+  y2: number
+}
 
-  // Two extreme field-pixel corners: the top-left field pixel (highest leverage row, earliest
-  // entry-date column, per the A-E5 vertical flip) and the bottom-right (lowest leverage row,
-  // latest entry-date column). Computed from resampleField's OWN (shared, reused) buffer FIRST,
-  // before paintFilledContour's own internal resampleField call mutates that same buffer.
-  const expectedBuffer = resampleField(fixture, 'multiple', { widthPx: field.width, heightPx: field.height })
-  const cornerAt = (px: number, py: number): Rgba => {
-    const i = (py * field.width + px) * 4
-    return [expectedBuffer[i] ?? -1, expectedBuffer[i + 1] ?? -1, expectedBuffer[i + 2] ?? -1, expectedBuffer[i + 3] ?? -1]
+/** Every `BAND_LEVELS` boundary's own segments, in DISPLAY space, over the SAME ramp-position
+ * field and `flags` the stroke annotation pass strokes -- the identical geometry a viewer would
+ * see as a boundary line, so "close to a boundary" means close to what is actually drawn. */
+function boundarySegmentsAt(widthPx: number, heightPx: number): DisplaySegment[] {
+  const { cols, rows } = grid
+  const cellCount = cols * rows
+  const rampValues = new Float64Array(cellCount)
+  for (let i = 0; i < cellCount; i++) {
+    rampValues[i] = rampPositionFor(grid.multiples[i] ?? 0)
   }
-  const expectedTopLeft = cornerAt(0, 0)
-  const expectedBottomRight = cornerAt(field.width - 1, field.height - 1)
 
-  const { ctx } = makeDisplayCanvas()
-  paintFilledContour(ctx, fixture, 'multiple')
+  const segments: DisplaySegment[] = []
+  for (const level of BAND_LEVELS) {
+    for (const segment of marchingSquaresSegments(rampValues, cols, rows, level, grid.flags)) {
+      segments.push({
+        x1: gridColToDisplayX(segment.x1, widthPx, cols),
+        y1: gridRowToDisplayY(segment.y1, heightPx, rows),
+        x2: gridColToDisplayX(segment.x2, widthPx, cols),
+        y2: gridRowToDisplayY(segment.y2, heightPx, rows),
+      })
+    }
+  }
+  return segments
+}
 
-  const sampledTopLeft = samplePixelAtDisplayPoint(ctx, field.x, field.y)
+function closestPointOnSegment(px: number, py: number, segment: DisplaySegment): { x: number; y: number } {
+  const dx = segment.x2 - segment.x1
+  const dy = segment.y2 - segment.y1
+  const lengthSquared = dx * dx + dy * dy
+  if (lengthSquared === 0) return { x: segment.x1, y: segment.y1 }
+  const t = Math.max(0, Math.min(1, ((px - segment.x1) * dx + (py - segment.y1) * dy) / lengthSquared))
+  return { x: segment.x1 + t * dx, y: segment.y1 + t * dy }
+}
+
+/** The minimum Chebyshev distance from display pixel centre (`px + 0.5`, `py + 0.5`) to any of
+ * `segments`. */
+function minChebyshevDistanceToSegments(px: number, py: number, segments: readonly DisplaySegment[]): number {
+  const qx = px + 0.5
+  const qy = py + 0.5
+  let min = Number.POSITIVE_INFINITY
+  for (const segment of segments) {
+    const closest = closestPointOnSegment(qx, qy, segment)
+    const distance = Math.max(Math.abs(qx - closest.x), Math.abs(qy - closest.y))
+    if (distance < min) min = distance
+  }
+  return min
+}
+
+/** Column/row of the sweep cell display pixel (`px`, `py`) falls into, honoring the same A-E5
+ * vertical flip `paint-contour.ts`'s own pixel mapping bakes in. */
+function cellAtDisplayPixel(px: number, py: number, widthPx: number, heightPx: number): { col: number; row: number } {
+  const { cols, rows } = grid
+  const col = Math.min(cols - 1, Math.max(0, Math.floor((px / widthPx) * cols)))
+  const imgRow = Math.min(rows - 1, Math.max(0, Math.floor((py / heightPx) * rows)))
+  return { col, row: rows - 1 - imgRow }
+}
+
+// --- Gate criterion 1: equivalence, proven BEFORE the timing below is trusted ------------------
+
+test('equivalence: the polygon FillPath matches the resample FillPath (oracle) within the declared tolerances', async () => {
+  const width = MEASUREMENT_WIDTH_PX
+  const height = MEASUREMENT_HEIGHT_PX
+
+  const resampleBuffer = paintToBuffer('resample', width, height)
+  const polygonBuffer = paintToBuffer('polygon', width, height)
+  expect(resampleBuffer.length).toBe(polygonBuffer.length)
+
+  const segments = boundarySegmentsAt(width, height)
+
+  let differingCount = 0
+  let categoricalDifferingCount = 0
+  let outOfToleranceCount = 0
+  const totalPixels = width * height
+
+  for (let py = 0; py < height; py++) {
+    for (let px = 0; px < width; px++) {
+      const index = (py * width + px) * 4
+      if (pixelsEqual(resampleBuffer, polygonBuffer, index)) continue
+
+      differingCount++
+
+      const { col, row } = cellAtDisplayPixel(px, py, width, height)
+      const flags = grid.flags[row * grid.cols + col] ?? 0
+      if (flags !== 0) {
+        categoricalDifferingCount++
+        continue
+      }
+
+      const distance = minChebyshevDistanceToSegments(px, py, segments)
+      if (distance > MAX_BOUNDARY_DISTANCE_PX) {
+        outOfToleranceCount++
+      }
+    }
+  }
+
+  const differingRatio = differingCount / totalPixels
+
+  // Recorded UNCONDITIONALLY, before any assertion below can throw: D-06's gate is placed after
+  // this task specifically because the escalation decision is contingent on a measurement that
+  // does not exist until this test runs, so the full set of measured figures must survive a
+  // criterion miss, not just the first assertion that happens to throw.
+  await commands.recordInfoLine(
+    'D07-equivalence-heatmap-form-2',
+    `D07-equivalence-heatmap-form-2: totalPixels=${totalPixels} differingCount=${differingCount} ` +
+      `differingRatio=${(differingRatio * 100).toFixed(3)}% (ceiling ${(MAX_DIFFERING_PIXEL_RATIO * 100).toFixed(1)}%) ` +
+      `categoricalDifferingCount=${categoricalDifferingCount} (ceiling ${MAX_CATEGORICAL_DIFFERING_PIXELS}) ` +
+      `outOfToleranceCount=${outOfToleranceCount} (pixels beyond ${MAX_BOUNDARY_DISTANCE_PX}px of a boundary, ceiling 0) ` +
+      `geometry={widthPx:${width},heightPx:${height}}`,
+  )
+
   expect(
-    sampledTopLeft,
-    'field pixel (0, 0) must equal resampleField-s own output after paintFilledContour: a mismatch ' +
-      'here means the PERF-05 heatmap-form-2 figure below is not trustworthy',
-  ).toEqual(expectedTopLeft)
+    categoricalDifferingCount,
+    'pixels inside a ruined/incomplete cell must match exactly between the two fill paths',
+  ).toBeLessThanOrEqual(MAX_CATEGORICAL_DIFFERING_PIXELS)
 
-  const sampledBottomRight = samplePixelAtDisplayPoint(ctx, field.x + field.width - 1, field.y + field.height - 1)
   expect(
-    sampledBottomRight,
-    'field pixel (width-1, height-1) must equal resampleField-s own output after paintFilledContour',
-  ).toEqual(expectedBottomRight)
+    outOfToleranceCount,
+    `${outOfToleranceCount} differing pixel(s) lie more than ${MAX_BOUNDARY_DISTANCE_PX}px ` +
+      'from any band boundary: the disagreement is not confined to boundary interpolation',
+  ).toBe(0)
+
+  expect(
+    differingRatio,
+    `${(differingRatio * 100).toFixed(3)}% of field pixels differ, exceeding the ` +
+      `${(MAX_DIFFERING_PIXEL_RATIO * 100).toFixed(1)}% ceiling`,
+  ).toBeLessThanOrEqual(MAX_DIFFERING_PIXEL_RATIO)
 })
 
-// --- Measurement -----------------------------------------------------------------------------
+// --- Gate criterion 2: the repaint budget, measured on the shipped renderer --------------------
 
-test('PERF-05: form 2 (filled contour) repaint on a metric change, measured on the real committed fixture', async () => {
+test('PERF-05: form 2 (filled contour, polygon FillPath) repaint on a metric change, at the declared shipped-panel geometry', async () => {
   const score = await resolveRunCalibration()
 
-  const { ctx } = makeDisplayCanvas()
-  // A cold first paint pays one-time buffer construction cost a warm metric toggle never pays
-  // again -- warm the buffer before the timed repaint below.
-  paintFilledContour(ctx, fixture, 'multiple')
+  const { ctx } = makeCanvas(MEASUREMENT_WIDTH_PX, MEASUREMENT_HEIGHT_PX)
+  // A cold first paint pays one-time cost (e.g. Path2D construction warmup) a warm metric toggle
+  // never pays again -- warm before the timed repaint below.
+  paintSweepField(ctx, grid, { metric: 'multiple', fillPath: 'polygon' })
+
+  const generationBeforeMeasurement = grid.generation
 
   let metric: 'multiple' | 'drawdown' = 'multiple'
   const rawMs = await measureBatchedMinOfN(REPEAT_COUNT, REPAINT_BATCH_SIZE, () => {
     metric = metric === 'multiple' ? 'drawdown' : 'multiple'
-    paintFilledContour(ctx, fixture, metric)
+    paintSweepField(ctx, grid, { metric, fillPath: 'polygon' })
   })
   const normalizedMs = normalize(rawMs, score)
+
+  // The metric-change repaint reads the SAME cached grid and never re-sweeps it: PERF-05 is a
+  // re-colour, not a re-sweep (07-04-PLAN.md's planner assumption on this requirement's own edge
+  // family).
+  expect(grid.generation).toBe(generationBeforeMeasurement)
 
   await commands.recordEnvironment(captureEnvironment(score))
 
@@ -144,10 +316,31 @@ test('PERF-05: form 2 (filled contour) repaint on a metric change, measured on t
 
   await commands.recordInfoLine(
     'PERF-05-heatmap-form-2',
-    `PERF-05-heatmap-form-2: normalizedMs=${normalizedMs.toFixed(2)} rawMs=${rawMs.toFixed(4)} ` +
-      `batchSize=${REPAINT_BATCH_SIZE} geometry=${JSON.stringify(FORM_2_GEOMETRY)} ` +
-      `(individually gated at 16ms; per D-12/F-02 not a ranking against the other forms, which are ` +
-      'painted at their own geometries)',
+    `PERF-05-heatmap-form-2: fillPath=polygon normalizedMs=${normalizedMs.toFixed(2)} ` +
+      `rawMs=${rawMs.toFixed(4)} batchSize=${REPAINT_BATCH_SIZE} ` +
+      `geometry={widthPx:${MEASUREMENT_WIDTH_PX},heightPx:${MEASUREMENT_HEIGHT_PX}} ` +
+      `(gate criterion 2: measured against the declared plausible shipped panel size, per ` +
+      '06-HEATMAP-SPEC.md Finding A, not the smaller Phase 6 mockup geometry)',
+  )
+
+  // The Phase 6 mockup geometry, recorded as an info line only: keeps the shipped number
+  // comparable to the previously recorded 12.80ms figure without being the geometry the gate
+  // itself is judged against.
+  let phase6Metric: 'multiple' | 'drawdown' = 'multiple'
+  const { ctx: phase6Ctx } = makeCanvas(PHASE_6_WIDTH_PX, PHASE_6_HEIGHT_PX)
+  paintSweepField(phase6Ctx, grid, { metric: 'multiple', fillPath: 'polygon' })
+  const phase6RawMs = await measureBatchedMinOfN(REPEAT_COUNT, REPAINT_BATCH_SIZE, () => {
+    phase6Metric = phase6Metric === 'multiple' ? 'drawdown' : 'multiple'
+    paintSweepField(phase6Ctx, grid, { metric: phase6Metric, fillPath: 'polygon' })
+  })
+  const phase6NormalizedMs = normalize(phase6RawMs, score)
+  await commands.recordInfoLine(
+    'PERF-05-heatmap-form-2-phase6-geometry',
+    `PERF-05-heatmap-form-2-phase6-geometry: fillPath=polygon normalizedMs=${phase6NormalizedMs.toFixed(2)} ` +
+      `rawMs=${phase6RawMs.toFixed(4)} batchSize=${REPAINT_BATCH_SIZE} ` +
+      `geometry={widthPx:${PHASE_6_WIDTH_PX},heightPx:${PHASE_6_HEIGHT_PX}} ` +
+      '(informational: comparable to the previously recorded 12.80ms per-pixel figure at this ' +
+      'same geometry, not gated)',
   )
 
   expect(() => assertWithinBudget(row)).not.toThrow()

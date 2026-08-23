@@ -16,31 +16,37 @@
  * an arbitrary N by M field renders -- proven by painting a deliberately non-default grid in
  * `tests/app/sweep-tracer.browser.test.ts`.
  *
- * The fill itself is routed through a `FillPath` seam (a named union): this task's only member is
- * `'resample'`, the per-pixel `resampleField` path (D-09's documented fallback, D-08's permanent
- * test oracle). Plan 07-04's polygon-fill path adds a second member here and is a swap at this
- * seam, not a rewrite of this file.
+ * The fill itself is routed through a `FillPath` seam (a named union): `'resample'`, the
+ * per-pixel `resampleField` path (D-09's documented fallback, D-08's permanent test oracle, and
+ * this file's original 07-01 member), and `'polygon'` (07-04-PLAN.md Task 2), which fills the
+ * `polygon-fill.ts` band rings 06-HEATMAP-SPEC.md Finding A ranked first: GPU work proportional
+ * to cells rather than JS work proportional to display pixels. Both paths are selectable and the
+ * per-pixel path is NEVER deleted regardless of which one ships (D-08): it is the permanent
+ * oracle `bench/heatmap-form-2.bench.test.ts`'s equivalence gate proves the polygon path against
+ * before either path's timing figure is trusted.
  *
  * Reads chrome colours from CSS custom properties via `getComputedStyle` at render time,
  * following `EquityCurveChart.tsx`'s header rule (canvas gets no free `prefers-color-scheme`
  * styling) -- the heatmap palette itself does not swap by theme.
  */
 
-import { CELL_FLAG_RUINED } from '../data/sweep-fixture-format.ts'
-import { RUIN_BASE_RGBA, rampPositionFor } from '../colorscale/value-to-color.ts'
+import { CELL_FLAG_INCOMPLETE, CELL_FLAG_RUINED } from '../data/sweep-fixture-format.ts'
+import { INCOMPLETE_RGBA, RUIN_BASE_RGBA, interpolateRamp, rampPositionFor, type Rgba } from '../colorscale/value-to-color.ts'
 import { makeHatchPattern } from './hatch-pattern.ts'
 import { BAND_LEVELS, resampleField, type Metric } from './field-sampler.ts'
 import { marchingSquaresSegments } from './iso-lines.ts'
+import { buildBandPolygons } from './polygon-fill.ts'
 import type { SweepGrid } from '../sweep/sweep-grid.ts'
 
-/** This task's only fill path: the per-pixel `resampleField` bilinear resample. Plan 07-04 adds
- * `'polygon'` here; every switch over this union in this file must be exhaustive so that addition
- * is a compile-time-enforced swap, not a silent no-op. */
-export type FillPath = 'resample'
+/** The two selectable fill paths: `'resample'` (07-01, D-09/D-08's permanent oracle) and
+ * `'polygon'` (07-04-PLAN.md Task 2). Every switch over this union in this file must be
+ * exhaustive, so adding a member here is a compile-time-enforced swap, never a silent no-op. */
+export type FillPath = 'resample' | 'polygon'
 
 export interface SweepPaintOptions {
   metric: Metric
-  /** Defaults to `'resample'` -- this task's only implemented member. */
+  /** Defaults to `'resample'` until 07-04-PLAN.md Task 4 resolves the D-06 gate and sets the
+   * shipped default at this seam. */
   fillPath?: FillPath
 }
 
@@ -55,12 +61,16 @@ function getCssVar(name: string, fallback: string): string {
 }
 
 /**
- * Converts a fractional GRID column (as `iso-lines.ts`'s `marchingSquaresSegments` returns, in
- * the grid's own unflipped column indexing) to a display-pixel x-coordinate, the exact inverse of
- * this file's own pixel-to-grid mapping (mirrors the mockup's `gridColToDisplayX`, generalized to
- * `cols` rather than the mockup's fixed `FORM_2_GEOMETRY.cols`).
+ * Converts a fractional GRID column (as `iso-lines.ts`'s `marchingSquaresSegments` and
+ * `polygon-fill.ts`'s `buildBandPolygons` both return, in the grid's own unflipped column
+ * indexing) to a display-pixel x-coordinate, the exact inverse of this file's own pixel-to-grid
+ * mapping (mirrors the mockup's `gridColToDisplayX`, generalized to `cols` rather than the
+ * mockup's fixed `FORM_2_GEOMETRY.cols`). Exported so `bench/heatmap-form-2.bench.test.ts`'s
+ * equivalence gate can locate a band boundary at the exact same display coordinate this module's
+ * own stroke and polygon-fill passes use, rather than a second, independently-drifting copy of
+ * this arithmetic.
  */
-function gridColToDisplayX(colF: number, widthPx: number, cols: number): number {
+export function gridColToDisplayX(colF: number, widthPx: number, cols: number): number {
   const cellWidthPx = widthPx / cols
   return (colF + 0.5) * cellWidthPx - 0.5
 }
@@ -68,9 +78,9 @@ function gridColToDisplayX(colF: number, widthPx: number, cols: number): number 
 /**
  * Converts a fractional GRID row to a display-pixel y-coordinate, applying the same A-E5
  * vertical flip the mockup's `resampleField`/`gridRowToDisplayY` bake in: grid row 0 (the lowest
- * leverage) paints at the BOTTOM.
+ * leverage) paints at the BOTTOM. Exported for the same reason `gridColToDisplayX` is.
  */
-function gridRowToDisplayY(rowF: number, heightPx: number, rows: number): number {
+export function gridRowToDisplayY(rowF: number, heightPx: number, rows: number): number {
   const cellHeightPx = heightPx / rows
   const imgRowF = rows - 1 - rowF
   return (imgRowF + 0.5) * cellHeightPx - 0.5
@@ -96,9 +106,10 @@ function getRampValues(grid: SweepGrid, metric: Metric): Float64Array {
   return cachedRampValues
 }
 
-/** This task's only `FillPath` member: the per-pixel bilinear resample, written directly at
+/** The `'resample'` `FillPath` member: the per-pixel bilinear resample, written directly at
  * display resolution via a single `putImageData` (no upscale/`drawImage` step needed, mirroring
- * the mockup). */
+ * the mockup). D-09's documented fallback; D-08's permanent test oracle regardless of which path
+ * ships. */
 function paintResampleFill(ctx: CanvasRenderingContext2D, grid: SweepGrid, metric: Metric, widthPx: number, heightPx: number): void {
   const buffer = resampleField(grid, metric, { widthPx, heightPx })
   const imageData = new ImageData(buffer, widthPx, heightPx)
@@ -106,10 +117,89 @@ function paintResampleFill(ctx: CanvasRenderingContext2D, grid: SweepGrid, metri
   ctx.putImageData(imageData, 0, 0)
 }
 
+/** One `BAND_LEVELS` band's own representative colour, cached at its CENTRE ramp position (never
+ * its edge), mirroring `field-sampler.ts`'s own (unexported) `BAND_COLORS` construction exactly
+ * -- this module does not import that private array, so it re-derives the identical figure from
+ * the same public `BAND_LEVELS`/`interpolateRamp` this file already imports, built once at module
+ * load rather than per repaint. */
+const BAND_FILL_COLORS: readonly Rgba[] = BAND_LEVELS.slice(0, -1).map((level, i) => {
+  const upper = BAND_LEVELS[i + 1]!
+  return interpolateRamp((level + upper) / 2)
+})
+
+function rgbaToCss(rgba: Rgba): string {
+  const [r, g, b, a] = rgba
+  return `rgba(${r}, ${g}, ${b}, ${a / 255})`
+}
+
+/** The categorical branch colour for a cell's own flag byte (D-18 wins over D-20, the identical
+ * branch order `field-sampler.ts`'s `categoricalFor`/`valueToColor` already use), or `null` for a
+ * plain, valued cell. `polygon-fill.ts`'s `buildBandPolygons` excludes every categorical cell from
+ * every band polygon as a hole, so this pass paints their own flat rectangle FIRST, before any
+ * band polygon is filled on top -- mirroring `resampleField`'s own categorical override, which
+ * this fill path has no other way to reproduce, since a band polygon by construction never
+ * touches that area. */
+function categoricalFillColor(flags: number): Rgba | null {
+  if ((flags & CELL_FLAG_RUINED) !== 0) return RUIN_BASE_RGBA
+  if ((flags & CELL_FLAG_INCOMPLETE) !== 0) return INCOMPLETE_RGBA
+  return null
+}
+
+/** The `'polygon'` `FillPath` member (07-04-PLAN.md Task 2): fills `polygon-fill.ts`'s band rings
+ * directly, GPU work proportional to cells rather than JS work proportional to display pixels
+ * (06-HEATMAP-SPEC.md Finding A). Every ring vertex is converted through this file's own
+ * `gridColToDisplayX`/`gridRowToDisplayY` -- the exact inverse of `resampleField`'s own
+ * pixel-to-grid sampling formula (this file's header) -- so a polygon edge lands on the same
+ * display coordinate the oracle's own per-pixel classification would, up to the anti-aliasing
+ * `bench/heatmap-form-2.bench.test.ts`'s equivalence tolerance already accounts for. */
+function paintPolygonFill(ctx: CanvasRenderingContext2D, grid: SweepGrid, metric: Metric, widthPx: number, heightPx: number): void {
+  const { cols, rows } = grid
+  ctx.clearRect(0, 0, widthPx, heightPx)
+
+  for (let row = 0; row < rows; row++) {
+    for (let col = 0; col < cols; col++) {
+      const color = categoricalFillColor(grid.flags[row * cols + col] ?? 0)
+      if (color === null) continue
+      const x1 = gridColToDisplayX(col, widthPx, cols)
+      const x2 = gridColToDisplayX(col + 1, widthPx, cols)
+      const y1 = gridRowToDisplayY(row, heightPx, rows)
+      const y2 = gridRowToDisplayY(row + 1, heightPx, rows)
+      ctx.fillStyle = rgbaToCss(color)
+      ctx.fillRect(Math.min(x1, x2), Math.min(y1, y2), Math.abs(x2 - x1), Math.abs(y2 - y1))
+    }
+  }
+
+  const rampValues = getRampValues(grid, metric)
+  const bands = buildBandPolygons(rampValues, cols, rows, BAND_LEVELS, grid.flags)
+
+  for (let bandIndex = 0; bandIndex < bands.length; bandIndex++) {
+    const rings = bands[bandIndex]!
+    if (rings.length === 0) continue
+
+    const path = new Path2D()
+    for (const ring of rings) {
+      const points = ring.points
+      const first = points[0]!
+      path.moveTo(gridColToDisplayX(first.col, widthPx, cols), gridRowToDisplayY(first.row, heightPx, rows))
+      for (let i = 1; i < points.length; i++) {
+        const point = points[i]!
+        path.lineTo(gridColToDisplayX(point.col, widthPx, cols), gridRowToDisplayY(point.row, heightPx, rows))
+      }
+      path.closePath()
+    }
+
+    ctx.fillStyle = rgbaToCss(BAND_FILL_COLORS[bandIndex]!)
+    ctx.fill(path, 'evenodd')
+  }
+}
+
 function paintFill(ctx: CanvasRenderingContext2D, grid: SweepGrid, metric: Metric, fillPath: FillPath, widthPx: number, heightPx: number): void {
   switch (fillPath) {
     case 'resample':
       paintResampleFill(ctx, grid, metric, widthPx, heightPx)
+      return
+    case 'polygon':
+      paintPolygonFill(ctx, grid, metric, widthPx, heightPx)
       return
     default: {
       const exhaustive: never = fillPath
