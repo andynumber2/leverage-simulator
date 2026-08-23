@@ -14,14 +14,22 @@
  * dispatched. Every chunk buffer transfers in both directions via `Comlink.transfer`, never
  * structured-cloned (key_links).
  *
- * This task's pool runs one sweep at a time and merges every chunk's result into the caller's
- * `SweepGrid` before resolving; the generation-staleness check (skipping a merge from a
- * superseded sweep) is plan 07-05's work -- `SweepChunkRequest.generation` is threaded through
- * from here so that plan is a check on an existing field, not a signature change.
+ * 07-05-PLAN.md Task 1 (D-13, T-07-06, T-07-02, T-07-12): cancellation is a generation
+ * comparison, never a pool teardown. `createSweepPool()`'s returned `SweepPool` tracks its own
+ * monotonic `currentGeneration`; starting a new sweep (`runSweep`) bumps it SYNCHRONOUSLY, before
+ * any await, so a caller starting a new sweep never waits on a prior in-flight generation
+ * (PERF-06's one-frame budget). `isStaleGeneration`/`mergeChunkResult` are the pure functions that
+ * decide, per arriving chunk, whether it reaches the live grid -- exported so
+ * `tests/sweep/cancellation.test.ts` can prove the discard directly, with no pool, no Worker and
+ * no browser. A chunk whose worker call times out or fails degrades to `CELL_FLAG_INCOMPLETE`
+ * cells and a counter (T-07-12) rather than rejecting the whole sweep. `dispose()` is the ONLY
+ * place any worker in this pool is ever torn down; ordinary cancel-and-restart never terminates or
+ * reconstructs one (T-07-02).
  */
 
 import * as Comlink from 'comlink'
 
+import { CELL_FLAG_INCOMPLETE } from '../data/sweep-fixture-format.ts'
 import { chunkBufferByteLength, SWEEP_COLS, SWEEP_ROWS, type SweepGrid } from './sweep-grid.ts'
 import type { SweepBaseParams, SweepChunkRequest, SweepWorkerApi } from './sweep.worker.ts'
 
@@ -80,15 +88,20 @@ export interface SweepPoolOptions {
 }
 
 /** One full sweep request: `generation` plus the params shared by every cell, and the resolved
- * entry-date axis -- `entryDates[col]` is column `col`'s ISO entry date, length `SWEEP_COLS`,
- * precomputed once by the caller (`src/app/state.ts`'s `scheduleSweep`) from
- * `resolveEntryDateBounds`. Row indices are not supplied here: `runSweep` always covers every
- * row `0..SWEEP_ROWS - 1` for every column this task ever requests (plan 07-05's coarse pass is
- * the first caller to ever narrow either axis). */
+ * entry-date axis -- `entryDates[col]` is column `col`'s ISO entry date, length equal to the
+ * TARGET grid's own `cols` (not necessarily `SWEEP_COLS`; see `rowIndices` below), precomputed
+ * once by the caller (`src/app/state.ts`'s `scheduleSweep`) from `resolveEntryDateBounds`. */
 export interface SweepRunRequest {
   generation: number
   params: SweepBaseParams
   entryDates: readonly string[]
+  /** 07-05-PLAN.md Task 2 (D-12): row indices into the full `SWEEP_ROWS` leverage axis this run
+   * should compute, positionally matching the TARGET grid's own rows -- position `i` in this
+   * array is grid row `i`, and each entry is the ABSOLUTE row index `leverageForRow` resolves the
+   * leverage from. Defaults to every row `0..SWEEP_ROWS - 1` (the full pass's usage) when
+   * omitted. The coarse pass is the first caller to ever narrow this axis (and, via a shorter
+   * `entryDates`, the column axis too). */
+  rowIndices?: readonly number[]
 }
 
 interface ColumnChunk {
@@ -127,17 +140,108 @@ function partitionColumns(entryDates: readonly string[], workerCount: number): C
 
 const ALL_ROW_INDICES: readonly number[] = Array.from({ length: SWEEP_ROWS }, (_, i) => i)
 
+/** 07-05-PLAN.md Task 1 (D-13): true exactly when `resultGeneration` is STRICTLY behind
+ * `currentGeneration` -- the ONLY comparison standing between an arriving chunk and the live grid
+ * (T-07-06). Equal generations are NOT stale: the coarse and full passes of one sweep (plan
+ * 07-05 Task 2) share a single generation number, so the full pass's own chunks must still merge
+ * after the coarse pass has already "spent" that generation bumping it. */
+export function isStaleGeneration(resultGeneration: number, currentGeneration: number): boolean {
+  return resultGeneration < currentGeneration
+}
+
+/** One arriving chunk's own local shape, ready to merge: `columnIndices` are POSITIONS in the
+ * TARGET grid's own column axis (never absolute `SWEEP_COLS` indices -- see `SweepRunRequest`'s
+ * doc comment), and `rowCount` is the target grid's own row count for this chunk. */
+export interface ChunkMergeInput {
+  columnIndices: readonly number[]
+  rowCount: number
+  multiples: Float32Array
+  drawdowns: Float32Array
+  flags: Uint8Array
+}
+
+/**
+ * 07-05-PLAN.md Task 1 (T-07-06): the pure function standing between every arriving chunk and the
+ * live grid. Returns `true` when `chunk` merged (its cells were written into `grid`), `false`
+ * when it was discarded as stale -- in which case every one of `grid`'s cells is left
+ * byte-identical to before the call. Directly testable in the Node `unit` project with no pool,
+ * no Worker and no browser (`tests/sweep/cancellation.test.ts`).
+ */
+export function mergeChunkResult(
+  chunk: ChunkMergeInput,
+  resultGeneration: number,
+  currentGeneration: number,
+  grid: SweepGrid,
+): boolean {
+  if (isStaleGeneration(resultGeneration, currentGeneration)) return false
+  const { rowCount } = chunk
+  for (let colPos = 0; colPos < chunk.columnIndices.length; colPos++) {
+    const col = chunk.columnIndices[colPos]
+    if (col === undefined) continue
+    for (let rowPos = 0; rowPos < rowCount; rowPos++) {
+      const srcCell = colPos * rowCount + rowPos
+      const gridCell = rowPos * grid.cols + col
+      grid.multiples[gridCell] = chunk.multiples[srcCell] ?? 0
+      grid.drawdowns[gridCell] = chunk.drawdowns[srcCell] ?? 0
+      grid.flags[gridCell] = chunk.flags[srcCell] ?? 0
+    }
+  }
+  return true
+}
+
+/** T-07-12: builds a synthetic all-`CELL_FLAG_INCOMPLETE` chunk result for a chunk whose worker
+ * call timed out or failed -- every one of its cells degrades to the same flat neutral grey an
+ * incomplete-hold cell (D-28) already renders, rather than inventing a third grey-adjacent state
+ * or rejecting the whole sweep. Routed through the same `mergeChunkResult` every real result
+ * uses, so a stale failed chunk is discarded by the identical generation check. */
+function buildIncompleteChunkResult(chunk: ColumnChunk, rowCount: number): ChunkMergeInput {
+  const cellCount = chunk.columnIndices.length * rowCount
+  const flags = new Uint8Array(cellCount)
+  flags.fill(CELL_FLAG_INCOMPLETE)
+  return {
+    columnIndices: chunk.columnIndices,
+    rowCount,
+    multiples: new Float32Array(cellCount),
+    drawdowns: new Float32Array(cellCount),
+    flags,
+  }
+}
+
+/** 07-05-PLAN.md Task 1: the object one `runSweep` call resolves to. */
+export interface SweepRunHandle {
+  generation: number
+  /** Cells this run flagged `CELL_FLAG_INCOMPLETE` because their chunk's worker call timed out
+   * or failed (T-07-12) -- distinct from D-28's per-cell incomplete-hold flag, which the worker
+   * itself sets independent of any pool-level chunk failure. */
+  failedCellCount: number
+  /** True when a strictly later generation started before every one of this run's chunks had
+   * settled: a caller that receives `stale: true` must not treat `grid` as this sweep's live
+   * result (D-13) -- the newer generation's own `runSweep` call owns painting from here. */
+  stale: boolean
+}
+
 export interface SweepPool {
   /**
-   * Runs one full sweep against `request`, writing every resolved cell's `multiples`,
-   * `drawdowns` and `flags` into `grid` (mutated in place; `grid.cols`/`grid.rows` must already
-   * equal `SWEEP_COLS`/`SWEEP_ROWS`). Resolves once every chunk's result has been merged.
+   * Runs one sweep against `request`, writing every resolved cell's `multiples`, `drawdowns` and
+   * `flags` into `grid` (mutated in place; `grid.cols` must equal `request.entryDates.length` and
+   * `grid.rows` must equal `(request.rowIndices ?? every row).length`). Resolves once every
+   * chunk's result has settled (merged, discarded as stale, or flagged incomplete on failure).
+   *
+   * 07-05-PLAN.md Task 1 (T-07-02, PERF-06): bumps the pool's own generation SYNCHRONOUSLY,
+   * before any await, when `request.generation` is strictly ahead of the pool's current one --
+   * the O(1) main-thread cancellation PERF-06 asks for. Never tears down or reconstructs a
+   * worker to cancel: a call starting a new sweep never awaits any prior in-flight generation
+   * before this synchronous bump takes effect.
    */
-  runSweep(grid: SweepGrid, request: SweepRunRequest): Promise<void>
+  runSweep(grid: SweepGrid, request: SweepRunRequest): Promise<SweepRunHandle>
   /** The number of live workers this pool constructed -- the same across every `runSweep` call
    * against this pool instance, which is what makes the persistent-pool contract checkable: two
    * consecutive sweeps report the same worker count. */
   readonly workerCount: number
+  /** Terminates every worker in this pool. The ONLY place any worker here is ever torn down --
+   * ordinary cancel-and-restart (`runSweep`, above) never terminates or reconstructs one
+   * (T-07-02). Used only when sweep mode is left entirely. */
+  dispose(): void
 }
 
 interface PoolEntry {
@@ -150,9 +254,10 @@ interface PoolEntry {
 /**
  * Constructs `options.workerCount ?? resolveWorkerCount()` workers ONCE, immediately, and keeps
  * them alive for the returned `SweepPool`'s whole lifetime -- no `runSweep` call ever tears one
- * down. Every `runSweep` call partitions the request's columns into chunks, dispatches them
- * across the persistent pool via a shared work queue (`CHUNKS_PER_WORKER` per worker), and merges
- * each chunk's transferred result buffer into `grid` as it arrives.
+ * down (that is `dispose()`'s job alone). Every `runSweep` call partitions the request's columns
+ * into chunks, dispatches them across the persistent pool via a shared work queue
+ * (`CHUNKS_PER_WORKER` per worker), and merges each chunk's transferred result buffer into `grid`
+ * as it arrives, gated on every arrival by `isStaleGeneration`/`mergeChunkResult`.
  */
 export function createSweepPool(options: SweepPoolOptions = {}): SweepPool {
   const workerCount = options.workerCount ?? resolveWorkerCount()
@@ -172,27 +277,59 @@ export function createSweepPool(options: SweepPoolOptions = {}): SweepPool {
     })
   }
 
-  async function runSweep(grid: SweepGrid, request: SweepRunRequest): Promise<void> {
+  /** The pool's own generation floor (T-07-02): monotonically non-decreasing -- only ever bumped
+   * forward by `runSweep`, never rewound, so a call bearing an older generation number can never
+   * "revive" and become current again. */
+  let currentGeneration = 0
+
+  function runSweep(grid: SweepGrid, request: SweepRunRequest): Promise<SweepRunHandle> {
+    const generation = request.generation
+    // The bump itself: synchronous, before any await anywhere in this function, so starting a
+    // new sweep never waits on a prior in-flight generation (PERF-06).
+    if (generation > currentGeneration) {
+      currentGeneration = generation
+    }
+
+    const rowIndices = request.rowIndices ?? ALL_ROW_INDICES
+    if (grid.cols !== request.entryDates.length) {
+      throw new Error(
+        `sweep-pool: grid.cols (${grid.cols}) does not equal request.entryDates.length ` +
+          `(${request.entryDates.length})`,
+      )
+    }
+    if (grid.rows !== rowIndices.length) {
+      throw new Error(
+        `sweep-pool: grid.rows (${grid.rows}) does not equal request.rowIndices.length ` +
+          `(${rowIndices.length})`,
+      )
+    }
+
     const chunks = partitionColumns(request.entryDates, workerCount)
     let nextChunkIndex = 0
+    let failedCellCount = 0
+    const rowCount = rowIndices.length
 
     async function drainQueue(entry: PoolEntry): Promise<void> {
       const { remote, workerIndex, failure } = entry
       while (nextChunkIndex < chunks.length) {
+        // A stale generation's remaining, not-yet-dispatched chunks are skipped outright: no
+        // worker time is spent computing a result nobody will ever paint (T-07-02).
+        if (isStaleGeneration(generation, currentGeneration)) return
+
         const chunkIndex = nextChunkIndex
         nextChunkIndex += 1
         const chunk = chunks[chunkIndex]
         if (!chunk) continue
 
-        const cellCount = chunk.columnIndices.length * SWEEP_ROWS
+        const cellCount = chunk.columnIndices.length * rowCount
         const buffer = new ArrayBuffer(chunkBufferByteLength(cellCount))
 
         const chunkRequest: SweepChunkRequest = {
-          generation: request.generation,
+          generation,
           params: request.params,
           columnIndices: chunk.columnIndices,
           entryDates: chunk.entryDates,
-          rowIndices: ALL_ROW_INDICES as number[],
+          rowIndices: rowIndices as number[],
         }
 
         let timeoutHandle: ReturnType<typeof setTimeout> | undefined
@@ -214,33 +351,46 @@ export function createSweepPool(options: SweepPoolOptions = {}): SweepPool {
             failure,
             timeout,
           ])
+          clearTimeout(timeoutHandle)
 
-          const rowCount = SWEEP_ROWS
           const chunkCellCount = chunk.columnIndices.length * rowCount
           const multiples = new Float32Array(resultBuffer, 0, chunkCellCount)
           const drawdowns = new Float32Array(resultBuffer, chunkCellCount * 4, chunkCellCount)
-          const flags = new Uint8Array(resultBuffer, chunkCellCount * 4 + chunkCellCount * 4, chunkCellCount)
+          const flags = new Uint8Array(resultBuffer, chunkCellCount * 8, chunkCellCount)
 
-          for (let colPos = 0; colPos < chunk.columnIndices.length; colPos++) {
-            const col = chunk.columnIndices[colPos]
-            if (col === undefined) continue
-            for (let rowPos = 0; rowPos < rowCount; rowPos++) {
-              const srcCell = colPos * rowCount + rowPos
-              const gridCell = rowPos * SWEEP_COLS + col
-              grid.multiples[gridCell] = multiples[srcCell] ?? 0
-              grid.drawdowns[gridCell] = drawdowns[srcCell] ?? 0
-              grid.flags[gridCell] = flags[srcCell] ?? 0
-            }
-          }
-        } finally {
+          // T-07-06: the generation comparison, and nothing else, decides whether this arriving
+          // chunk reaches `grid`.
+          mergeChunkResult(
+            { columnIndices: chunk.columnIndices, rowCount, multiples, drawdowns, flags },
+            generation,
+            currentGeneration,
+            grid,
+          )
+        } catch {
+          // T-07-12: a timed-out or failed chunk degrades to CELL_FLAG_INCOMPLETE cells and a
+          // counter, rather than rejecting the whole sweep. Still routed through the same
+          // generation-gated merge, so a stale failure cannot corrupt a live grid either.
           clearTimeout(timeoutHandle)
+          const incomplete = buildIncompleteChunkResult(chunk, rowCount)
+          const merged = mergeChunkResult(incomplete, generation, currentGeneration, grid)
+          if (merged) failedCellCount += chunk.columnIndices.length * rowCount
         }
       }
     }
 
-    await Promise.all(pool.map((entry) => drainQueue(entry)))
-    grid.generation = request.generation
+    return Promise.all(pool.map((entry) => drainQueue(entry))).then(() => {
+      const stale = isStaleGeneration(generation, currentGeneration)
+      if (!stale) grid.generation = generation
+      return { generation, failedCellCount, stale }
+    })
   }
 
-  return { runSweep, workerCount }
+  function dispose(): void {
+    // T-07-02: the ONLY place any worker in this pool is ever torn down.
+    for (const entry of pool) {
+      entry.worker.terminate()
+    }
+  }
+
+  return { runSweep, workerCount, dispose }
 }
