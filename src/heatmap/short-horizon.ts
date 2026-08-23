@@ -32,6 +32,21 @@
  * rule is a coarse "under N years" marker, not a value that feeds any computation, and the
  * estimate's error (at most a few trading days across a calendar year, from weekends/holidays)
  * is far smaller than the width of one grid column on D-03's 200-column entry-date axis.
+ *
+ * 07-09-PLAN.md Task 3 (F-04): the rule's own dash period is `[4, 3]` (a 7-display-pixel repeat:
+ * 4px on, 3px off), deliberately chosen to be clearly distinguishable from `hatch-pattern.ts`'s
+ * ruin hatch, whose 45-degree diagonal repeats every 6 display pixels. F-04 records that this
+ * rule and the ruin hatch can occupy the same region at the right edge of an open-ended sweep,
+ * both are deliberate, and neither yields -- a dash period equal to (or a small integer multiple
+ * of) 6 would let the rule's own on/off rhythm fall into visual lock-step with the hatch's
+ * diagonal repeat, reading as one blended texture rather than two independently legible marks
+ * layered on top of each other. 7 and 6 share no common factor beyond 1, so the two rhythms drift
+ * in and out of phase across the rule's full height rather than aligning at a fixed offset. The
+ * rule is also drawn strictly AFTER the hatch (`paint-contour.ts`'s own annotation-pass ordering,
+ * this file's `paintShortHorizonRule` doc comment below), and its label carries its own opaque
+ * `var(--color-surface)` backing (sized to the text plus the `--space-xs` padding token) so the
+ * label reads cleanly even where it crosses the hatch's own diagonal texture, which a bare 12px
+ * muted-text fill directly over a 2px-stroke diagonal pattern would not.
  */
 
 import type { SweepGrid } from '../sweep/sweep-grid.ts'
@@ -145,11 +160,22 @@ function getCssVar(name: string, fallback: string): string {
   return value === '' ? fallback : value
 }
 
+/** Reads a pixel-valued CSS custom property (e.g. `--space-xs: 4px`) and parses it to a bare
+ * number, falling back to `fallbackPx` when the property is unset or unparsable -- used only for
+ * the label's own backing padding below, so a design-token change to `--space-xs` is picked up
+ * here without a second hand-typed literal drifting from it. */
+function getCssPx(name: string, fallbackPx: number): number {
+  const raw = getComputedStyle(document.documentElement).getPropertyValue(name).trim()
+  const parsed = Number.parseFloat(raw)
+  return Number.isFinite(parsed) ? parsed : fallbackPx
+}
+
 /** 12px/400, the "Label / inline annotation" typographic role `07-UI-SPEC.md`'s Typography
  * table assigns to this exact label, in the app's UI-text stack (this is prose, not a numeric
  * readout, so it does not route through the numerics-only monospace stack `SliceChart.tsx`'s
  * `AXIS_FONT` uses). */
-const LABEL_FONT = '12px system-ui, -apple-system, "Segoe UI", sans-serif'
+const LABEL_FONT_SIZE_PX = 12
+const LABEL_FONT = `${LABEL_FONT_SIZE_PX}px system-ui, -apple-system, "Segoe UI", sans-serif`
 
 /** Gap, in display pixels, between the rule and its label text on either side of the line. */
 const LABEL_GAP_PX = 4
@@ -193,8 +219,8 @@ export function paintShortHorizonRule(
   ctx.save()
   ctx.strokeStyle = muted
   ctx.lineWidth = 1
-  // Task 3's own dash period, distinguishable from the ruin hatch's 6-display-pixel diagonal
-  // period -- see that task's own header note once it lands.
+  // A 7-display-pixel dash period ([4, 3]), deliberately distinguishable from the ruin hatch's
+  // 6-display-pixel diagonal period -- see this module's own header note for the full reasoning.
   ctx.setLineDash([4, 3])
   ctx.beginPath()
   ctx.moveTo(snappedX, 0)
@@ -205,10 +231,26 @@ export function paintShortHorizonRule(
 
   ctx.save()
   ctx.font = LABEL_FONT
-  ctx.fillStyle = muted
-  ctx.textBaseline = 'top'
   const textWidth = ctx.measureText(SHORT_HORIZON_LABEL).width
   const fitsRight = x + LABEL_GAP_PX + textWidth <= widthPx
+
+  // 07-09-PLAN.md Task 3 (F-04): a small opaque backing in the panel surface colour
+  // (`var(--color-surface)`), sized to the text plus the `--space-xs` (4px) padding token on
+  // every side, so the label stays legible where it crosses the ruin hatch's own diagonal
+  // texture -- 12px muted text drawn directly over a 2px-stroke diagonal pattern is not legible
+  // on its own, since the hatch's strokes and the label's own thin glyph strokes compete at a
+  // similar visual weight. The backing paints BEFORE the text and AFTER the rule's own dashed
+  // stroke above, so the text remains the topmost layer.
+  const backingPaddingPx = getCssPx('--space-xs', 4)
+  const backingWidth = textWidth + backingPaddingPx * 2
+  const backingHeight = LABEL_FONT_SIZE_PX + backingPaddingPx * 2
+  const backingY = LABEL_GAP_PX - backingPaddingPx
+  const backingX = fitsRight ? x + LABEL_GAP_PX - backingPaddingPx : x - LABEL_GAP_PX - textWidth - backingPaddingPx
+  ctx.fillStyle = getCssVar('--color-surface', '#ffffff')
+  ctx.fillRect(backingX, backingY, backingWidth, backingHeight)
+
+  ctx.fillStyle = muted
+  ctx.textBaseline = 'top'
   if (fitsRight) {
     ctx.textAlign = 'left'
     ctx.fillText(SHORT_HORIZON_LABEL, x + LABEL_GAP_PX, LABEL_GAP_PX)

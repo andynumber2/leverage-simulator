@@ -82,6 +82,15 @@ import { BAND_LEVELS, resampleField, type Metric } from './field-sampler.ts'
 import { marchingSquaresSegments } from './iso-lines.ts'
 import { buildBandPolygons } from './polygon-fill.ts'
 import { paintShortHorizonRule, shortHorizonColumn } from './short-horizon.ts'
+import {
+  CURVE_LABEL_FONT,
+  CURVE_LABEL_FONT_HEIGHT_PX,
+  labelAnchorAvoiding,
+  paintCurveLabel,
+  type CurveLabelAnchor,
+  type DisplaySegment,
+} from './curve-label.ts'
+import { formatMultiple, formatSignedPercent } from '../metrics/format.ts'
 import type { SweepGrid } from '../sweep/sweep-grid.ts'
 
 /** The two selectable fill paths: `'resample'` (07-01, D-08's permanent oracle, and -- per
@@ -374,6 +383,33 @@ function paintPolygonFill(ctx: CanvasRenderingContext2D, grid: SweepGrid, metric
   }
 }
 
+/**
+ * 07-09-PLAN.md Task 4 (D-33): the emphasized boundary's own value, rendered through
+ * `src/metrics/format.ts` -- never a second inline formatter (the project's own formatting
+ * contract: "every rendered metric value routes through here"). `multiple`'s emphasized boundary
+ * is breakeven (`formatMultiple(1.0)`, `"1.00x"`); `annualized`'s is `formatSignedPercent(0)`
+ * (`"0.00%"`) suffixed `/yr`, matching `legendTicksForMetric`'s own identical
+ * `${formatSignedPercent(value)}/yr` convention for the same metric's legend ticks, rather than a
+ * second, differently-formatted copy of the same number. `drawdown` has no emphasized boundary
+ * (`emphasizedBandLevelFor('drawdown')` is `null`), so this function is never reached for it: the
+ * caller only invokes it inside the `isEmphasized` branch below, which is never `true` for a metric
+ * whose `emphasizedLevel` is `null`.
+ */
+function curveLabelTextFor(metric: Metric): string | null {
+  switch (metric) {
+    case 'multiple':
+      return formatMultiple(1.0)
+    case 'annualized':
+      return `${formatSignedPercent(0)}/yr`
+    case 'drawdown':
+      return null
+    default: {
+      const exhaustive: never = metric
+      throw new Error(`paint-contour: unknown metric "${String(exhaustive)}"`)
+    }
+  }
+}
+
 function paintFill(ctx: CanvasRenderingContext2D, grid: SweepGrid, metric: Metric, fillPath: FillPath, widthPx: number, heightPx: number): void {
   switch (fillPath) {
     case 'resample':
@@ -422,25 +458,97 @@ export function paintSweepField(ctx: CanvasRenderingContext2D, grid: SweepGrid, 
   const borderColor = getCssVar('--color-border', '#d0d3d8')
   const textColor = getCssVar('--color-text', '#14161a')
 
+  // 07-09-PLAN.md Task 1 (D-29): resolved before the band-levels loop (rather than after, as
+  // originally written) so Task 4's own curve-label collision-avoidance can steer clear of the
+  // rule's own column while choosing the breakeven/annualized-emphasized label's anchor -- both
+  // depend only on `grid.meta`, never on anything painted, so hoisting this call changes nothing
+  // about what it resolves to.
+  const shortHorizonCol = shortHorizonColumn(grid)
+  const shortHorizonRuleXPx = shortHorizonCol !== null ? shortHorizonCol * (widthPx / cols) : null
+
   for (const level of bandLevels) {
     const segments = marchingSquaresSegments(rampValues, cols, rows, level, grid.flags)
     if (segments.length === 0) continue
 
     const isEmphasized = emphasizedLevel !== null && Math.abs(level - emphasizedLevel) < 1e-9
+    const displaySegments: DisplaySegment[] = segments.map((segment) => ({
+      x1: gridColToDisplayX(segment.x1, widthPx, cols),
+      y1: gridRowToDisplayY(segment.y1, heightPx, rows),
+      x2: gridColToDisplayX(segment.x2, widthPx, cols),
+      y2: gridRowToDisplayY(segment.y2, heightPx, rows),
+    }))
+
+    // 07-09-PLAN.md Task 4 (D-33): the emphasized boundary alone carries an inline label, drawn
+    // ON the curve itself -- resolved BEFORE stroking so the segment(s) under the label's own
+    // bounding box can be excluded from the stroke pass below (the contour-map "break the line
+    // under the label" convention: the text sits IN the line, never on top of it).
+    let curveLabelAnchor: CurveLabelAnchor | null = null
+    let curveLabelText: string | null = null
+    const skipSegmentIndices = new Set<number>()
+
+    if (isEmphasized) {
+      curveLabelText = curveLabelTextFor(options.metric)
+      if (curveLabelText !== null) {
+        ctx.save()
+        ctx.font = CURVE_LABEL_FONT
+        const textWidthPx = ctx.measureText(curveLabelText).width
+        ctx.restore()
+
+        // 07-09-PLAN.md Task 4: prefers an anchor at least the label's own width away from the
+        // short-horizon rule's column (D-29), falling back to the next-shallowest candidate --
+        // resolves the F-04 collision Task 4's own plan text calls out between this label and
+        // Task 1's rule label.
+        curveLabelAnchor = labelAnchorAvoiding(displaySegments, { widthPx, heightPx }, shortHorizonRuleXPx, textWidthPx)
+
+        if (curveLabelAnchor !== null) {
+          const halfW = textWidthPx / 2
+          const halfH = CURVE_LABEL_FONT_HEIGHT_PX / 2
+          const cos = Math.cos(curveLabelAnchor.angleRad)
+          const sin = Math.sin(curveLabelAnchor.angleRad)
+          const localCorners: Array<readonly [number, number]> = [
+            [-halfW, -halfH],
+            [halfW, -halfH],
+            [halfW, halfH],
+            [-halfW, halfH],
+          ]
+          const corners = localCorners.map(([dx, dy]) => ({
+            x: curveLabelAnchor!.xPx + dx * cos - dy * sin,
+            y: curveLabelAnchor!.yPx + dx * sin + dy * cos,
+          }))
+          const boxMinX = Math.min(...corners.map((c) => c.x))
+          const boxMaxX = Math.max(...corners.map((c) => c.x))
+          const boxMinY = Math.min(...corners.map((c) => c.y))
+          const boxMaxY = Math.max(...corners.map((c) => c.y))
+
+          for (let i = 0; i < displaySegments.length; i++) {
+            const segment = displaySegments[i]!
+            const segMinX = Math.min(segment.x1, segment.x2)
+            const segMaxX = Math.max(segment.x1, segment.x2)
+            const segMinY = Math.min(segment.y1, segment.y2)
+            const segMaxY = Math.max(segment.y1, segment.y2)
+            const intersects = segMinX <= boxMaxX && segMaxX >= boxMinX && segMinY <= boxMaxY && segMaxY >= boxMinY
+            if (intersects) skipSegmentIndices.add(i)
+          }
+        }
+      }
+    }
+
     ctx.save()
     ctx.beginPath()
-    for (const segment of segments) {
-      const x1 = gridColToDisplayX(segment.x1, widthPx, cols)
-      const y1 = gridRowToDisplayY(segment.y1, heightPx, rows)
-      const x2 = gridColToDisplayX(segment.x2, widthPx, cols)
-      const y2 = gridRowToDisplayY(segment.y2, heightPx, rows)
-      ctx.moveTo(x1, y1)
-      ctx.lineTo(x2, y2)
+    for (let i = 0; i < displaySegments.length; i++) {
+      if (skipSegmentIndices.has(i)) continue
+      const segment = displaySegments[i]!
+      ctx.moveTo(segment.x1, segment.y1)
+      ctx.lineTo(segment.x2, segment.y2)
     }
     ctx.lineWidth = isEmphasized ? 2 : 1
     ctx.strokeStyle = isEmphasized ? textColor : borderColor
     ctx.stroke()
     ctx.restore()
+
+    if (curveLabelAnchor !== null && curveLabelText !== null) {
+      paintCurveLabel(ctx, curveLabelAnchor, curveLabelText)
+    }
   }
 
   const cellWidthPx = widthPx / cols
@@ -481,9 +589,9 @@ export function paintSweepField(ctx: CanvasRenderingContext2D, grid: SweepGrid, 
 
   // 07-09-PLAN.md Task 1 (D-29): the short-horizon rule paints LAST, after every band fill, band
   // boundary stroke, and the ruin hatch, so it layers above the whole field rather than floating
-  // over it in the DOM. Gated on shortHorizonColumn returning non-null: fixed-period mode (and
-  // an open-ended sweep where no column crosses the threshold) gets no rule at all.
-  const shortHorizonCol = shortHorizonColumn(grid)
+  // over it in the DOM. Gated on shortHorizonCol (resolved above, before the band-levels loop)
+  // being non-null: fixed-period mode (and an open-ended sweep where no column crosses the
+  // threshold) gets no rule at all.
   if (shortHorizonCol !== null) {
     paintShortHorizonRule(ctx, { widthPx, heightPx }, shortHorizonCol, cols)
   }
