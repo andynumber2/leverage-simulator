@@ -103,10 +103,14 @@ describe('mergeChunkResult', () => {
     // not a before/after comparison of two zero-filled arrays.
     grid.multiples.set([1.1, 2.2, 3.3, 4.4])
     grid.drawdowns.set([0.1, 0.2, 0.3, 0.4])
+    // 07-06-PLAN.md (orchestrator-authorized scope extension): annualized is now a 4th merged
+    // array, seeded here the same way multiples/drawdowns are, so "unchanged" covers it too.
+    grid.annualized.set([0.05, 0.06, 0.07, 0.08])
     grid.flags.set([0, 0, 0, 0])
     const before = {
       multiples: Array.from(grid.multiples),
       drawdowns: Array.from(grid.drawdowns),
+      annualized: Array.from(grid.annualized),
       flags: Array.from(grid.flags),
     }
 
@@ -115,6 +119,7 @@ describe('mergeChunkResult', () => {
       rowCount: 2,
       multiples: new Float32Array([9, 9, 9, 9]),
       drawdowns: new Float32Array([9, 9, 9, 9]),
+      annualized: new Float32Array([9, 9, 9, 9]),
       flags: new Uint8Array([9, 9, 9, 9]),
     }
 
@@ -123,6 +128,7 @@ describe('mergeChunkResult', () => {
     expect(merged).toBe(false)
     expect(Array.from(grid.multiples)).toEqual(before.multiples)
     expect(Array.from(grid.drawdowns)).toEqual(before.drawdowns)
+    expect(Array.from(grid.annualized)).toEqual(before.annualized)
     expect(Array.from(grid.flags)).toEqual(before.flags)
   })
 
@@ -135,6 +141,11 @@ describe('mergeChunkResult', () => {
       rowCount: 2,
       multiples: new Float32Array([1.5, 2.5, 3.5, 4.5]),
       drawdowns: new Float32Array([0.1, 0.2, 0.3, 0.4]),
+      // 07-06-PLAN.md (orchestrator-authorized scope extension): distinguishable annualized
+      // values, mapped through the exact same colPos/rowPos -> gridCell transform as multiples/
+      // drawdowns below -- proving the merge loop's 4th segment lands at the right cell, not
+      // just that the field exists.
+      annualized: new Float32Array([0.11, 0.22, 0.33, 0.44]),
       flags: new Uint8Array([0, 1, 0, 0]),
     }
 
@@ -149,6 +160,11 @@ describe('mergeChunkResult', () => {
     const expectedDrawdowns = [0.1, 0.3, 0.2, 0.4]
     for (let i = 0; i < expectedDrawdowns.length; i++) {
       expect(drawdowns[i]).toBeCloseTo(expectedDrawdowns[i]!, 5)
+    }
+    const annualized = Array.from(grid.annualized)
+    const expectedAnnualized = [0.11, 0.33, 0.22, 0.44]
+    for (let i = 0; i < expectedAnnualized.length; i++) {
+      expect(annualized[i]).toBeCloseTo(expectedAnnualized[i]!, 5)
     }
     expect(Array.from(grid.flags)).toEqual([0, 0, 1, 0])
   })

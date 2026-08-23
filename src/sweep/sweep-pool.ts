@@ -30,7 +30,7 @@
 import * as Comlink from 'comlink'
 
 import { CELL_FLAG_INCOMPLETE } from '../data/sweep-fixture-format.ts'
-import { chunkBufferByteLength, SWEEP_COLS, SWEEP_ROWS, type SweepGrid } from './sweep-grid.ts'
+import { ANNUALIZED_UNDEFINED, chunkBufferByteLength, SWEEP_COLS, SWEEP_ROWS, type SweepGrid } from './sweep-grid.ts'
 import type { SweepBaseParams, SweepChunkRequest, SweepWorkerApi } from './sweep.worker.ts'
 
 export type { SweepBaseParams }
@@ -151,12 +151,18 @@ export function isStaleGeneration(resultGeneration: number, currentGeneration: n
 
 /** One arriving chunk's own local shape, ready to merge: `columnIndices` are POSITIONS in the
  * TARGET grid's own column axis (never absolute `SWEEP_COLS` indices -- see `SweepRunRequest`'s
- * doc comment), and `rowCount` is the target grid's own row count for this chunk. */
+ * doc comment), and `rowCount` is the target grid's own row count for this chunk.
+ *
+ * 07-06-PLAN.md (orchestrator-authorized scope extension): `annualized` is a required member,
+ * not optional -- every chunk result (real or the synthetic incomplete-chunk fallback below)
+ * always carries all four metric arrays, matching `chunkBufferByteLength`'s 4-segment wire
+ * layout. */
 export interface ChunkMergeInput {
   columnIndices: readonly number[]
   rowCount: number
   multiples: Float32Array
   drawdowns: Float32Array
+  annualized: Float32Array
   flags: Uint8Array
 }
 
@@ -183,6 +189,12 @@ export function mergeChunkResult(
       const gridCell = rowPos * grid.cols + col
       grid.multiples[gridCell] = chunk.multiples[srcCell] ?? 0
       grid.drawdowns[gridCell] = chunk.drawdowns[srcCell] ?? 0
+      // 07-06-PLAN.md (orchestrator-authorized scope extension): ANNUALIZED_UNDEFINED, never 0,
+      // for the same out-of-bounds-index defensive fallback the other two arrays use above (a
+      // genuinely undefined annualized return is NaN already at this point -- sweep-grid.ts's own
+      // sentinel contract -- this `??` only guards a TS noUncheckedIndexedAccess read that never
+      // actually misses within chunk.columnIndices.length * rowCount).
+      grid.annualized[gridCell] = chunk.annualized[srcCell] ?? ANNUALIZED_UNDEFINED
       grid.flags[gridCell] = chunk.flags[srcCell] ?? 0
     }
   }
@@ -203,6 +215,11 @@ function buildIncompleteChunkResult(chunk: ColumnChunk, rowCount: number): Chunk
     rowCount,
     multiples: new Float32Array(cellCount),
     drawdowns: new Float32Array(cellCount),
+    // Zero-filled (the typed array default), matching D-20/computeChunkMetrics's own D-28
+    // incomplete-cell convention: an incomplete-hold cell's annualized value is 0, never the
+    // ANNUALIZED_UNDEFINED sentinel -- that sentinel is reserved for a genuinely undefined
+    // solver result on an otherwise-complete cell, not a pool-level chunk failure.
+    annualized: new Float32Array(cellCount),
     flags,
   }
 }
@@ -353,15 +370,18 @@ export function createSweepPool(options: SweepPoolOptions = {}): SweepPool {
           ])
           clearTimeout(timeoutHandle)
 
+          // 07-06-PLAN.md (orchestrator-authorized scope extension): 4-segment layout, matching
+          // sweep-grid.ts's chunkBufferByteLength and sweep.worker.ts's runChunk write order.
           const chunkCellCount = chunk.columnIndices.length * rowCount
           const multiples = new Float32Array(resultBuffer, 0, chunkCellCount)
           const drawdowns = new Float32Array(resultBuffer, chunkCellCount * 4, chunkCellCount)
-          const flags = new Uint8Array(resultBuffer, chunkCellCount * 8, chunkCellCount)
+          const annualized = new Float32Array(resultBuffer, chunkCellCount * 4 * 2, chunkCellCount)
+          const flags = new Uint8Array(resultBuffer, chunkCellCount * 4 * 3, chunkCellCount)
 
           // T-07-06: the generation comparison, and nothing else, decides whether this arriving
           // chunk reaches `grid`.
           mergeChunkResult(
-            { columnIndices: chunk.columnIndices, rowCount, multiples, drawdowns, flags },
+            { columnIndices: chunk.columnIndices, rowCount, multiples, drawdowns, annualized, flags },
             generation,
             currentGeneration,
             grid,

@@ -11,6 +11,14 @@
  * persistent across sweeps (constructs its workers once, reuses them on a second sweep), and the
  * renderer is grid-size agnostic (F-07: a deliberately non-default 51x14 grid paints without
  * error).
+ *
+ * 07-06-PLAN.md (orchestrator-authorized scope extension): also proves `grid.annualized` is
+ * populated with REAL values by a real, live sweep -- not merely that the field exists on the
+ * `SweepGrid` type. Plan 07-03 computed `annualized` correctly inside `computeChunkMetrics` but
+ * deliberately left it uncrossed over `runChunk`'s transferable-buffer wire, so before this
+ * plan's `chunkBufferByteLength`/`sweep-pool.ts` extension, `grid.annualized` stayed zero-filled
+ * forever regardless of what `computeChunkMetrics` computed -- a bug this test would have caught
+ * on its own, and continues to guard against regressing.
  */
 
 import { afterEach, beforeEach, expect, test } from 'vitest'
@@ -236,3 +244,65 @@ test('paintSweepField renders a deliberately non-default 51x14 grid without erro
   const colors = distinctSampledColors(canvas, 5)
   expect(colors.size).toBeGreaterThanOrEqual(4)
 })
+
+test(
+  '07-06-PLAN.md (orchestrator-authorized scope extension): a real sweep populates grid.annualized ' +
+    'with real, varied values crossing the runChunk wire, not a zero-filled buffer',
+  async () => {
+    container = document.createElement('div')
+    document.body.appendChild(container)
+    disposeApp = mountApp(container)
+
+    // Same present-but-disabled-while-loading pattern 07-06-PLAN.md Task 2 introduced -- wait for
+    // the "Sweep" radio specifically to become enabled before clicking it.
+    await waitFor(() => {
+      const toggle = container!.querySelector<HTMLInputElement>('[data-testid="sweep-mode-sweep"]')
+      return toggle !== null && !toggle.disabled
+    })
+    const toggle = container.querySelector<HTMLInputElement>('[data-testid="sweep-mode-sweep"]')
+    expect(toggle).not.toBeNull()
+    toggle!.click()
+    expect(resultMode()).toBe('sweep')
+
+    await waitFor(() => sweepGrid() !== null && sweepGrid()!.cols === 200 && sweepGrid()!.rows === 50, 30_000)
+
+    const grid = sweepGrid()!
+    const cellCount = grid.cols * grid.rows
+
+    // D-20/computeChunkMetrics: an incomplete-hold cell's annualized value is contractually 0,
+    // never the ANNUALIZED_UNDEFINED sentinel -- checked directly against every cell this run's
+    // own CELL_FLAG_INCOMPLETE flag names, not inferred from the count below.
+    let incompleteCellCount = 0
+    let validNonZeroCount = 0
+    let sawTheUndefinedSentinelOutsideIncomplete = false
+    for (let i = 0; i < cellCount; i++) {
+      const flags = grid.flags[i] ?? 0
+      const value = grid.annualized[i] ?? 0
+      if ((flags & CELL_FLAG_INCOMPLETE) !== 0) {
+        incompleteCellCount++
+        expect(value, `incomplete cell ${i}'s annualized value must be exactly 0, never the sentinel`).toBe(0)
+        continue
+      }
+      if (Number.isNaN(value)) {
+        // A real ANNUALIZED_UNDEFINED sentinel on a non-incomplete cell (an undefined solver
+        // bracket) is a legitimate, expected outcome for SOME cells -- not itself a failure --
+        // but it must never be silently indistinguishable from a real 0%/yr result.
+        sawTheUndefinedSentinelOutsideIncomplete = true
+        continue
+      }
+      if (Number.isFinite(value) && value !== 0) validNonZeroCount++
+    }
+
+    // The default landing sweep (SPX, contributionAmount 0, D-24's CAGR branch) resolves a real,
+    // non-zero CAGR for the overwhelming majority of the 10,000 cells -- mirroring this file's
+    // own multiples validCells >= 9500 floor above. Before this plan's wire-layout extension,
+    // grid.annualized stayed zero-filled for every cell regardless of flags, which this
+    // non-zero-value floor -- not merely a non-null/defined check -- is what catches.
+    expect(validNonZeroCount).toBeGreaterThanOrEqual(9500 - incompleteCellCount)
+    expect(incompleteCellCount).toBeLessThan(cellCount)
+    // Documents the sentinel path is exercised or not for this run without failing either way --
+    // metrics-one-pass.test.ts (07-03) is the dedicated, deterministic sentinel-branch proof.
+    void sawTheUndefinedSentinelOutsideIncomplete
+  },
+  35_000,
+)
