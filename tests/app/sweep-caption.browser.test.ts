@@ -17,7 +17,7 @@ import { afterEach, beforeEach, expect, test, vi } from 'vitest'
 import { render } from 'solid-js/web'
 
 import { mountApp } from '../../src/app/main.tsx'
-import { resetAppState, resultMode, sweepGrid } from '../../src/app/state.ts'
+import { loadStatus, resetAppState, resultMode, sweepGrid } from '../../src/app/state.ts'
 import { SweepCaption } from '../../src/app/components/ResultColumn/SweepCaption.tsx'
 import { VIZ10_CAVEAT_SENTENCES } from '../../src/heatmap/sweep-copy.ts'
 import { createSweepGrid, type SweepGrid, type SweepGridMeta } from '../../src/sweep/sweep-grid.ts'
@@ -167,8 +167,11 @@ async function mountAndEnterSweepMode(): Promise<HTMLDivElement> {
   const el = document.createElement('div')
   document.body.appendChild(el)
   disposeApp = mountApp(el)
-  await waitFor(() => el.querySelector('[data-testid="sweep-mode-toggle"]') !== null)
-  const toggle = el.querySelector<HTMLButtonElement>('[data-testid="sweep-mode-toggle"]')!
+  // The mode radios are `disabled` until the bundle finishes loading, and a click on a disabled
+  // input is a no-op -- wait for readiness the same way tests/app/sweep-controls.browser.test.ts
+  // does, not merely for the element to exist.
+  await waitFor(() => loadStatus() === 'ready')
+  const toggle = el.querySelector<HTMLInputElement>('[data-testid="sweep-mode-sweep"]')!
   toggle.click()
   expect(resultMode()).toBe('sweep')
   return el
