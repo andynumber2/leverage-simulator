@@ -240,10 +240,146 @@ npm run test -- --run tests/ci-workflow.test.ts tests/report.test.ts tests/perf-
 
 ## 2. The D-17 baseline run
 
-Filled in by Task 3, from the CI run id Task 2 returns (or an explicit record that none was
-obtained).
+**Task 2 resolution:** the orchestrator, explicitly authorized by the repository owner, merged
+Task 1's two commits (`47d52f3`, `a29acb5`) onto `gsd/phase-07-sweep-engine-and-the-heatmap`
+as merge commit `d81bc35`, pushed the branch, and opened PR #7
+(https://github.com/andynumber2/leverage-simulator/pull/7). This started
+`.github/workflows/ci.yml`'s `pull_request` trigger for the first time against this phase's
+retargeted, production-pool `bench/sweep.bench.test.ts`.
+
+**CI run 32654061079** (workflow: CI, `pull_request` event):
+
+```
+gh run view 32654061079 -R andynumber2/leverage-simulator --json headBranch,headSha,conclusion
+```
+
+- `headBranch`: `gsd/phase-07-sweep-engine-and-the-heatmap`
+- `headSha`: `d81bc3501c1cd1e12c1b2f0e9eb86798f2ccc31b`
+- `conclusion`: `failure`
+- Duration: 2m5s
+
+The job failed at the `npm run bench` step with:
+
+```
+AssertionError: expected [Function] to not throw an error but 'Error: assertWithinBudget: budget "PE…' was thrown
+Received: "Error: assertWithinBudget: budget \"PERF-03\" failed: measured 1168.5889570555207ms exceeds budget 1000ms"
+ ❯ bench/sweep.bench.test.ts:411:44
+```
+
+The `actions/upload-artifact@v4` step still succeeded (`if: always()`), exactly as T-07-28's
+mitigation and this plan's own key link predicted: a red job did not discard the measurement, it
+is recovered here by run id.
+
+**Artifact fetched with:**
+
+```
+gh run download 32654061079 -R andynumber2/leverage-simulator --name bench-results
+```
+
+**Environment block, transcribed verbatim from the downloaded `bench-results.json`:**
+
+```json
+{
+  "hardwareConcurrency": 4,
+  "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/151.0.7922.34 Safari/537.36",
+  "deviceMemory": 16,
+  "calibrationScore": 0.8149999999997817,
+  "timestamp": "2026-08-23T17:13:59.895Z",
+  "os": "linux 6.17.0-1022-azure",
+  "ci": true
+}
+```
+
+`hardwareConcurrency` is **4**, matching `PERF_03_BASELINE_HARDWARE_CONCURRENCY`: this genuinely
+is a D-17 baseline run, not a differently-sized host being read as one.
+
+**PERF-03 row, transcribed verbatim:**
+
+```json
+{
+  "budgetId": "PERF-03",
+  "requirementId": "PERF-03",
+  "measuredMs": 952.3999999999942,
+  "normalizedMs": 1168.5889570555207,
+  "budgetMs": 1000,
+  "anchorMs": 1000,
+  "anchorLabel": "holds attention",
+  "source": "production",
+  "verdict": "fail"
+}
+```
+
+`source` is `production` (the real `src/sweep/sweep-pool.ts` production pool, plan 07-03's
+retarget -- not the Phase 1 synthetic-GBM spike pool). `verdict` is `fail`, not `unmeasured`:
+this is a real, non-withheld D-17 baseline verdict, on the declared 4-core baseline
+(`hardwareConcurrency=4`), for the first time in this phase's history.
+
+**Verdict, stated plainly:** the measured, normalized full-sweep figure is **1168.59ms against the
+1000ms budget -- 116.9% of budget, an outright FAIL, not a narrow miss.** This crosses
+`ESCALATION_TRIGGER_RATIO` (70% of budget) by a wide margin; the run's own info line records the
+escalation candidate directly:
+
+```
+PERF-03 escalation candidate (D-20, at or above 70% of budget): normalizedMs=1168.59 budgetMs=1000
+PERF-03 sweep: workerCount=3 hardwareConcurrency=4 declaredBaselineHardwareConcurrency=4 measuredMs=952.40 normalizedMs=1168.59 verdict=rendered measurementExcludesWorkerConstruction=true source=production
+```
+
+The phase's third roadmap success criterion ("a full 10,000-cell sweep completes in under 1000ms
+wall clock... measured on a 4-core baseline") is **not met** by this measurement. This is not
+relaxed, hidden, or reframed as a pass anywhere in this document: the figure is over budget, on
+the real baseline, measured against the real shipped kernel. Per this plan's own prohibition, no
+threshold, cap, or calibration constant is changed in response to this measurement anywhere in
+this plan's commits. Resolving what this means for the phase (accept-with-documented-escalation,
+or a named architectural lever) is explicitly **plan 07-12's job**, per this plan's own scope and
+the coordinator's instruction; this document records the measurement, not a resolution.
+
+**Confidence band** (WINDOWS.md entry 2, quoted from this same run's own info line): "normalize()
+residual is 6.36% relative over 13 recorded D-17 baseline runs, so a single CI run supports a
+headroom claim only to roughly +/-13% (2 standard deviations), and a two-run comparison only to
+roughly +/-20%." This is a single run: read the 1168.59ms figure as accurate to roughly +/-13% on
+its own, not as a tighter number than one baseline sample supports. Even at the low end of that
+band (~1017ms), the figure still exceeds the 1000ms budget.
+
+**Total run runtime, noted for completeness:** this run's own `totalRuntimeMs` was **43,259ms**,
+which itself exceeds `BENCH_TOTAL_RUNTIME_CAP_MS` (30,000ms). `assertRunInvariants` checks the
+verdict-fail gate before the total-runtime gate (see `bench/report.ts`'s own check ordering), so
+this run's reported failure is the PERF-03 budget breach, not the runtime cap -- the cap breach
+was real but never became the reported reason. This is recorded here as a factual observation from
+the artifact, not acted on: Task 1's runtime-cap fix was verified only against this dev sandbox
+(9 logical cores, informational/non-baseline throughout section 1 above), and this real 4-core CI
+run shows that fix was insufficient to also clear the cap on the declared baseline machine itself.
+No cap was changed in response (per this plan's own prohibition); this observation is left on the
+record for whichever later work addresses the PERF-03 escalation to read, alongside the escalation
+itself.
 
 ## 3. The contribution-schedule figure
 
-Filled in by Task 3, alongside this file's own section 1 dev-sandbox contribution-schedule figure
-above.
+**D-17 baseline run 32654061079** (`hardwareConcurrency=4`, `headSha=d81bc3501c1cd1e12c1b2f0e9eb86798f2ccc31b`),
+transcribed from the same artifact's info line:
+
+```
+PERF-03 with a monthly contribution schedule (F-06, D-24 solveIrr branch), sampleCount=1 (not REPEAT_COUNT minimum-of-N, see this test's own comment): measuredMs=7303.90 normalizedMs=8961.84 hardwareConcurrency=4 workerCount=3
+```
+
+This is a single-sample (`sampleCount=1`), informational-only figure -- no `MeasurementRow` is
+recorded for it, per `bench/sweep.bench.test.ts`'s own design (F-06's cost-disclosure info line,
+not a budget gate). On the real D-17 baseline (`hardwareConcurrency=4`), the contribution-schedule
+(`solveIrr` branch) sweep measured **8961.84ms normalized against the same 1000ms PERF-03
+budget -- roughly 8.96x over, and roughly 7.67x worse than this same run's own zero-contribution
+figure (1168.59ms normalized)**.
+
+**This dev sandbox's own figure** (section 1 above, `hardwareConcurrency=9`, informational,
+non-baseline), for comparison: `measuredMs=2010.20 normalizedMs=3557.88`.
+
+**07-03-SUMMARY.md's and 07-VERIFICATION.md's prior dev-sandbox figure** (also `hardwareConcurrency=9`,
+informational, non-baseline, an earlier measurement on a different 9-core host than this plan's own
+sandbox): `~2072ms raw / ~3453ms normalized` (07-03-SUMMARY.md) and `2027.40ms raw/3351.07ms
+normalized` (07-VERIFICATION.md's independently-run figure).
+
+All four figures -- the two dev-sandbox figures and this baseline run's figure -- agree the
+contribution-schedule sweep is several times over the 1000ms budget; the D-17 baseline figure
+(8961.84ms normalized) is the largest of the three because it also carries this run's own
+zero-contribution slowdown (see section 2's total-runtime observation above) on top of the
+`solveIrr` branch's structurally higher per-cell cost. This is the input plan 07-12's Key
+Decision reads; this document states the numbers and takes no position on them, per this plan's
+own scope.
