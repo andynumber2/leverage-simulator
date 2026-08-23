@@ -16,14 +16,51 @@
  * an arbitrary N by M field renders -- proven by painting a deliberately non-default grid in
  * `tests/app/sweep-tracer.browser.test.ts`.
  *
- * The fill itself is routed through a `FillPath` seam (a named union): `'resample'`, the
- * per-pixel `resampleField` path (D-09's documented fallback, D-08's permanent test oracle, and
- * this file's original 07-01 member), and `'polygon'` (07-04-PLAN.md Task 2), which fills the
- * `polygon-fill.ts` band rings 06-HEATMAP-SPEC.md Finding A ranked first: GPU work proportional
- * to cells rather than JS work proportional to display pixels. Both paths are selectable and the
- * per-pixel path is NEVER deleted regardless of which one ships (D-08): it is the permanent
- * oracle `bench/heatmap-form-2.bench.test.ts`'s equivalence gate proves the polygon path against
- * before either path's timing figure is trusted.
+ * --- D-06/D-07 GATE OUTCOME (07-04-PLAN.md Tasks 2-4): resample ships; polygon was rejected ----
+ *
+ * The fill is routed through a `FillPath` seam (a named union): `'resample'` and `'polygon'`.
+ * **`'resample'` is the SHIPPED default and D-08's permanent test oracle.** `'polygon'`
+ * (07-04-PLAN.md Task 1's `polygon-fill.ts` band rings, the O(cells) approach
+ * 06-HEATMAP-SPEC.md Finding A ranked first) was built, gated, measured, and REJECTED on
+ * evidence -- kept in the source and test trees (never deleted) so a future reader can see why
+ * without rebuilding it, and so `bench/heatmap-form-2.bench.test.ts`'s equivalence check keeps
+ * running as a live regression detector on the rejected path.
+ *
+ * Measured on this dev sandbox (`hardwareConcurrency=9`, not the D-17 CI baseline), at the
+ * declared 1200x400 shipped-panel geometry over the real committed fixture (`holdMode: 'fixed'`,
+ * `holdingYears: 10`, `incompleteCount: 2600`):
+ * - Equivalence: 12.92% of field pixels differed from the `'resample'` oracle (2.0% ceiling);
+ *   35,532 categorical-cell pixels differed (0 ceiling); 9,677 non-categorical pixels differed
+ *   beyond the 2px boundary-proximity tolerance (0 ceiling). Root cause: `resampleField`'s
+ *   bilinear stencil smooths a ruined/incomplete cell's colour across its neighbouring cells (any
+ *   display pixel whose 4-corner stencil touches a categorical grid point renders categorically),
+ *   while `polygon-fill.ts`'s hole rings are exact to the flagged cell's own rectangle -- a
+ *   genuine algorithmic disagreement, not a stitching bug.
+ * - PERF-05 (repaint on a metric change), BOTH measured geometries, `'polygon'` vs the SHIPPED
+ *   `'resample'` + D-09 offscreen cache (this file's own dev-sandbox figures,
+ *   `bench/heatmap-form-2.bench.test.ts`'s own recorded info lines carry the authoritative,
+ *   re-measured-on-every-run numbers): at the declared 1200x400 shipped-panel geometry, `'polygon'`
+ *   measured ~149ms against the 16ms budget (~9.4x over); `'resample'` + D-09 measures ~8.2-8.5ms
+ *   (within budget, source of the official PERF-05 row). At the Phase 6 mockup geometry (764x224,
+ *   informational only, not gated), `'polygon'` measured ~146-158ms; `'resample'` + D-09 measures
+ *   ~7.9-8.1ms.
+ *
+ * The owner independently reproduced this in the live app, interactively, at the shipped 800x240
+ * geometry: with the app's default `holdMode: 'end-of-data'` (no categorical cells), resample
+ * measured ~12-15ms and polygon ~16-20ms -- close enough that the bench gate alone looked
+ * possibly unrepresentative. With a fixed ~10-year holding period (reintroducing the fixture's
+ * ~2,600 contiguous incomplete cells), polygon jumped to ~110-130ms against resample's ~12-13ms,
+ * independently reproducing the bench's 149.71ms figure. The polygon path degrades roughly 10x
+ * precisely when ruin/incomplete cells appear on screen -- the case the heatmap exists to show --
+ * so the committed fixture is a legitimate real user configuration, not a synthetic worst case.
+ *
+ * **Finding A is NOT closed.** The shipped path is D-09's documented mitigation (below), not the
+ * O(cells) polygon rebuild Finding A hoped would make the whole finding evaporate. All four
+ * downstream concerns Finding A named stay LIVE: the offscreen cache (implemented below, D-09),
+ * the metric-switch breach (a metric change still forces one full resample -- the cache fixes
+ * pan/zoom, it does not fix metric switching), the panel-size ceiling (repaint cost is still
+ * bounded by `RESAMPLE_INTERNAL_MAX_AREA_PX`, not eliminated), and zoom softness (accepted:
+ * `imageSmoothingEnabled` is deliberately on for the upscale draw).
  *
  * Reads chrome colours from CSS custom properties via `getComputedStyle` at render time,
  * following `EquityCurveChart.tsx`'s header rule (canvas gets no free `prefers-color-scheme`
@@ -38,15 +75,16 @@ import { marchingSquaresSegments } from './iso-lines.ts'
 import { buildBandPolygons } from './polygon-fill.ts'
 import type { SweepGrid } from '../sweep/sweep-grid.ts'
 
-/** The two selectable fill paths: `'resample'` (07-01, D-09/D-08's permanent oracle) and
- * `'polygon'` (07-04-PLAN.md Task 2). Every switch over this union in this file must be
+/** The two selectable fill paths: `'resample'` (07-01, D-08's permanent oracle, and -- per
+ * 07-04-PLAN.md Task 3's decision -- the SHIPPED default) and `'polygon'` (07-04-PLAN.md Task 1,
+ * gated in Task 2, REJECTED in Task 3 -- kept in the tree, never deleted, so the rejection is
+ * checkable rather than merely remembered). Every switch over this union in this file must be
  * exhaustive, so adding a member here is a compile-time-enforced swap, never a silent no-op. */
 export type FillPath = 'resample' | 'polygon'
 
 export interface SweepPaintOptions {
   metric: Metric
-  /** Defaults to `'resample'` until 07-04-PLAN.md Task 4 resolves the D-06 gate and sets the
-   * shipped default at this seam. */
+  /** Defaults to `'resample'` -- the shipped default 07-04-PLAN.md Task 3 decided on. */
   fillPath?: FillPath
 }
 
@@ -106,15 +144,109 @@ function getRampValues(grid: SweepGrid, metric: Metric): Float64Array {
   return cachedRampValues
 }
 
-/** The `'resample'` `FillPath` member: the per-pixel bilinear resample, written directly at
- * display resolution via a single `putImageData` (no upscale/`drawImage` step needed, mirroring
- * the mockup). D-09's documented fallback; D-08's permanent test oracle regardless of which path
- * ships. */
+/**
+ * D-09's mitigation for Finding A, and 07-04-PLAN.md Task 3's decided outcome (d09-fallback):
+ * resample BELOW display resolution and upscale, rather than resampling at full display
+ * resolution every repaint. `RESAMPLE_INTERNAL_MAX_AREA_PX` is anchored to the measured
+ * 171,136px / 12.80ms CI figure (06-HEATMAP-SPEC.md Finding A, this file's original 07-01
+ * geometry) with headroom below the 16ms PERF-05 budget, not an arbitrary fraction of the
+ * display's own area -- at the declared 1200x400 shipped-panel geometry (480,000px) this yields
+ * an internal resample close to that same anchor area, which is the number the 12.80ms figure
+ * was actually measured against. Below this area, no downscaling happens at all (small canvases
+ * already fit the budget at native resolution).
+ */
+const RESAMPLE_INTERNAL_MAX_AREA_PX = 175_000
+
+function internalResampleDimensions(widthPx: number, heightPx: number): { internalWidthPx: number; internalHeightPx: number } {
+  const displayArea = widthPx * heightPx
+  if (displayArea <= RESAMPLE_INTERNAL_MAX_AREA_PX) {
+    return { internalWidthPx: widthPx, internalHeightPx: heightPx }
+  }
+  const scale = Math.sqrt(RESAMPLE_INTERNAL_MAX_AREA_PX / displayArea)
+  return {
+    internalWidthPx: Math.max(1, Math.round(widthPx * scale)),
+    internalHeightPx: Math.max(1, Math.round(heightPx * scale)),
+  }
+}
+
+interface ResampleOffscreenCache {
+  canvas: HTMLCanvasElement
+  ctx: CanvasRenderingContext2D
+  internalWidthPx: number
+  internalHeightPx: number
+  generation: number
+  metric: Metric | undefined
+  cols: number
+  rows: number
+}
+
+/** D-09: the offscreen cache is invalidated per DATA or METRIC change (`grid.generation`,
+ * `metric`, `cols`, `rows`), never per frame -- a pan/zoom repaint at unchanged data reuses the
+ * cached bitmap via `drawImage`'s own upscale, paying no resample cost at all. A metric change
+ * still forces one fresh resample (Finding A's own stated limit: the cache fixes pan/zoom, it
+ * does not fix metric switching), but that resample now runs at the reduced internal resolution
+ * rather than full display resolution. */
+let resampleCache: ResampleOffscreenCache | undefined
+
+function ensureResampleCache(internalWidthPx: number, internalHeightPx: number): ResampleOffscreenCache {
+  if (
+    resampleCache === undefined ||
+    resampleCache.internalWidthPx !== internalWidthPx ||
+    resampleCache.internalHeightPx !== internalHeightPx
+  ) {
+    const canvas = document.createElement('canvas')
+    canvas.width = internalWidthPx
+    canvas.height = internalHeightPx
+    const ctx = canvas.getContext('2d')
+    if (!ctx) {
+      throw new Error('paint-contour: 2D context unavailable for the D-09 offscreen resample cache')
+    }
+    resampleCache = {
+      canvas,
+      ctx,
+      internalWidthPx,
+      internalHeightPx,
+      generation: -1,
+      metric: undefined,
+      cols: -1,
+      rows: -1,
+    }
+  }
+  return resampleCache
+}
+
+/** The `'resample'` `FillPath` member (D-08's permanent oracle, and -- per 07-04-PLAN.md Task 3's
+ * decision -- the shipped default): bilinearly resamples `grid` at a reduced INTERNAL resolution
+ * into an offscreen canvas cached across repaints, then draws that cached bitmap upscaled onto
+ * `ctx` via `drawImage`. `imageSmoothingEnabled` is left on for the upscale draw specifically
+ * (D-09's own stated tradeoff: zoom/upscale softness is accepted so the metric-change repaint
+ * itself stays inside budget), even though every other pass in this file disables it for crisp,
+ * unblurred strokes and hatch fills.
+ */
 function paintResampleFill(ctx: CanvasRenderingContext2D, grid: SweepGrid, metric: Metric, widthPx: number, heightPx: number): void {
-  const buffer = resampleField(grid, metric, { widthPx, heightPx })
-  const imageData = new ImageData(buffer, widthPx, heightPx)
+  const { internalWidthPx, internalHeightPx } = internalResampleDimensions(widthPx, heightPx)
+  const cache = ensureResampleCache(internalWidthPx, internalHeightPx)
+
+  const stale =
+    cache.generation !== grid.generation ||
+    cache.metric !== metric ||
+    cache.cols !== grid.cols ||
+    cache.rows !== grid.rows
+
+  if (stale) {
+    const buffer = resampleField(grid, metric, { widthPx: internalWidthPx, heightPx: internalHeightPx })
+    const imageData = new ImageData(buffer, internalWidthPx, internalHeightPx)
+    cache.ctx.putImageData(imageData, 0, 0)
+    cache.generation = grid.generation
+    cache.metric = metric
+    cache.cols = grid.cols
+    cache.rows = grid.rows
+  }
+
   ctx.clearRect(0, 0, widthPx, heightPx)
-  ctx.putImageData(imageData, 0, 0)
+  ctx.imageSmoothingEnabled = true
+  ctx.drawImage(cache.canvas, 0, 0, internalWidthPx, internalHeightPx, 0, 0, widthPx, heightPx)
+  ctx.imageSmoothingEnabled = false
 }
 
 /** One `BAND_LEVELS` band's own representative colour, cached at its CENTRE ramp position (never
@@ -151,7 +283,11 @@ function categoricalFillColor(flags: number): Rgba | null {
  * `gridColToDisplayX`/`gridRowToDisplayY` -- the exact inverse of `resampleField`'s own
  * pixel-to-grid sampling formula (this file's header) -- so a polygon edge lands on the same
  * display coordinate the oracle's own per-pixel classification would, up to the anti-aliasing
- * `bench/heatmap-form-2.bench.test.ts`'s equivalence tolerance already accounts for. */
+ * `bench/heatmap-form-2.bench.test.ts`'s equivalence tolerance already accounts for.
+ *
+ * REJECTED as the shipped default (07-04-PLAN.md Task 3, this file's own header): kept callable
+ * and kept covered by `tests/heatmap/polygon-fill.test.ts` and the bench file's own (now
+ * `test.fails`-marked) equivalence check, never deleted, so the rejection stays checkable. */
 function paintPolygonFill(ctx: CanvasRenderingContext2D, grid: SweepGrid, metric: Metric, widthPx: number, heightPx: number): void {
   const { cols, rows } = grid
   ctx.clearRect(0, 0, widthPx, heightPx)

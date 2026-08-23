@@ -1,32 +1,38 @@
 /**
- * bench/heatmap-form-2.bench.test.ts: 07-04-PLAN.md Task 2, the D-07 gate.
+ * bench/heatmap-form-2.bench.test.ts: 07-04-PLAN.md Task 2 ran the D-07 gate here; Task 3's
+ * checkpoint (owner decision: d09-fallback) REJECTED the `'polygon'` `FillPath`; Task 4 repoints
+ * this file's official PERF-05 row at the SHIPPED `'resample'` path (D-09's offscreen-cache
+ * mitigation, `src/heatmap/paint-contour.ts`'s own header has the full decision record).
  *
- * Proves equivalence BEFORE trusting any timing, then measures the shipped renderer
- * (`src/heatmap/paint-contour.ts`'s `paintSweepField`), not the Phase 6 mockup: `06-06`'s own
- * header note already recorded that this file must record the cost of the form actually being
- * built, and this task closes Finding F-05 (repointing the recorder at shipped code) at the same
- * time it runs D-07's own gate for the `'polygon'` `FillPath` this task adds.
+ * Measures the shipped renderer (`src/heatmap/paint-contour.ts`'s `paintSweepField`), not the
+ * Phase 6 mockup -- closes Finding F-05. No longer imports anything from
+ * `.planning/phases/06-heatmap-design-pass/mockups/`: the graduated `src/heatmap/` modules
+ * (07-01) and the live `SweepGrid` container (07-01's `src/sweep/sweep-grid.ts`) fully replace the
+ * mockup's own `SweepFixture`-shaped API for this purpose, adapted here from the committed fixture
+ * bytes via `toSweepGrid`.
  *
- * This file owns the run's single PERF-05 `MeasurementRow` (06-06's own header note, unchanged by
- * this task). It no longer imports anything from `.planning/phases/06-heatmap-design-pass/
- * mockups/` -- the graduated `src/heatmap/` modules (07-01) and the live `SweepGrid` container
- * (07-01's `src/sweep/sweep-grid.ts`) fully replace the mockup's own `SweepFixture`-shaped API for
- * this purpose, adapted here from the committed fixture bytes via `toSweepGrid`.
+ * Four tests, in this order:
  *
- * Two gate criteria, in this order (D-07):
+ * 1. Equivalence (`test.fails`): `paintSweepField` painted through the REJECTED `'polygon'`
+ *    `FillPath` against the `'resample'` `FillPath` (D-08's permanent, per-pixel oracle) within
+ *    three named tolerances -- expected to keep failing (that is WHY the path was rejected); this
+ *    stays live as a regression detector, not a blocking gate, per 07-04-PLAN.md Task 3's explicit
+ *    instruction to keep `polygon-fill.ts` and its tests rather than deleting the evidence.
+ * 2. Informational: the rejected `'polygon'` path's own repaint cost, recorded via
+ *    `recordInfoLine` only (never `recordMeasurement`, which would collide with test 4's official
+ *    row -- `bench/report.ts`'s `resolveByBudgetId` throws on two `'production'`-sourced rows for
+ *    the same budget id, by design).
+ * 3. (implicit, see `src/heatmap/paint-contour.ts`'s own header) -- the interactive owner
+ *    verification that independently reproduced this file's own 149.71ms figure in the live app.
+ * 4. PERF-05 (SHIPPED, gated): a metric-change repaint through `'resample'` (D-09's offscreen
+ *    cache) at the declared 1200x400 display geometry (D-07's own "plausible shipped panel size",
+ *    per 06-HEATMAP-SPEC.md Finding A's own prediction) must hold PERF-05's 16ms budget. The
+ *    Phase 6 geometry (764x224) is recorded as an info line only, so the shipped number stays
+ *    comparable to the originally recorded 12.80ms without being the geometry the gate itself is
+ *    judged against.
  *
- * 1. Equivalence: `paintSweepField` painted through the `'polygon'` `FillPath` (this task's new
- *    band-polygon fill) must match the `'resample'` `FillPath` (D-08's permanent, per-pixel
- *    oracle) within three named tolerances, checked BEFORE any timing figure below is trusted.
- * 2. The repaint budget: a metric-change repaint through `'polygon'` at a declared 1200x400
- *    display geometry (D-07's own "plausible shipped panel size", per 06-HEATMAP-SPEC.md Finding
- *    A's own prediction) must hold PERF-05's 16ms budget. The Phase 6 geometry (764x224) is
- *    recorded as an info line only, so the shipped number stays comparable to the prior recorded
- *    12.80ms without being the geometry the gate itself is judged against.
- *
- * If either criterion misses, this file records the measured figures and the specific failure
- * without relaxing any tolerance, budget, or geometry (07-04-PLAN.md's own prohibition): Task 3's
- * checkpoint is what decides what happens next, not this file.
+ * No tolerance, budget, or geometry was relaxed anywhere in this file in response to any
+ * measurement (07-04-PLAN.md's own prohibition, still binding after the decision).
  */
 
 import { commands } from 'vitest/browser'
@@ -34,7 +40,7 @@ import { beforeAll, expect, test } from 'vitest'
 
 import { decodeSweepFixture, type SweepFixture } from '../src/data/sweep-fixture-format.ts'
 import { rampPositionFor } from '../src/colorscale/value-to-color.ts'
-import { BAND_LEVELS } from '../src/heatmap/field-sampler.ts'
+import { BAND_LEVELS, resampleField } from '../src/heatmap/field-sampler.ts'
 import { marchingSquaresSegments } from '../src/heatmap/iso-lines.ts'
 import {
   gridColToDisplayX,
@@ -203,9 +209,18 @@ function cellAtDisplayPixel(px: number, py: number, widthPx: number, heightPx: n
   return { col, row: rows - 1 - imgRow }
 }
 
+// --- D-08: the oracle survives, exercised directly (not merely through paintSweepField) -------
+
+test('resampleField (D-08 oracle) runs directly against the live grid and returns a well-formed buffer', () => {
+  const widthPx = 200
+  const heightPx = 50
+  const buffer = resampleField(grid, 'multiple', { widthPx, heightPx })
+  expect(buffer.length).toBe(widthPx * heightPx * 4)
+})
+
 // --- Gate criterion 1: equivalence, proven BEFORE the timing below is trusted ------------------
 
-test('equivalence: the polygon FillPath matches the resample FillPath (oracle) within the declared tolerances', async () => {
+test.fails('equivalence: the polygon FillPath matches the resample FillPath (oracle) within the declared tolerances -- REJECTED, kept as a live regression detector (07-04-PLAN.md Task 3)', async () => {
   const width = MEASUREMENT_WIDTH_PX
   const height = MEASUREMENT_HEIGHT_PX
 
@@ -274,17 +289,21 @@ test('equivalence: the polygon FillPath matches the resample FillPath (oracle) w
   ).toBeLessThanOrEqual(MAX_DIFFERING_PIXEL_RATIO)
 })
 
-// --- Gate criterion 2: the repaint budget, measured on the shipped renderer --------------------
+// --- The rejected polygon path's own repaint cost, informational only (07-04-PLAN.md Task 3) ---
+// No longer the official PERF-05 MeasurementRow (that would collide with the shipped 'resample'
+// row below -- bench/report.ts's resolveByBudgetId throws on two 'production'-sourced rows for
+// the same budget id, by design: there is no principled winner between two live measurements of
+// the SAME budget). Recomputed each run so the figure stays current, recorded via recordInfoLine
+// only. Task 2's own commit and this file's own header record the historical 149.71ms figure the
+// rejection decision was made against.
 
-test('PERF-05: form 2 (filled contour, polygon FillPath) repaint on a metric change, at the declared shipped-panel geometry', async () => {
+test('informational: form 2 (filled contour, polygon FillPath, REJECTED) repaint on a metric change, at the declared shipped-panel geometry', async () => {
   const score = await resolveRunCalibration()
 
   const { ctx } = makeCanvas(MEASUREMENT_WIDTH_PX, MEASUREMENT_HEIGHT_PX)
   // A cold first paint pays one-time cost (e.g. Path2D construction warmup) a warm metric toggle
   // never pays again -- warm before the timed repaint below.
   paintSweepField(ctx, grid, { metric: 'multiple', fillPath: 'polygon' })
-
-  const generationBeforeMeasurement = grid.generation
 
   let metric: 'multiple' | 'drawdown' = 'multiple'
   const rawMs = await measureBatchedMinOfN(REPEAT_COUNT, REPAINT_BATCH_SIZE, () => {
@@ -293,9 +312,44 @@ test('PERF-05: form 2 (filled contour, polygon FillPath) repaint on a metric cha
   })
   const normalizedMs = normalize(rawMs, score)
 
+  await commands.recordInfoLine(
+    'PERF-05-heatmap-form-2-polygon-rejected',
+    `PERF-05-heatmap-form-2-polygon-rejected: fillPath=polygon normalizedMs=${normalizedMs.toFixed(2)} ` +
+      `rawMs=${rawMs.toFixed(4)} batchSize=${REPAINT_BATCH_SIZE} ` +
+      `geometry={widthPx:${MEASUREMENT_WIDTH_PX},heightPx:${MEASUREMENT_HEIGHT_PX}} budget=16ms ` +
+      '(informational only, NOT the official PERF-05 row -- 07-04-PLAN.md Task 3 rejected this ' +
+      'path; the historical figure the decision was made against was 149.71ms on the same dev ' +
+      'sandbox, recorded in this file own header and the Task 2 commit message)',
+  )
+})
+
+// --- Gate criterion 2 (SHIPPED): the repaint budget, measured on the shipped 'resample' path ---
+// 07-04-PLAN.md Task 3's decision (d09-fallback) and Task 4's own action text both require the
+// OFFICIAL PERF-05 MeasurementRow to come from the SHIPPED renderer, not the rejected polygon
+// path this file measured while the D-06/D-07 gate was still open (closes Finding F-05 for the
+// final, decided state).
+
+test('PERF-05: form 2 (filled contour, resample FillPath, D-09 offscreen cache) repaint on a metric change, at the declared shipped-panel geometry', async () => {
+  const score = await resolveRunCalibration()
+
+  const { ctx } = makeCanvas(MEASUREMENT_WIDTH_PX, MEASUREMENT_HEIGHT_PX)
+  // A cold first paint pays the D-09 offscreen cache's one-time construction cost a warm metric
+  // toggle never pays again -- warm before the timed repaint below.
+  paintSweepField(ctx, grid, { metric: 'multiple', fillPath: 'resample' })
+
+  const generationBeforeMeasurement = grid.generation
+
+  let metric: 'multiple' | 'drawdown' = 'multiple'
+  const rawMs = await measureBatchedMinOfN(REPEAT_COUNT, REPAINT_BATCH_SIZE, () => {
+    metric = metric === 'multiple' ? 'drawdown' : 'multiple'
+    paintSweepField(ctx, grid, { metric, fillPath: 'resample' })
+  })
+  const normalizedMs = normalize(rawMs, score)
+
   // The metric-change repaint reads the SAME cached grid and never re-sweeps it: PERF-05 is a
   // re-colour, not a re-sweep (07-04-PLAN.md's planner assumption on this requirement's own edge
-  // family).
+  // family). A metric change DOES invalidate the D-09 offscreen cache (by design, Finding A's own
+  // stated limit), but that is a re-resample at the reduced internal resolution, never a re-sweep.
   expect(grid.generation).toBe(generationBeforeMeasurement)
 
   await commands.recordEnvironment(captureEnvironment(score))
@@ -316,30 +370,31 @@ test('PERF-05: form 2 (filled contour, polygon FillPath) repaint on a metric cha
 
   await commands.recordInfoLine(
     'PERF-05-heatmap-form-2',
-    `PERF-05-heatmap-form-2: fillPath=polygon normalizedMs=${normalizedMs.toFixed(2)} ` +
-      `rawMs=${rawMs.toFixed(4)} batchSize=${REPAINT_BATCH_SIZE} ` +
+    `PERF-05-heatmap-form-2: fillPath=resample (D-09 offscreen cache, shipped) ` +
+      `normalizedMs=${normalizedMs.toFixed(2)} rawMs=${rawMs.toFixed(4)} batchSize=${REPAINT_BATCH_SIZE} ` +
       `geometry={widthPx:${MEASUREMENT_WIDTH_PX},heightPx:${MEASUREMENT_HEIGHT_PX}} ` +
-      `(gate criterion 2: measured against the declared plausible shipped panel size, per ` +
-      '06-HEATMAP-SPEC.md Finding A, not the smaller Phase 6 mockup geometry)',
+      `(gate criterion 2, closes Finding F-05: the official PERF-05 figure, measured against the ` +
+      'declared plausible shipped panel size, per 06-HEATMAP-SPEC.md Finding A, not the smaller ' +
+      'Phase 6 mockup geometry)',
   )
 
   // The Phase 6 mockup geometry, recorded as an info line only: keeps the shipped number
-  // comparable to the previously recorded 12.80ms figure without being the geometry the gate
+  // comparable to the originally recorded 12.80ms figure without being the geometry the gate
   // itself is judged against.
   let phase6Metric: 'multiple' | 'drawdown' = 'multiple'
   const { ctx: phase6Ctx } = makeCanvas(PHASE_6_WIDTH_PX, PHASE_6_HEIGHT_PX)
-  paintSweepField(phase6Ctx, grid, { metric: 'multiple', fillPath: 'polygon' })
+  paintSweepField(phase6Ctx, grid, { metric: 'multiple', fillPath: 'resample' })
   const phase6RawMs = await measureBatchedMinOfN(REPEAT_COUNT, REPAINT_BATCH_SIZE, () => {
     phase6Metric = phase6Metric === 'multiple' ? 'drawdown' : 'multiple'
-    paintSweepField(phase6Ctx, grid, { metric: phase6Metric, fillPath: 'polygon' })
+    paintSweepField(phase6Ctx, grid, { metric: phase6Metric, fillPath: 'resample' })
   })
   const phase6NormalizedMs = normalize(phase6RawMs, score)
   await commands.recordInfoLine(
     'PERF-05-heatmap-form-2-phase6-geometry',
-    `PERF-05-heatmap-form-2-phase6-geometry: fillPath=polygon normalizedMs=${phase6NormalizedMs.toFixed(2)} ` +
+    `PERF-05-heatmap-form-2-phase6-geometry: fillPath=resample normalizedMs=${phase6NormalizedMs.toFixed(2)} ` +
       `rawMs=${phase6RawMs.toFixed(4)} batchSize=${REPAINT_BATCH_SIZE} ` +
       `geometry={widthPx:${PHASE_6_WIDTH_PX},heightPx:${PHASE_6_HEIGHT_PX}} ` +
-      '(informational: comparable to the previously recorded 12.80ms per-pixel figure at this ' +
+      '(informational: comparable to the originally recorded 12.80ms per-pixel figure at this ' +
       'same geometry, not gated)',
   )
 
