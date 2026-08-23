@@ -14,6 +14,15 @@
  * bench/sweep.bench.test.ts's measureMinOfN closure (07.1-RESEARCH.md Pattern 2), and never
  * modifies that file, so none of this file's instrumentation can perturb the gated PERF-03 figure
  * it exists to explain.
+ *
+ * 07.1-05-PLAN.md Task 1: this arm now runs at a REDUCED size. Its one-time job (answering
+ * criterion 1's attribution question) is already done and recorded in 07.1-PERF-03-PROFILE.md
+ * (`hardwareConcurrency=4`, CI run 32669644628) -- the full-size figures live there, not here. What
+ * this file now exists to do is catch a STRUCTURAL regression in the same attribution shape on
+ * every future CI run, not reproduce the original run's exact numbers. Originally `PROFILE_COLS=24`
+ * / `IRR_PROFILE_COLS=8` / a single 5000-call batch shared between the npv and solveIrr timings;
+ * now `PROFILE_COLS=12` / `IRR_PROFILE_COLS=4` / separate, much smaller `NPV_BATCH_SIZE` and
+ * `SOLVE_IRR_BATCH_SIZE` batches (see `STANDING_COST_BUDGET_MS` below for the reasoning).
  */
 
 import { commands } from 'vitest/browser'
@@ -51,19 +60,32 @@ const SYMBOL = 'SPX'
 const DIVIDEND_REINVEST = true
 const INITIAL_INVESTMENT = 10_000
 
+/** 07.1-05-PLAN.md Task 1: this arm's standing cost budget, `hardwareConcurrency=4` (the D-17
+ * baseline host), projected from this repo's own dev-sandbox measurement by the host-to-baseline
+ * ratio the plan summary records (07.1-05-SUMMARY.md; derived from bench/sweep.bench.test.ts's
+ * own untouched PERF-03 gated row, comparing CI run 32669644628's raw measuredMs against a local
+ * re-measurement of the same code). This arm answered criterion 1's one-time attribution question
+ * already (07.1-PERF-03-PROFILE.md carries the full-size figures); a standing regression detector
+ * does not need to reproduce that number every CI run, only catch a structural break in the same
+ * shape. */
+const STANDING_COST_BUDGET_MS = 600
+
 /** Zero-contribution (CAGR) arms and the pool-level IRR arm: sized to keep this file's own
  * standing cost small against BENCH_TOTAL_RUNTIME_CAP_MS while still exercising a real
- * multi-chunk pool run (BASELINE_WORKER_COUNT * CHUNKS_PER_WORKER chunks) at the full SWEEP_ROWS
- * row count -- narrower than SWEEP_COLS (200) precisely because this file's cost is additive on
- * top of the gated bench/sweep.bench.test.ts's own runtime. */
-const PROFILE_COLS = 24
+ * multi-chunk pool run at the full SWEEP_ROWS row count -- narrower than SWEEP_COLS (200) because
+ * this file's cost is additive on top of the gated bench/sweep.bench.test.ts's own runtime.
+ * Reduced from 24 to 12 by 07.1-05-PLAN.md Task 1 to fit STANDING_COST_BUDGET_MS: 12 keeps
+ * `partitionColumns`'s chunk count at exactly `BASELINE_WORKER_COUNT * CHUNKS_PER_WORKER = 12`
+ * (same as the original 24, since chunk count is `min(cols, 12)`), so the dispatch-overhead shape
+ * this arm exercises is unchanged, only the per-chunk kernel work is halved. */
+const PROFILE_COLS = 12
 
 /** The serial solveIrr arm: narrower than PROFILE_COLS because a serial (single-thread,
  * zero-pool, zero-dispatch) computeChunkMetrics call over the solveIrr branch is measurably more
  * expensive per cell than the CAGR branch (07.1-RESEARCH.md Summary: bisection over up to
  * ~1,176 cash flows per cell versus one closed-form Math.pow call), so this arm stays narrower to
- * keep its own wall-clock cost small. */
-const IRR_PROFILE_COLS = 8
+ * keep its own wall-clock cost small. Reduced from 8 to 4 by 07.1-05-PLAN.md Task 1 (STANDING_COST_BUDGET_MS). */
+const IRR_PROFILE_COLS = 4
 
 /** A representative leverage row for the cashFlowCount/npvEvaluationsPerSolve figures below: row
  * 25 of 50, leverageForRow(25) ~= 3.04x -- roughly the middle of the swept 1x-5x axis, not an
@@ -72,11 +94,20 @@ const IRR_PROFILE_COLS = 8
  * produced. */
 const REPRESENTATIVE_ROW = 25
 
-/** Large enough that both the npv-only and the solveIrr batch clear MIN_MEASUREMENT_MS with
- * comfortable margin (solveIrr's own bisection loop runs up to 100 npv evaluations per call over
- * the same cash-flow list) -- recorded alongside the ratio it produced, per this task's own
- * requirement. */
-const NPV_SOLVE_BATCH_SIZE = 5000
+/** 07.1-05-PLAN.md Task 1: npv() and solveIrr() are timed at SEPARATE batch sizes, not the shared
+ * NPV_SOLVE_BATCH_SIZE the original arm used. npv() is cheap enough per call that a batch small
+ * enough to keep solveIrr's own batch under STANDING_COST_BUDGET_MS would fall under
+ * MIN_MEASUREMENT_MS for npv() alone; solveIrr() is expensive enough per call that a batch large
+ * enough to clear MIN_MEASUREMENT_MS for npv() would blow the whole file's budget on the solveIrr
+ * batch alone (measured pre-reduction: a shared batch of 5000 cost 74.00ms for npv but 7770.90ms
+ * for solveIrr on the D-17 baseline, a ~105x ratio -- no single batch size clears the floor for
+ * both while also fitting the budget). `npvEvaluationsPerSolve` is computed from the PER-CALL cost
+ * of each (`solveIrrMs / SOLVE_IRR_BATCH_SIZE) / (npvMs / NPV_BATCH_SIZE)`), which is
+ * mathematically identical to the old same-batch-size ratio (the batch size cancels out of a
+ * per-call ratio) -- the derived figure this task must keep computing is unchanged, only how each
+ * side of it is measured. Both batch sizes are disclosed in the recorded info line. */
+const NPV_BATCH_SIZE = 4_000
+const SOLVE_IRR_BATCH_SIZE = 100
 
 function baseParams(overrides: Partial<SweepBaseParams> = {}): SweepBaseParams {
   return {
@@ -257,7 +288,7 @@ test('sweep-pool-profile: attributed breakdown, zero-contribution (CAGR) branch'
     'sweep-pool-profile-cagr',
     'sweep-pool-profile CAGR (zero-contribution) branch: ' +
       `cols=${PROFILE_COLS} rows=${SWEEP_ROWS} cells=${PROFILE_COLS * SWEEP_ROWS} serialCellCount=${serialCellCount} ` +
-      `hardwareConcurrency=${hardwareConcurrency} workerCount=${pool.workerCount} ` +
+      `hardwareConcurrency=${hardwareConcurrency} workerCount=${pool.workerCount} standingCostBudgetMs=${STANDING_COST_BUDGET_MS} (whole-file budget, hardwareConcurrency=4, shared with the solveIrr branch below) ` +
       `poolConstructionMs=${formatMeasured(poolConstructionMs)} normalizedPoolConstructionMs=${formatMeasured(normalize(poolConstructionMs, score))} ` +
       `coldSweepMs=${formatMeasured(coldSweepMs)} normalizedColdSweepMs=${formatMeasured(normalize(coldSweepMs, score))} ` +
       `warmSweepMs=${formatMeasured(warmSweepMs)} normalizedWarmSweepMs=${formatMeasured(normalize(warmSweepMs, score))} ` +
@@ -305,20 +336,21 @@ test('sweep-pool-profile: attributed breakdown, D-24 solveIrr contribution-sched
   const cashFlowCountRatio = lastFlows.count / firstFlows.count
 
   // npvEvaluationsPerSolve: measured, not counted from source. A batch of npv() calls against the
-  // FIRST column's flows gives npvMs; the same batch of solveIrr() calls (over the same flows)
-  // gives solveIrrMs; solveIrrMs / npvMs is the implied evaluation count.
+  // FIRST column's flows gives npvMs; a SEPARATE, much smaller batch of solveIrr() calls (over the
+  // same flows) gives solveIrrMs -- two different batch sizes (NPV_BATCH_SIZE, SOLVE_IRR_BATCH_SIZE,
+  // see their own doc comment for why), so the ratio is computed per-call, not batch-to-batch.
   const npvStart = performance.now()
-  for (let i = 0; i < NPV_SOLVE_BATCH_SIZE; i++) {
+  for (let i = 0; i < NPV_BATCH_SIZE; i++) {
     npv(0.05, firstFlows)
   }
   const npvMs = performance.now() - npvStart
 
   const solveIrrStart = performance.now()
-  for (let i = 0; i < NPV_SOLVE_BATCH_SIZE; i++) {
+  for (let i = 0; i < SOLVE_IRR_BATCH_SIZE; i++) {
     solveIrr(firstFlows)
   }
   const solveIrrMs = performance.now() - solveIrrStart
-  const npvEvaluationsPerSolve = solveIrrMs / npvMs
+  const npvEvaluationsPerSolve = solveIrrMs / SOLVE_IRR_BATCH_SIZE / (npvMs / NPV_BATCH_SIZE)
 
   const hardwareConcurrency = navigator.hardwareConcurrency
   const leverage = leverageForRow(REPRESENTATIVE_ROW)
@@ -335,7 +367,8 @@ test('sweep-pool-profile: attributed breakdown, D-24 solveIrr contribution-sched
       `cashFlowCountFirst=${firstFlows.count} cashFlowCountFirstEntryDate=${firstEntryDate} ` +
       `cashFlowCountLast=${lastFlows.count} cashFlowCountLastEntryDate=${lastEntryDate} ` +
       `cashFlowCountRatio=${formatMeasured(cashFlowCountRatio)} ` +
-      `npvEvaluationsPerSolve=${formatMeasured(npvEvaluationsPerSolve)} batchSize=${NPV_SOLVE_BATCH_SIZE} ` +
+      `npvEvaluationsPerSolve=${formatMeasured(npvEvaluationsPerSolve)} (derived, per-call ratio, see NPV_BATCH_SIZE/SOLVE_IRR_BATCH_SIZE doc comment) ` +
+      `npvBatchSize=${NPV_BATCH_SIZE} solveIrrBatchSize=${SOLVE_IRR_BATCH_SIZE} ` +
       `npvMs=${formatMeasured(npvMs)} solveIrrMs=${formatMeasured(solveIrrMs)}`,
   )
 })

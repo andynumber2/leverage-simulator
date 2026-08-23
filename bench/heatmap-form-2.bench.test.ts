@@ -18,13 +18,7 @@
  *    three named tolerances -- expected to keep failing (that is WHY the path was rejected); this
  *    stays live as a regression detector, not a blocking gate, per 07-04-PLAN.md Task 3's explicit
  *    instruction to keep `polygon-fill.ts` and its tests rather than deleting the evidence.
- * 2. Informational: the rejected `'polygon'` path's own repaint cost, recorded via
- *    `recordInfoLine` only (never `recordMeasurement`, which would collide with test 4's official
- *    row -- `bench/report.ts`'s `resolveByBudgetId` throws on two `'production'`-sourced rows for
- *    the same budget id, by design).
- * 3. (implicit, see `src/heatmap/paint-contour.ts`'s own header) -- the interactive owner
- *    verification that independently reproduced this file's own 149.71ms figure in the live app.
- * 4. PERF-05 (SHIPPED, gated): a metric-change repaint through `'resample'` (D-09's offscreen
+ * 2. PERF-05 (SHIPPED, gated): a metric-change repaint through `'resample'` (D-09's offscreen
  *    cache) at the declared 1200x400 display geometry (D-07's own "plausible shipped panel size",
  *    per 06-HEATMAP-SPEC.md Finding A's own prediction) must hold PERF-05's 16ms budget. The
  *    Phase 6 geometry (764x224) is recorded as an info line only, so the shipped number stays
@@ -33,6 +27,21 @@
  *
  * No tolerance, budget, or geometry was relaxed anywhere in this file in response to any
  * measurement (07-04-PLAN.md's own prohibition, still binding after the decision).
+ *
+ * 07.1-05-PLAN.md Task 2 (step 1: remove an informational arm that re-measures an already-REJECTED
+ * path whose historical figure is already transcribed): the standing "informational: form 2
+ * (filled contour, polygon FillPath, REJECTED) repaint" test that used to sit here was REMOVED.
+ * Its own timing figure (fillPath=polygon at the shipped 1200x400 geometry) was informational only
+ * (`recordInfoLine`, never `recordMeasurement`) and existed solely to keep a rejected path's cost
+ * "on the record" -- but the decision it informed (D-09's offscreen-cache 'resample' path over
+ * 'polygon', 07-04-PLAN.md Task 3) is closed, and the figure that decision was made against
+ * (149.71ms) is already transcribed in this file's own commit history (07-04-PLAN.md Task 2's
+ * commit message) and in 07-PERF-03-BASELINE.md. Repeating that specific timing measurement on
+ * every future CI run bought nothing further: the equivalence test above (`test.fails`) already
+ * stays live as the standing regression detector for whether the polygon path's OUTPUT drifts back
+ * toward matching the shipped path; a separate wall-clock re-measurement of the REJECTED path's own
+ * repaint cost is not needed to keep that detector meaningful. Removed roughly 1000ms of this
+ * file's own standing cost on this dev sandbox (07.1-05-SUMMARY.md has the exact figure).
  */
 
 import { commands } from 'vitest/browser'
@@ -92,19 +101,6 @@ const PHASE_6_HEIGHT_PX = 224
  * which records a real `MeasurementRow` and is therefore NOT eligible for sampling-cost
  * reduction under 07-11-PLAN.md Task 1's rule. */
 const REPAINT_BATCH_SIZE = 20
-
-/** 07-11-PLAN.md Task 1 (gap-closure): the informational 'polygon' (REJECTED) repaint arm below
- * records no `MeasurementRow` (`recordInfoLine` only, see this file's own header), making its
- * sampling cost eligible for reduction. At this arm's own measured ~92ms/call raw cost on this
- * dev sandbox, `REPAINT_BATCH_SIZE=20` costs roughly 10.7s of wall clock on its own -- the single
- * largest contributor to a full-suite `BENCH_TOTAL_RUNTIME_CAP_MS` breach found while establishing
- * the PERF-03 baseline (see `07-PERF-03-BASELINE.md` section 1 for the measured per-file costs).
- * A batch of 2 still clears `MIN_MEASUREMENT_MS`'s 10ms floor with an order-of-magnitude margin
- * (2 calls at ~92ms/call is ~184ms, roughly 18x the floor) while cutting this arm's own cost by
- * about 90%. The figure stays fully disclosed (`batchSize` is printed alongside it, same as
- * before); only sampling cost is cut, never disclosure, and the shipped/gated PERF-05 row's own
- * `REPAINT_BATCH_SIZE` above is untouched. */
-const REJECTED_POLYGON_BATCH_SIZE = 2
 
 let fixture: SweepFixture
 let grid: SweepGrid
@@ -303,43 +299,6 @@ test.fails('equivalence: the polygon FillPath matches the resample FillPath (ora
     `${(differingRatio * 100).toFixed(3)}% of field pixels differ, exceeding the ` +
       `${(MAX_DIFFERING_PIXEL_RATIO * 100).toFixed(1)}% ceiling`,
   ).toBeLessThanOrEqual(MAX_DIFFERING_PIXEL_RATIO)
-})
-
-// --- The rejected polygon path's own repaint cost, informational only (07-04-PLAN.md Task 3) ---
-// No longer the official PERF-05 MeasurementRow (that would collide with the shipped 'resample'
-// row below -- bench/report.ts's resolveByBudgetId throws on two 'production'-sourced rows for
-// the same budget id, by design: there is no principled winner between two live measurements of
-// the SAME budget). Recomputed each run so the figure stays current, recorded via recordInfoLine
-// only. Task 2's own commit and this file's own header record the historical 149.71ms figure the
-// rejection decision was made against.
-
-test('informational: form 2 (filled contour, polygon FillPath, REJECTED) repaint on a metric change, at the declared shipped-panel geometry', async () => {
-  const score = await resolveRunCalibration()
-
-  const { ctx } = makeCanvas(MEASUREMENT_WIDTH_PX, MEASUREMENT_HEIGHT_PX)
-  // A cold first paint pays one-time cost (e.g. Path2D construction warmup) a warm metric toggle
-  // never pays again -- warm before the timed repaint below.
-  paintSweepField(ctx, grid, { metric: 'multiple', fillPath: 'polygon' })
-
-  let metric: 'multiple' | 'drawdown' = 'multiple'
-  const rawMs = await measureBatchedMinOfN(REPEAT_COUNT, REJECTED_POLYGON_BATCH_SIZE, () => {
-    metric = metric === 'multiple' ? 'drawdown' : 'multiple'
-    paintSweepField(ctx, grid, { metric, fillPath: 'polygon' })
-  })
-  const normalizedMs = normalize(rawMs, score)
-
-  await commands.recordInfoLine(
-    'PERF-05-heatmap-form-2-polygon-rejected',
-    `PERF-05-heatmap-form-2-polygon-rejected: fillPath=polygon normalizedMs=${normalizedMs.toFixed(2)} ` +
-      `rawMs=${rawMs.toFixed(4)} batchSize=${REJECTED_POLYGON_BATCH_SIZE} ` +
-      `geometry={widthPx:${MEASUREMENT_WIDTH_PX},heightPx:${MEASUREMENT_HEIGHT_PX}} budget=16ms ` +
-      '(informational only, NOT the official PERF-05 row -- 07-04-PLAN.md Task 3 rejected this ' +
-      'path; the historical figure the decision was made against was 149.71ms on the same dev ' +
-      'sandbox, recorded in this file own header and the Task 2 commit message; batchSize reduced ' +
-      'from the shipped arm\'s REPAINT_BATCH_SIZE=20 to 2 by 07-11-PLAN.md Task 1, a sampling-cost ' +
-      'reduction on an arm that records no MeasurementRow, to clear a full-suite ' +
-      'BENCH_TOTAL_RUNTIME_CAP_MS breach -- see this file\'s own REJECTED_POLYGON_BATCH_SIZE comment)',
-  )
 })
 
 // --- Gate criterion 2 (SHIPPED): the repaint budget, measured on the shipped 'resample' path ---

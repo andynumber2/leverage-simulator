@@ -34,6 +34,32 @@
  * in-flight full-grid sweep per width to drive the contention measurement itself -- two full-grid
  * sweeps per width (warm, in-flight) plus one small, grid-size-independent cold sweep per width,
  * per this task's own sizing instruction.
+ *
+ * 07.1-05-PLAN.md Task 1: this arm now runs at a REDUCED size. Its one-time job (the
+ * defer-to-baseline worker-count evidence 07.1-04-SUMMARY.md records) is already answered and
+ * recorded there; the full-size figures (both widths, both at the original SWEEP_COLS=200 column
+ * axis) live in that document, not here. What this file now exists to do is catch a structural
+ * regression in the same shape on every future CI run, not reproduce the original run's exact
+ * numbers. Originally the warm-baseline and in-flight sweeps both ran the full SWEEP_COLS=200
+ * columns; a SINGLE un-repeated full-grid sweep at that width, at the D-17 baseline
+ * (`hardwareConcurrency=4`), costs on the order of 900-1180ms by itself (07.1-PERF-03-PROFILE.md
+ * section 2's own `idealParallelFullGridMs`/measured PERF-03 figures) -- two widths times two
+ * full-grid measurements (warm, in-flight) each would alone exceed this arm's entire
+ * STANDING_COST_BUDGET_MS several times over, so both the warm-baseline and in-flight sweeps now
+ * share a narrower `CONTENTION_COLS` axis (not just the in-flight one) -- disclosed as
+ * `contentionCols` in every info line below. The cold sweep (already a tiny, grid-size-independent
+ * 1x1 grid) is unchanged. The narrowing is bounded by `MIN_FRAME_COUNT`, exactly as this task's own
+ * instruction requires: CONTENTION_COLS is chosen so the in-flight sweep still comfortably clears
+ * MIN_FRAME_COUNT's frame count with real margin (measured 15-20 frames across repeat runs at both
+ * tested worker counts, roughly 50-100% above the 10-frame floor) on this repo's own
+ * (faster-than-baseline) dev sandbox, where a narrowed sweep resolves fastest and the guard is most
+ * likely to trip -- the slower D-17 baseline host runs the same narrowed sweep for longer
+ * wall-clock time, so the same column count clears the guard with even more margin there. Even at
+ * this narrowing, STANDING_COST_BUDGET_MS is not reached (see 07.1-05-SUMMARY.md): this arm's two
+ * full-grid-shaped measurements per width (warm, in-flight) plus each width's own worker-startup
+ * and per-test harness overhead are large enough, relative to MIN_FRAME_COUNT's floor on column
+ * count, that this budget is a disclosed shortfall, not a met target -- recorded per this task's
+ * own escape clause rather than tripping the guard to force a smaller number.
  */
 
 import { commands } from 'vitest/browser'
@@ -61,10 +87,29 @@ const SYMBOL = 'SPX'
 const DIVIDEND_REINVEST = true
 const INITIAL_INVESTMENT = 10_000
 
+/** 07.1-05-PLAN.md Task 1: this arm's standing cost budget, `hardwareConcurrency=4` (the D-17
+ * baseline host), projected from this repo's own dev-sandbox measurement by the host-to-baseline
+ * ratio the plan summary records (07.1-05-SUMMARY.md; derived from bench/sweep.bench.test.ts's own
+ * untouched PERF-03 gated row). This arm already answered the defer-to-baseline worker-count
+ * question once (07.1-04-SUMMARY.md carries the full-size figures); a standing regression detector
+ * does not need to reproduce that run's exact numbers every CI run, only catch a structural break
+ * in the same shape. */
+const STANDING_COST_BUDGET_MS = 1500
+
 /** A frame count this small would mean the in-flight sweep resolved before the workload sampled
  * enough frames to report a maximum/median without single-sample artifacts -- fail loudly rather
  * than disclose an unsupported figure. */
 const MIN_FRAME_COUNT = 10
+
+/** 07.1-05-PLAN.md Task 1: the entry-date axis both the warm-baseline and in-flight full-grid
+ * sweeps now share, narrower than SWEEP_COLS (200) -- see this file's own header for why both
+ * grids needed narrowing, not just the in-flight one, and why this specific value stays well clear
+ * of MIN_FRAME_COUNT even on this repo's own faster-than-baseline dev sandbox (where the guard is
+ * closest to tripping, since a narrowed sweep resolves fastest there). Chosen empirically: at this
+ * width, on this sandbox, the in-flight sweep completed 15-20 frames across repeat runs at both
+ * tested worker counts, comfortable margin above MIN_FRAME_COUNT=10 (see 07.1-05-SUMMARY.md for
+ * the measured frame counts). */
+const CONTENTION_COLS = 135
 
 function baseParams(): SweepBaseParams {
   return {
@@ -222,18 +267,22 @@ async function measureWidth(workerCount: number): Promise<WidthMeasurement> {
   })
   const coldFirstSweepMs = performance.now() - coldStart
 
-  // Warm: the first FULL-grid sweep on the now-warm pool -- steady-state throughput, still
+  // Warm and in-flight both run at the narrowed CONTENTION_COLS width, not the full SWEEP_COLS --
+  // see this file's own header for why both grids, not just the in-flight one, needed narrowing.
+  const contentionEntryDates = entryDates.slice(0, CONTENTION_COLS)
+
+  // Warm: the first narrowed-grid sweep on the now-warm pool -- steady-state throughput, still
   // unloaded (no concurrent main-thread workload yet).
-  const warmGrid = createSweepGrid(SWEEP_COLS, SWEEP_ROWS, makeMeta(entryDates, leverages, params))
+  const warmGrid = createSweepGrid(CONTENTION_COLS, SWEEP_ROWS, makeMeta(contentionEntryDates, leverages, params))
   const warmStart = performance.now()
-  await pool.runSweep(warmGrid, { generation: 2, params, entryDates })
+  await pool.runSweep(warmGrid, { generation: 2, params, entryDates: contentionEntryDates })
   const warmSweepMs = performance.now() - warmStart
 
-  // In-flight: a second full-grid sweep, held while a repeating main-thread workload runs from
+  // In-flight: a second narrowed-grid sweep, held while a repeating main-thread workload runs from
   // requestAnimationFrame -- the contention measurement itself. The sweep's own promise is held
   // in `sweepPromise` without blocking anything: awaiting a promise never blocks the event loop,
   // so the rAF-scheduled workload below keeps running while this function is suspended on it.
-  const loadGrid = createSweepGrid(SWEEP_COLS, SWEEP_ROWS, makeMeta(entryDates, leverages, params))
+  const loadGrid = createSweepGrid(CONTENTION_COLS, SWEEP_ROWS, makeMeta(contentionEntryDates, leverages, params))
   const recomputeDurations: number[] = []
   const frameGaps: number[] = []
   let lastFrameTime: number | null = null
@@ -253,7 +302,7 @@ async function measureWidth(workerCount: number): Promise<WidthMeasurement> {
   requestAnimationFrame(frame)
 
   const loadStart = performance.now()
-  const sweepPromise = pool.runSweep(loadGrid, { generation: 3, params, entryDates })
+  const sweepPromise = pool.runSweep(loadGrid, { generation: 3, params, entryDates: contentionEntryDates })
   await sweepPromise
   const sweepDurationUnderLoadMs = performance.now() - loadStart
   // Stop the workload when the sweep's promise resolves, per this task's own instruction.
@@ -272,7 +321,7 @@ async function measureWidth(workerCount: number): Promise<WidthMeasurement> {
 
   return {
     workerCount,
-    chunkCount: partitionColumns(entryDates, workerCount).length,
+    chunkCount: partitionColumns(contentionEntryDates, workerCount).length,
     coldFirstSweepMs,
     warmSweepMs,
     sweepDurationUnderLoadMs,
@@ -288,6 +337,8 @@ function formatWidthLine(result: WidthMeasurement, score: number): string {
   const rn = (ms: number): string => `${ms.toFixed(4)}/${normalize(ms, score).toFixed(4)}`
   return (
     `sweep-contention: workerCount=${result.workerCount} hardwareConcurrency=${navigator.hardwareConcurrency} ` +
+    `contentionCols=${CONTENTION_COLS} (narrowed from SWEEP_COLS=${SWEEP_COLS}, shared by the warm and in-flight sweeps -- see this file's header) ` +
+    `standingCostBudgetMs=${STANDING_COST_BUDGET_MS} (whole-file budget, hardwareConcurrency=4, shared across both widths) ` +
     `chunkCount=${result.chunkCount} calibrationScore=${score} ` +
     `coldFirstSweepMs(raw/normalized)=${rn(result.coldFirstSweepMs)} ` +
     `warmSweepMs(raw/normalized)=${rn(result.warmSweepMs)} ` +
