@@ -17,7 +17,7 @@ import fc from 'fast-check'
 import { describe, expect, test } from 'vitest'
 
 import { solveCagr } from '../../src/metrics/cagr.ts'
-import { buildCashFlows, solveIrr, type CashFlow } from '../../src/metrics/irr.ts'
+import { buildCashFlows, npv, solveIrr, type CashFlow } from '../../src/metrics/irr.ts'
 import type { KernelOutputs, KernelParams, KernelResult, KernelSeries } from '../../src/kernel/backtest.types.ts'
 
 function makeSeries(calendarDaysElapsed: number[], contributionFlags: number[]): KernelSeries {
@@ -196,4 +196,57 @@ describe('buildCashFlows: D-21 post-ruin contribution exclusion', () => {
     expect(flows[2]).toEqual({ daysSinceEntry: 3, amount: -250 })
     expect(flows[3]).toEqual({ daysSinceEntry: 3, amount: 10_530 })
   })
+})
+
+describe('npv: the log/exp reduction agrees with an independent Math.pow-based oracle (07-03-PLAN.md Task 3, F-06)', () => {
+  /** The exact formula the shipped `npv` replaced, defined fresh here (not imported) so a bug
+   * shared between the reduction and its own oracle cannot slip through undetected. */
+  function npvOracle(rate: number, flows: readonly CashFlow[]): number {
+    let total = 0
+    for (const flow of flows) {
+      total += flow.amount / Math.pow(1 + rate, flow.daysSinceEntry / 365)
+    }
+    return total
+  }
+
+  test(
+    'fast-check: matches the Math.pow oracle within 1e-12 relative error (floored at an absolute ' +
+      'scale of 1, so a near-zero NPV cannot spuriously blow up the ratio) over 200+ generated ' +
+      'cash-flow sequences of 2 to 400 flows, random ascending irregular day offsets, and rates ' +
+      'across the full [-0.9999, 10.0] bracket',
+    () => {
+      fc.assert(
+        fc.property(
+          fc.double({ min: -0.9999, max: 10.0, noNaN: true, noDefaultInfinity: true }),
+          fc.array(
+            fc.record({
+              dayGap: fc.integer({ min: 1, max: 40 }),
+              amount: fc.double({ min: -1_000_000, max: 1_000_000, noNaN: true, noDefaultInfinity: true }),
+            }),
+            { minLength: 1, maxLength: 399 },
+          ),
+          (rate, gaps) => {
+            // Random ASCENDING irregular day offsets, built from random positive gaps so
+            // daysSinceEntry is strictly increasing (never a repeat, never descending) -- the
+            // shape buildCashFlows itself always produces (D-24's own irregular-gap premise).
+            // Total flow count is 2 (the day-0 anchor plus one generated flow) to 400 (plus 399),
+            // covering the plan's stated "random flow counts from 2 to 400."
+            const flows: CashFlow[] = [{ daysSinceEntry: 0, amount: -10_000 }]
+            let cumulativeDays = 0
+            for (const { dayGap, amount } of gaps) {
+              cumulativeDays += dayGap
+              flows.push({ daysSinceEntry: cumulativeDays, amount })
+            }
+
+            const actual = npv(rate, flows)
+            const expected = npvOracle(rate, flows)
+
+            const scale = Math.max(1, Math.abs(expected))
+            expect(Math.abs(actual - expected) / scale, `rate=${rate} flowCount=${flows.length}`).toBeLessThan(1e-12)
+          },
+        ),
+        { numRuns: 200 },
+      )
+    },
+  )
 })
