@@ -489,3 +489,125 @@ describe('Task 2: ruin proven categorical on the named verification sweep', () =
     expect(matchesAnySample(pixel, sequentialSamples)).toBe(false)
   })
 })
+
+// -------------------------------------------------------------------------------------------
+// Task 3: the hatch and the rule read cleanly together where they overlap
+// -------------------------------------------------------------------------------------------
+
+describe('Task 3: the hatch and the short-horizon rule read cleanly together (F-04)', () => {
+  // Same 20x4 shape and entry-date construction as Task 1's fixture, so shortHorizonColumn(grid)
+  // is again deterministically 10 and ruleX is again exactly 100 -- see that describe block's own
+  // comment for the arithmetic. Reused rather than re-derived so this test's own fixture is
+  // provably the same rule geometry Task 1 already verified in isolation.
+  const endOfDataDate = '2020-01-01'
+  const cols = 20
+  const rows = 4
+  const widthPx = 200
+  const heightPx = 80
+  const openEndedEntryDates = Array.from({ length: cols }, (_, col) => isoDateMinusDays(endOfDataDate, 2000 - 100 * col))
+
+  function makeStraddlingGrid(): SweepGrid {
+    const grid = createSweepGrid(cols, rows, testMeta({ entryDates: openEndedEntryDates, holdMode: 'end-of-data', endOfDataDate }))
+    grid.multiples.fill(2) // flat field: no contour crossings, isolating hatch + rule pixels
+    // Ruined block straddles the rule's own column (10): columns 8-12, rows 0-2 (leaving row 3 --
+    // the TOP of the canvas, where the rule's own label and its backing panel sit -- untouched, so
+    // sampling below stays clear of the label's own pixels).
+    for (let row = 0; row <= 2; row++) {
+      for (let col = 8; col <= 12; col++) {
+        grid.flags[row * cols + col] = CELL_FLAG_RUINED
+      }
+    }
+    return grid
+  }
+
+  test('shortHorizonColumn resolves to column 10 on this fixture (sanity check shared with Task 1)', () => {
+    expect(shortHorizonColumn(makeStraddlingGrid())).toBe(10)
+  })
+
+  test("at three row positions inside the hatched block, the rule's muted stroke is present at the rule's own column, and the hatch survives one cell either side", () => {
+    const grid = makeStraddlingGrid()
+    const ctx = makeCanvas(widthPx, heightPx)
+    paintSweepField(ctx, grid, { metric: 'multiple' })
+    const data = ctx.getImageData(0, 0, widthPx, heightPx).data
+
+    const muted = readCssRgb('--color-text-muted')
+    const cellWidthPx = widthPx / cols
+    const cellHeightPx = heightPx / rows
+    const ruleX = 10 * cellWidthPx // 100
+
+    // rows 0, 1, 2 (grid space) map to image rows 3, 2, 1 (rows - 1 - row) -- three separate row
+    // positions strictly inside the hatched block (row 3/image-row 0 is deliberately excluded, see
+    // makeStraddlingGrid's own comment).
+    const sampleImgRows = [1, 2, 3] // image rows corresponding to grid rows 2, 1, 0
+    for (const imgRow of sampleImgRows) {
+      const yCenter = imgRow * cellHeightPx + cellHeightPx / 2
+
+      // The rule's own muted stroke is present somewhere in a small y-window around this row's
+      // centre, at the rule's own column -- the dashed period means not every single y matches,
+      // so scan a window rather than one exact y (mirrors Task 1's own dash-sampling approach).
+      let ruleFound = false
+      for (let dy = -8; dy <= 8 && !ruleFound; dy++) {
+        const y = Math.round(yCenter) + dy
+        if (y < 0 || y >= heightPx) continue
+        for (let dx = -2; dx <= 2; dx++) {
+          const [r, g, b] = pixelAt(data, widthPx, Math.round(ruleX) + dx, y)
+          if (rgbDistance([r, g, b], muted) < 40) {
+            ruleFound = true
+            break
+          }
+        }
+      }
+      expect(ruleFound, `image row ${imgRow}: the rule's muted stroke must be findable near the rule's own column`).toBe(true)
+
+      // One cell either side of the rule (columns 9 and 11), the hatch survives: two pixels at
+      // different offsets within that single cell differ from each other (the same texture proof
+      // Task 2 uses), proving the rule did not suppress the hatch it's drawn over.
+      for (const col of [9, 11]) {
+        const cellX0 = col * cellWidthPx
+        const cellY0 = imgRow * cellHeightPx
+        const cornerA = pixelAt(data, widthPx, Math.floor(cellX0 + 2), Math.floor(cellY0 + 2))
+        const cornerB = pixelAt(data, widthPx, Math.floor(cellX0 + cellWidthPx - 2), Math.floor(cellY0 + cellHeightPx - 2))
+        expect(cornerA, `image row ${imgRow}, col ${col}: hatch texture must survive next to the rule`).not.toEqual(cornerB)
+      }
+    }
+  })
+
+  test("the label's bounding box region contains the panel surface colour behind the text, so the label is legible over the hatch texture", () => {
+    // A wider canvas than this describe block's other two tests use (700 vs 200px): at 200px wide,
+    // SHORT_HORIZON_LABEL (a full sentence) is wider than the whole canvas regardless of which side
+    // it renders on, which is exactly what Task 1's own "renders to the right by default" test
+    // avoids the same way (a 600px canvas there). 700px here gives the label room to render fully
+    // on one side so its backing rectangle -- and the padding strip this test samples inside --
+    // stays entirely on-canvas.
+    const wideWidthPx = 700
+    const cellWidthPx = wideWidthPx / cols
+    const grid = makeStraddlingGrid()
+    const ctx = makeCanvas(wideWidthPx, heightPx)
+    paintSweepField(ctx, grid, { metric: 'multiple' })
+    const data = ctx.getImageData(0, 0, wideWidthPx, heightPx).data
+
+    const surface = readCssRgb('--color-surface')
+    const ruleX = 10 * cellWidthPx // 350, comfortable room on both sides at this width
+
+    // Independently recompute the expected backing rectangle, mirroring short-horizon.ts's own
+    // paintShortHorizonRule geometry exactly (LABEL_GAP_PX=4, --space-xs padding=4, font size 12).
+    const measureCtx = document.createElement('canvas').getContext('2d')!
+    measureCtx.font = '12px system-ui, -apple-system, "Segoe UI", sans-serif'
+    const textWidth = measureCtx.measureText(SHORT_HORIZON_LABEL).width
+    const gap = 4
+    const padding = 4
+    const fitsRight = ruleX + gap + textWidth <= wideWidthPx
+    expect(fitsRight, 'sanity check on the fixture: the label must fit to the right at this canvas width').toBe(true)
+    const backingX = ruleX + gap - padding
+
+    // Sample just inside the backing rectangle's own leading edge -- inside the padding strip
+    // reserved between the backing's own border and where the glyph ink begins, so this pixel is
+    // reliably pure backing fill rather than possibly landing on a text stroke.
+    const sampleX = Math.round(backingX) + 1
+    const sampleY = 1 // 1px inside the backing's own top edge (backingY = LABEL_GAP_PX - padding = 0)
+
+    const [r, g, b] = pixelAt(data, wideWidthPx, sampleX, sampleY)
+    expect(rgbDistance([r, g, b], surface), 'the label backing must be the panel surface colour, not the field or hatch beneath it').toBeLessThan(15)
+  })
+})
+
