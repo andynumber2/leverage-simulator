@@ -383,3 +383,16 @@ zero-contribution slowdown (see section 2's total-runtime observation above) on 
 `solveIrr` branch's structurally higher per-cell cost. This is the input plan 07-12's Key
 Decision reads; this document states the numbers and takes no position on them, per this plan's
 own scope.
+
+## 4. The recorded decision
+
+**2026-08-23.** Both overruns recorded in sections 2 and 3 -- the zero-contribution headline
+figure (`measuredMs=952.40`, `normalizedMs=1168.59`, 116.9% of budget, FAIL) and the
+contribution-schedule `solveIrr` branch (`measuredMs=7303.90`, `normalizedMs=8961.84`, roughly
+8.96x over budget) -- are resolved together in one Key Decision: **`pool-tuning`**, spent first,
+with the coarser default grid (D-03) explicitly held in reserve. PERF-03 is recorded as FAILED,
+not met; the phase's third roadmap success criterion does not close on this record. No
+`thresholdMs`, `NOMINAL_REFERENCE_MS`, or calibration constant moved in response to either
+figure. See `.planning/PROJECT.md`'s Key Decisions table, the row titled "PERF-03 D-17 baseline
+escalation (Phase 7)", for the full rationale, the levers considered and their disposition, and
+what a follow-up phase must measure before PERF-03 can be claimed met.
