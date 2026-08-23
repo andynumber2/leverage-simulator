@@ -72,9 +72,15 @@ test(
     document.body.appendChild(container)
     disposeApp = mountApp(container)
 
-    await waitFor(() => container!.querySelector('[data-testid="sweep-mode-toggle"]') !== null)
+    // 07-06-PLAN.md Task 2: SweepModeToggle now renders unconditionally (present-but-disabled
+    // while loading, D-18), so this waits for the "Sweep" radio specifically to become enabled --
+    // its mere presence in the DOM no longer implies the manifest has decoded.
+    await waitFor(() => {
+      const toggle = container!.querySelector<HTMLInputElement>('[data-testid="sweep-mode-sweep"]')
+      return toggle !== null && !toggle.disabled
+    })
 
-    const toggle = container.querySelector<HTMLButtonElement>('[data-testid="sweep-mode-toggle"]')
+    const toggle = container.querySelector<HTMLInputElement>('[data-testid="sweep-mode-sweep"]')
     expect(toggle).not.toBeNull()
     toggle!.click()
 

@@ -29,7 +29,9 @@ import {
   backtestRequest,
   DEFAULT_REQUEST,
   resetAppState,
+  resultMode,
   setActiveTier,
+  setResultMode,
   updateBacktestRequest,
 } from '../../src/app/state.ts'
 
@@ -87,8 +89,8 @@ function buildManifestFixture(overrides: {
   }
 }
 
-test('PARAMETER_DEFAULTS has exactly ten entries, one per D-22 parameter', () => {
-  expect(Object.keys(PARAMETER_DEFAULTS).length).toBe(10)
+test('PARAMETER_DEFAULTS has exactly eleven entries: one per D-22 parameter, plus 07-06-PLAN.md Task 2\'s resultMode', () => {
+  expect(Object.keys(PARAMETER_DEFAULTS).length).toBe(11)
 })
 
 const STORE_BACKED_CASES: Array<{
@@ -140,6 +142,11 @@ const STORE_BACKED_CASES: Array<{
     id: 'financingSpread',
     offDefault: () => updateBacktestRequest({ financingSpreadPercent: 1.2 }),
     isNowDefault: () => backtestRequest().financingSpreadPercent === DEFAULT_REQUEST.financingSpreadPercent,
+  },
+  {
+    id: 'resultMode',
+    offDefault: () => setResultMode('sweep'),
+    isNowDefault: () => resultMode() === 'single',
   },
 ]
 

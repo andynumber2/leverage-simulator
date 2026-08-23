@@ -528,7 +528,7 @@ test('6/7. a stacked bundle-mismatch plus cross-field-caveat explanation does no
 //    other, despite six more controls carrying the affordance than Phase 4 shipped")
 // ---------------------------------------------------------------------------------------------
 
-test('8. the default badge and reset affordance neither collide with nor wrap unpredictably against their control, at 320px, across all ten defaulted parameters', async () => {
+test('8. the default badge and reset affordance neither collide with nor wrap unpredictably against their control, at 320px, across all eleven defaulted parameters', async () => {
   await page.viewport(NARROW_VIEWPORT.width, NARROW_VIEWPORT.height)
   const el = await mountAndWaitForMetrics()
 
@@ -546,13 +546,18 @@ test('8. the default badge and reset affordance neither collide with nor wrap un
   updateBacktestRequest({ ...DEFAULT_REQUEST })
   PARAMETER_DEFAULTS.entryDate.reset()
   setActiveTier('strict')
-  await waitFor(() => el.querySelectorAll('[data-testid^="default-badge-"]').length === 10)
+  // 07-06-PLAN.md Task 2: PARAMETER_DEFAULTS.resultMode is an eleventh registry entry
+  // (`resultMode` starts, and stays, at its own default 'single' throughout this whole test --
+  // nothing here ever calls setResultMode), so its own DefaultBadge renders in the result
+  // column for the entire test, alongside the ten D-22 parameter badges/reset buttons in the
+  // parameter column.
+  await waitFor(() => el.querySelectorAll('[data-testid^="default-badge-"]').length === 11)
   await nextFrame()
 
-  // Cold arrival: all ten default badges, each contained within its own control and wrapping
+  // Cold arrival: all eleven default badges, each contained within its own control and wrapping
   // rather than clipping.
   const badges = Array.from(el.querySelectorAll<HTMLElement>('[data-testid^="default-badge-"]'))
-  expect(badges.length, 'expected ten default badges on a cold arrival').toBe(10)
+  expect(badges.length, 'expected eleven default badges on a cold arrival').toBe(11)
   for (const badgeEl of badges) {
     assertWrapsNotClips(badgeEl, `the default badge "${badgeEl.dataset.testid}"`)
     const control = badgeEl.closest('.parameter-group')
