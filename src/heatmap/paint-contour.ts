@@ -81,6 +81,7 @@ import { makeHatchPattern } from './hatch-pattern.ts'
 import { BAND_LEVELS, resampleField, type Metric } from './field-sampler.ts'
 import { marchingSquaresSegments } from './iso-lines.ts'
 import { buildBandPolygons } from './polygon-fill.ts'
+import { paintShortHorizonRule, shortHorizonColumn } from './short-horizon.ts'
 import type { SweepGrid } from '../sweep/sweep-grid.ts'
 
 /** The two selectable fill paths: `'resample'` (07-01, D-08's permanent oracle, and -- per
@@ -459,4 +460,13 @@ export function paintSweepField(ctx: CanvasRenderingContext2D, grid: SweepGrid, 
     ctx.fillRect(0, 0, widthPx, heightPx)
   }
   ctx.restore()
+
+  // 07-09-PLAN.md Task 1 (D-29): the short-horizon rule paints LAST, after every band fill, band
+  // boundary stroke, and the ruin hatch, so it layers above the whole field rather than floating
+  // over it in the DOM. Gated on shortHorizonColumn returning non-null: fixed-period mode (and
+  // an open-ended sweep where no column crosses the threshold) gets no rule at all.
+  const shortHorizonCol = shortHorizonColumn(grid)
+  if (shortHorizonCol !== null) {
+    paintShortHorizonRule(ctx, { widthPx, heightPx }, shortHorizonCol, cols)
+  }
 }
