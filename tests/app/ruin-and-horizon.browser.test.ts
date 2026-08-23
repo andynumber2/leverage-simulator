@@ -24,9 +24,12 @@ import '../../src/app/styles.css'
 import { mountApp } from '../../src/app/main.tsx'
 import { loadStatus, setActiveTier, setResultMode, sweepGrid, updateBacktestRequest } from '../../src/app/state.ts'
 import type { Tier } from '../../src/app/bounds.ts'
-import { paintSweepField } from '../../src/heatmap/paint-contour.ts'
+import { gridColToDisplayX, gridRowToDisplayY, getRampValues, paintSweepField } from '../../src/heatmap/paint-contour.ts'
 import { SHORT_HORIZON_LABEL, shortHorizonColumn } from '../../src/heatmap/short-horizon.ts'
-import { interpolateRamp, interpolateSequentialRamp } from '../../src/colorscale/value-to-color.ts'
+import { labelAnchorAvoiding, CURVE_LABEL_FONT, CURVE_LABEL_FONT_HEIGHT_PX, type DisplaySegment } from '../../src/heatmap/curve-label.ts'
+import { marchingSquaresSegments } from '../../src/heatmap/iso-lines.ts'
+import { emphasizedBandLevelFor, interpolateRamp, interpolateSequentialRamp } from '../../src/colorscale/value-to-color.ts'
+import { formatMultiple, formatSignedPercent } from '../../src/metrics/format.ts'
 import { CELL_FLAG_INCOMPLETE, CELL_FLAG_RUINED } from '../../src/data/sweep-fixture-format.ts'
 import { createSweepGrid, leverageForRow, type SweepGrid, type SweepGridMeta } from '../../src/sweep/sweep-grid.ts'
 
@@ -611,3 +614,259 @@ describe('Task 3: the hatch and the short-horizon rule read cleanly together (F-
   })
 })
 
+// -------------------------------------------------------------------------------------------
+// Task 4: the breakeven curve's inline label
+// -------------------------------------------------------------------------------------------
+
+describe('Task 4: inline breakeven curve label (D-33)', () => {
+  const cols = 20
+  const rows = 4
+  const widthPx = 200
+  const heightPx = 80
+
+  function makeGradientGrid(metric: 'multiple' | 'drawdown', holdMode: 'fixed' | 'end-of-data' = 'fixed'): SweepGrid {
+    const grid = createSweepGrid(
+      cols,
+      rows,
+      testMeta({
+        entryDates: Array.from({ length: cols }, () => '2000-01-01'),
+        holdMode,
+        holdingYears: holdMode === 'fixed' ? 5 : 0,
+        endOfDataDate: '2020-01-01',
+      }),
+    )
+    if (metric === 'multiple') {
+      // Linear gradient from 2.00x down to -2.00x across the columns, identical for every row --
+      // crosses breakeven (1.00x) at a fixed fractional column (col = 4.75, solved from
+      // 2 - (col/19)*4 = 1), the same for every row-cell, so marchingSquaresSegments returns one
+      // segment per row-band that together form a single continuous vertical line.
+      for (let row = 0; row < rows; row++) {
+        for (let col = 0; col < cols; col++) {
+          grid.multiples[row * cols + col] = 2 - (col / (cols - 1)) * 4
+        }
+      }
+    } else {
+      for (let row = 0; row < rows; row++) {
+        for (let col = 0; col < cols; col++) {
+          grid.drawdowns[row * cols + col] = 0.1 + (col / (cols - 1)) * 0.5
+        }
+      }
+    }
+    return grid
+  }
+
+  /** Independently recomputes the emphasized level's own display-space segments through the same
+   * public pipeline `paint-contour.ts` uses internally (`getRampValues` -> `marchingSquaresSegments`
+   * -> `gridColToDisplayX`/`gridRowToDisplayY`), so this test derives its expectations from the
+   * same public API surface the implementation is built on, not from a second, hand-rolled copy of
+   * the field arithmetic. */
+  function emphasizedDisplaySegments(grid: SweepGrid, metric: 'multiple' | 'drawdown'): DisplaySegment[] {
+    const level = emphasizedBandLevelFor(metric)
+    if (level === null) return []
+    const rampValues = getRampValues(grid, metric)
+    const gridSegments = marchingSquaresSegments(rampValues, grid.cols, grid.rows, level, grid.flags)
+    return gridSegments.map((segment) => ({
+      x1: gridColToDisplayX(segment.x1, widthPx, grid.cols),
+      y1: gridRowToDisplayY(segment.y1, heightPx, grid.rows),
+      x2: gridColToDisplayX(segment.x2, widthPx, grid.cols),
+      y2: gridRowToDisplayY(segment.y2, heightPx, grid.rows),
+    }))
+  }
+
+  test('multiple-of-contributed: "1.00x" (via formatMultiple) renders within two pixels of a breakeven iso-segment', () => {
+    expect(formatMultiple(1.0)).toBe('1.00x')
+    expect(formatMultiple(1.0)).toMatch(/^\d\.\d{2}x$/) // two fixed decimals, trailing lowercase x
+
+    const grid = makeGradientGrid('multiple')
+    const displaySegments = emphasizedDisplaySegments(grid, 'multiple')
+    expect(displaySegments.length).toBeGreaterThan(0)
+    const anchor = labelAnchorAvoiding(displaySegments, { widthPx, heightPx }, null, 0)
+    expect(anchor).not.toBeNull()
+
+    const ctx = makeCanvas(widthPx, heightPx)
+    paintSweepField(ctx, grid, { metric: 'multiple' })
+    const data = ctx.getImageData(0, 0, widthPx, heightPx).data
+    const textColor = readCssRgb('--color-text')
+
+    let found = false
+    for (let dy = -2; dy <= 2 && !found; dy++) {
+      for (let dx = -2; dx <= 2; dx++) {
+        const x = Math.round(anchor!.xPx) + dx
+        const y = Math.round(anchor!.yPx) + dy
+        if (x < 0 || x >= widthPx || y < 0 || y >= heightPx) continue
+        const [r, g, b] = pixelAt(data, widthPx, x, y)
+        if (rgbDistance([r, g, b], textColor) < 30) {
+          found = true
+          break
+        }
+      }
+    }
+    expect(found, 'label ink must appear within two pixels of the independently-computed anchor').toBe(true)
+  })
+
+  test('drawdown: no inline curve label renders (sequential scale has no emphasized threshold)', () => {
+    expect(emphasizedBandLevelFor('drawdown')).toBeNull()
+
+    const grid = makeGradientGrid('drawdown')
+    const ctx = makeCanvas(widthPx, heightPx)
+    paintSweepField(ctx, grid, { metric: 'drawdown' })
+    const data = ctx.getImageData(0, 0, widthPx, heightPx).data
+    const textColor = readCssRgb('--color-text')
+
+    // No boundary is ever drawn at the 2px var(--color-text) emphasis for drawdown (isEmphasized
+    // is never true, since emphasizedBandLevelFor('drawdown') is null), so --color-text should
+    // never appear anywhere on this canvas at all.
+    let anyTextColor = false
+    outer: for (let y = 0; y < heightPx; y++) {
+      for (let x = 0; x < widthPx; x++) {
+        const [r, g, b] = pixelAt(data, widthPx, x, y)
+        if (rgbDistance([r, g, b], textColor) < 15) {
+          anyTextColor = true
+          break outer
+        }
+      }
+    }
+    expect(anyTextColor).toBe(false)
+  })
+
+  test('the stroked breakeven line is interrupted under the label bounding box, not stroked continuously through it', () => {
+    const grid = makeGradientGrid('multiple')
+    const displaySegments = emphasizedDisplaySegments(grid, 'multiple')
+    const anchor = labelAnchorAvoiding(displaySegments, { widthPx, heightPx }, null, 0)
+    expect(anchor).not.toBeNull()
+
+    const ctx = makeCanvas(widthPx, heightPx)
+    paintSweepField(ctx, grid, { metric: 'multiple' })
+    const data = ctx.getImageData(0, 0, widthPx, heightPx).data
+    const textColor = readCssRgb('--color-text')
+
+    // This fixture's breakeven crossing is at the SAME x for every row (see makeGradientGrid's own
+    // comment), so the emphasized stroke is one continuous vertical line down the full canvas
+    // height except where paint-contour.ts skips the segment(s) under the label's own bounding box.
+    const strokeX = Math.round(anchor!.xPx)
+    const hasTextColorAt = (y: number): boolean => {
+      for (let dx = -1; dx <= 1; dx++) {
+        const [r, g, b] = pixelAt(data, widthPx, strokeX + dx, y)
+        if (rgbDistance([r, g, b], textColor) < 30) return true
+      }
+      return false
+    }
+
+    const presentYs: number[] = []
+    const absentYs: number[] = []
+    for (let y = 0; y < heightPx; y++) {
+      if (hasTextColorAt(y)) presentYs.push(y)
+      else absentYs.push(y)
+    }
+
+    expect(presentYs.length, 'the line must be intact somewhere away from the label').toBeGreaterThan(0)
+    expect(absentYs.length, 'the line must be interrupted somewhere, under the label').toBeGreaterThan(0)
+
+    // The interruption is a genuine gap SANDWICHED inside the line's own present-y range (not
+    // merely absent above/below the line's own natural extent, which this fixture's construction
+    // does not produce anyway since the line spans the full canvas height by construction).
+    const minPresent = Math.min(...presentYs)
+    const maxPresent = Math.max(...presentYs)
+    const interruptedInsideRange = absentYs.some((y) => y > minPresent && y < maxPresent)
+    expect(interruptedInsideRange, 'the absent run must sit strictly inside the line\'s own present-y range').toBe(true)
+  })
+
+  test('the breakeven curve label, forced near the short-horizon rule, does not collide with the rule label (F-04)', () => {
+    // A 40x20 grid, wide enough that SHORT_HORIZON_LABEL comfortably fits and the diagonal
+    // breakeven crossing below spans a genuine range of x positions to choose an anchor from.
+    const wideCols = 40
+    const wideRows = 20
+    const wideWidthPx = 800
+    const wideHeightPx = 400
+    const endOfDataDate = '2020-01-01'
+
+    // shortHorizonColumn resolves to column 20 (exact centre): columns < 20 are comfortably above
+    // the 3-year threshold (2000 calendar days remaining), columns >= 20 are comfortably below it
+    // (500 calendar days remaining) -- same isoDateMinusDays construction Task 1's own fixture uses.
+    const entryDates = Array.from({ length: wideCols }, (_, col) => isoDateMinusDays(endOfDataDate, col < 20 ? 2000 : 500))
+    const grid = createSweepGrid(wideCols, wideRows, testMeta({ entryDates, holdMode: 'end-of-data', endOfDataDate }))
+    expect(shortHorizonColumn(grid)).toBe(20)
+    const ruleX = 20 * (wideWidthPx / wideCols) // 400, the canvas's own horizontal centre
+
+    // Diagonal breakeven crossing at col === row (valid for row 0..19, i.e. columns 0..19, the
+    // LEFT half of the grid): the crossing nearest the rule sits at (row 19, col 19), whose display
+    // x is close to ruleX -- a genuine near-collision the label must be steered away from, per this
+    // task's own F-04 resolution ("prefer an anchor at least the label's own width away from the
+    // rule's column, falling back to the next-shallowest segment").
+    for (let row = 0; row < wideRows; row++) {
+      for (let col = 0; col < wideCols; col++) {
+        grid.multiples[row * wideCols + col] = 1 + (col - row) * 0.05
+      }
+    }
+
+    // emphasizedDisplaySegments closes over the OTHER tests' own 200x80 module-level geometry
+    // constants, which do not match this test's 800x400 canvas -- recompute directly at this
+    // test's own size rather than reuse that helper.
+    const level = emphasizedBandLevelFor('multiple')!
+    const rampValues = getRampValues(grid, 'multiple')
+    const gridSegments = marchingSquaresSegments(rampValues, wideCols, wideRows, level, grid.flags)
+    const wideDisplaySegments: DisplaySegment[] = gridSegments.map((segment) => ({
+      x1: gridColToDisplayX(segment.x1, wideWidthPx, wideCols),
+      y1: gridRowToDisplayY(segment.y1, wideHeightPx, wideRows),
+      x2: gridColToDisplayX(segment.x2, wideWidthPx, wideCols),
+      y2: gridRowToDisplayY(segment.y2, wideHeightPx, wideRows),
+    }))
+    expect(wideDisplaySegments.length).toBeGreaterThan(0)
+
+    const measureCtx = document.createElement('canvas').getContext('2d')!
+    measureCtx.font = CURVE_LABEL_FONT
+    const curveLabelText = formatMultiple(1.0)
+    const curveTextWidth = measureCtx.measureText(curveLabelText).width
+
+    const anchor = labelAnchorAvoiding(wideDisplaySegments, { widthPx: wideWidthPx, heightPx: wideHeightPx }, ruleX, curveTextWidth)
+    expect(anchor).not.toBeNull()
+    // The invariant `labelAnchorAvoiding` itself is responsible for: the chosen anchor clears the
+    // rule's column by at least the label's own width.
+    expect(Math.abs(anchor!.xPx - ruleX)).toBeGreaterThanOrEqual(curveTextWidth)
+
+    // The short-horizon rule label's own bounding box (mirrors short-horizon.ts's own geometry).
+    measureCtx.font = '12px system-ui, -apple-system, "Segoe UI", sans-serif'
+    const ruleLabelTextWidth = measureCtx.measureText(SHORT_HORIZON_LABEL).width
+    const gap = 4
+    const padding = 4
+    const fitsRight = ruleX + gap + ruleLabelTextWidth <= wideWidthPx
+    const ruleLabelMinX = fitsRight ? ruleX + gap - padding : ruleX - gap - ruleLabelTextWidth - padding
+    const ruleLabelMaxX = ruleLabelMinX + ruleLabelTextWidth + padding * 2
+    const ruleLabelMinY = 0
+    const ruleLabelMaxY = 12 + padding * 2
+
+    // The curve label's own bounding box, centred on the chosen anchor.
+    const curveHalfW = curveTextWidth / 2
+    const curveHalfH = CURVE_LABEL_FONT_HEIGHT_PX / 2
+    const curveLabelMinX = anchor!.xPx - curveHalfW
+    const curveLabelMaxX = anchor!.xPx + curveHalfW
+    const curveLabelMinY = anchor!.yPx - curveHalfH
+    const curveLabelMaxY = anchor!.yPx + curveHalfH
+
+    const intersects =
+      curveLabelMinX <= ruleLabelMaxX && curveLabelMaxX >= ruleLabelMinX && curveLabelMinY <= ruleLabelMaxY && curveLabelMaxY >= ruleLabelMinY
+    expect(intersects, 'the curve label and the short-horizon rule label must not overlap').toBe(false)
+
+    // Cross-validate against the real render: text-colour ink appears near the independently
+    // computed anchor, proving paint-contour.ts's own internal choice matches this prediction
+    // (both call the identical exported labelAnchorAvoiding with the identical inputs).
+    const ctx = makeCanvas(wideWidthPx, wideHeightPx)
+    paintSweepField(ctx, grid, { metric: 'multiple' })
+    const data = ctx.getImageData(0, 0, wideWidthPx, wideHeightPx).data
+    const textColor = readCssRgb('--color-text')
+    let found = false
+    for (let dy = -3; dy <= 3 && !found; dy++) {
+      for (let dx = -3; dx <= 3; dx++) {
+        const x = Math.round(anchor!.xPx) + dx
+        const y = Math.round(anchor!.yPx) + dy
+        if (x < 0 || x >= wideWidthPx || y < 0 || y >= wideHeightPx) continue
+        const [r, g, b] = pixelAt(data, wideWidthPx, x, y)
+        if (rgbDistance([r, g, b], textColor) < 30) {
+          found = true
+          break
+        }
+      }
+    }
+    expect(found, 'the real render must place label ink near the independently-predicted anchor').toBe(true)
+  })
+})
