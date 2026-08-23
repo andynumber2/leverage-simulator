@@ -371,11 +371,22 @@ Plans:
 **Plans:** 6 plans
 
 Plans:
+**Wave 1**
+
 - [ ] 07.1-01-PLAN.md (wave 1, tracer) - One measured D-17 baseline verdict this branch can read back, carrying criterion 1's attributed breakdown for both the CAGR and the `solveIrr` branch
 - [ ] 07.1-02-PLAN.md (wave 1) - Both anti-regression clamps, landed before any tuning: `assertRunInvariants` reports a budget failure and a runtime-cap breach together, and `partitionColumns` is proven to cover every column exactly once
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
 - [ ] 07.1-03-PLAN.md (wave 2) - Cut the `solveIrr` branch's per-solve cost, re-measure it at a real sample count inside a stated runtime ceiling, and decide its disposition
 - [ ] 07.1-04-PLAN.md (wave 2) - Measure main-thread responsiveness under a real in-flight sweep at width 3 and width 4, decide the `cores - 1` rule against it, and re-validate correctness at the shipped partition shape
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
 - [ ] 07.1-05-PLAN.md (wave 3) - Bring the bench suite's runtime back inside its cap, aimed by the baseline per-file attribution, with a stop rule and an escalation path that is never a raised cap
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
 - [ ] 07.1-06-PLAN.md (wave 4) - The authoritative D-17 baseline gate run, transcribed, with a disposition for all six criteria and the Key Decisions this phase owes
 
 **Margin target:** the headline PERF-03 row aims at `normalizedMs <= 870` on the D-17 baseline, not at 1000. WINDOWS.md entry 2 puts roughly plus or minus 13% on any single normalized figure, so a figure landing at 995ms is within the band's reach of a fail on identical code. A pass between 870 and 1000 is recorded as a thin pass with an explicit Key Decision, not as a quiet close.
