@@ -26,15 +26,14 @@
  * 07-06) already declares `src/heatmap/paint-contour.ts` in its own `files_modified` and is the
  * plan that owns fixing it.
  *
- * Task 1/2: mounts the two marginal slice charts (`SliceChart.tsx`, 8px from the field) and the
- * two-variant legend (`SweepLegend.tsx`), all inside this component's own `screenshot-region` --
- * the sweep panel's analogue of Phase 4's D-20 screenshot region (`App.tsx`'s own is
- * single-run-only, mounted only inside its `resultMode() === 'single'` branch, so the sweep panel
- * needs its own self-contained one). The field canvas's left padding is kept EXACTLY equal to the
- * horizontal slice's own measured y-axis gutter (`fieldLeftGutterPx`, reported via
- * `onGutterMeasured`) so the two share one entry-date axis pixel-for-pixel, by construction rather
- * than by matching two independently-guessed numbers. Task 3 (`SweepCaption.tsx`, the caption
- * strip) mounts inside this same `screenshot-region` in a following commit.
+ * Task 1/2/3: mounts the two marginal slice charts (`SliceChart.tsx`, 8px from the field), the
+ * two-variant legend (`SweepLegend.tsx`) and the caption strip (`SweepCaption.tsx`), all inside
+ * this component's own `screenshot-region` -- the sweep panel's analogue of Phase 4's D-20
+ * screenshot region (`App.tsx`'s own is single-run-only, mounted only inside its
+ * `resultMode() === 'single'` branch, so the sweep panel needs its own self-contained one). The
+ * field canvas's left padding is kept EXACTLY equal to the horizontal slice's own measured y-axis
+ * gutter (`fieldLeftGutterPx`, reported via `onGutterMeasured`) so the two share one entry-date
+ * axis pixel-for-pixel, by construction rather than by matching two independently-guessed numbers.
  */
 
 import { createEffect, createSignal, onCleanup } from 'solid-js'
@@ -44,6 +43,7 @@ import type { SweepGrid } from '../../../sweep/sweep-grid.ts'
 import { displayedMetric } from '../../state.ts'
 import { onThemeChange } from '../../theme.ts'
 import { HorizontalSliceChart, VerticalSliceChart } from './SliceChart.tsx'
+import { SweepCaption } from './SweepCaption.tsx'
 import { SweepLegend } from './SweepLegend.tsx'
 
 /** D-12: matches `FORM_2_GEOMETRY.widthPx`/`heightPx` (see this file's header note). */
@@ -117,6 +117,8 @@ export function HeatmapPanel(props: HeatmapPanelProps) {
         </div>
         <VerticalSliceChart grid={props.grid} metric={displayedMetric()} heightPx={HEATMAP_HEIGHT_PX} />
       </div>
+
+      <SweepCaption grid={props.grid} />
 
       <div style={{ 'margin-top': 'var(--space-md)' }}>
         <SweepLegend metric={displayedMetric()} />

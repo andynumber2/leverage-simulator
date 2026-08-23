@@ -78,6 +78,16 @@ export function chunkBufferByteLength(cellCount: number): number {
 export interface SweepGridMeta extends SweepFixtureMeta {
   holdMode: 'fixed' | 'end-of-data'
   endOfDataDate: string
+  /** 07-07-PLAN.md Task 3 (Rule 2 addition): the exact `BacktestRequest.holdingPeriodBars` value
+   * the sweep that produced this grid was dispatched with -- `null` in `'end-of-data'` mode, a
+   * non-negative integer bar count in `'fixed'` mode. `SweepFixtureMeta.holdingYears` (inherited)
+   * is a DIFFERENT, still-deferred field for the live grid (see `buildSweepGridMeta`'s own
+   * comment in `src/app/state.ts`); this is the field `SweepCaption.tsx`'s VIZ-04 mode statement
+   * actually reads, since `holdMode` alone cannot recover the requested bar count. Optional so
+   * every pre-existing `SweepGridMeta` object literal (tests, benches) built before this plan
+   * keeps compiling unchanged; a caller that needs the caption's exact wording reads
+   * `meta.holdingPeriodBars ?? null`. */
+  holdingPeriodBars?: number | null
 }
 
 /**

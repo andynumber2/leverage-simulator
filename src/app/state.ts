@@ -456,6 +456,11 @@ function buildSweepGridMeta(
     clippedAboveCount: 0,
     holdMode: req.holdingPeriodBars === null ? 'end-of-data' : 'fixed',
     endOfDataDate: boundsResult.lastDate,
+    // 07-07-PLAN.md Task 3 (Rule 2 addition): the caption strip's VIZ-04 mode statement needs the
+    // exact requested bar count in fixed mode, which `holdingYears` above never carries for the
+    // live grid (see that field's own comment) -- carried straight from the request that
+    // dispatched this sweep, not re-derived.
+    holdingPeriodBars: req.holdingPeriodBars,
   }
 }
 
