@@ -46,7 +46,7 @@ import { loadBundleFromFetch } from '../data/load-bundle-browser.ts'
 import type { ContributionFrequency } from '../data/contribution-schedule.ts'
 import { CELL_FLAG_INCOMPLETE, CELL_FLAG_RUINED } from '../data/sweep-fixture-format.ts'
 import { solveCagr } from '../metrics/cagr.ts'
-import { buildCashFlows, solveIrr, type CashFlow } from '../metrics/irr.ts'
+import { buildCashFlows, solveIrr, type CashFlows } from '../metrics/irr.ts'
 import { toDaysSinceEpoch } from '../../tools/bundle-compiler/src/calendar.ts'
 import { ANNUALIZED_UNDEFINED, chunkBufferByteLength, leverageForRow } from './sweep-grid.ts'
 import { resolveColumnSeries, type ColumnSeriesRequest } from './resolve-column-series.ts'
@@ -129,10 +129,11 @@ function getScratchOutputs(minLength: number): KernelOutputs {
   return { outValue: scratchOutValue, outRuined: scratchOutRuined, outLongGap: scratchOutLongGap }
 }
 
-// Scratch cash-flow array, reused across every cell that takes the `solveIrr` branch within one
+// Scratch cash-flow buffers, reused across every cell that takes the `solveIrr` branch within one
 // `computeChunkMetrics` call -- SIM-11: `buildCashFlows`'s `reuse` parameter (07-03-PLAN.md Task
-// 1) lets this file allocate the array ONCE per chunk rather than once per cell.
-let scratchCashFlows: CashFlow[] = []
+// 1, superseded by 07.1-03-PLAN.md Task 1's Lever B) grows this file's own `Float64Array` pair to
+// the chunk's largest cell, not once per cell.
+let scratchCashFlows: CashFlows = { daysSinceEntry: new Float64Array(0), amount: new Float64Array(0), count: 0 }
 
 /** The four typed arrays `computeChunkMetrics` writes, one element per (column, row) pair in the
  * SAME column-outside/row-inside order `request.columnIndices`/`request.rowIndices` name --
