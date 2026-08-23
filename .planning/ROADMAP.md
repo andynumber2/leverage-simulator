@@ -312,7 +312,7 @@ Plans:
   4. Changing the heatmap's displayed metric re-colors the cached grid in under 16ms and never triggers a re-sweep, because the sweep computes every display metric per cell in a single pass.
   5. Changing a parameter mid-sweep cancels the in-flight sweep within one frame and discards its superseded results rather than painting them, and heatmap pan and zoom sustain 60fps at full cell count. Both figures come from measurement, not from watching the screen.
 
-**Plans:** 10/10 plans executed
+**Plans:** 10/12 plans executed (2 gap-closure plans added after 07-VERIFICATION.md)
 
 Plans:
 **Wave 1**
@@ -339,6 +339,14 @@ Plans:
 **Wave 5** *(blocked on Wave 4 completion)*
 
 - [x] 07-10-PLAN.md: D-34's pan and zoom over the already-rendered field, with PERF-09 measured at full cell count
+
+**Wave 6** *(gap closure, blocked on Wave 5 completion)*
+
+- [ ] 07-11-PLAN.md: Land a real, non-withheld PERF-03 verdict from a D-17 (4-core) CI run, and clear the run-level invariant that would discard it
+
+**Wave 7** *(blocked on Wave 6 completion)*
+
+- [ ] 07-12-PLAN.md: Record the PROJECT.md Key Decision resolving the contribution-schedule (`solveIrr`) sweep's measured PERF-03 overrun
 
 **UI hint**: yes
 
