@@ -368,7 +368,17 @@ Plans:
   5. The bench suite's own total runtime is back inside `BENCH_TOTAL_RUNTIME_CAP_MS` (30,000ms) on the baseline host, and `assertRunInvariants` reports a cap breach independently of whether a verdict-fail fires first, so the 43,259ms breach that 07-VERIFICATION.md carried forward can no longer be masked.
   6. The sweep still computes what it computed before. The Phase 7 correctness suite (per-cell one-pass metrics, cancellation, pool-versus-serial equality, ruin and short-horizon rules) passes unchanged, and pool-versus-serial equality is asserted against the tuned partition shape so a faster wrong answer cannot pass as an improvement.
 
-**Plans:** TBD
+**Plans:** 6 plans
+
+Plans:
+- [ ] 07.1-01-PLAN.md (wave 1, tracer) - One measured D-17 baseline verdict this branch can read back, carrying criterion 1's attributed breakdown for both the CAGR and the `solveIrr` branch
+- [ ] 07.1-02-PLAN.md (wave 1) - Both anti-regression clamps, landed before any tuning: `assertRunInvariants` reports a budget failure and a runtime-cap breach together, and `partitionColumns` is proven to cover every column exactly once
+- [ ] 07.1-03-PLAN.md (wave 2) - Cut the `solveIrr` branch's per-solve cost, re-measure it at a real sample count inside a stated runtime ceiling, and decide its disposition
+- [ ] 07.1-04-PLAN.md (wave 2) - Measure main-thread responsiveness under a real in-flight sweep at width 3 and width 4, decide the `cores - 1` rule against it, and re-validate correctness at the shipped partition shape
+- [ ] 07.1-05-PLAN.md (wave 3) - Bring the bench suite's runtime back inside its cap, aimed by the baseline per-file attribution, with a stop rule and an escalation path that is never a raised cap
+- [ ] 07.1-06-PLAN.md (wave 4) - The authoritative D-17 baseline gate run, transcribed, with a disposition for all six criteria and the Key Decisions this phase owes
+
+**Margin target:** the headline PERF-03 row aims at `normalizedMs <= 870` on the D-17 baseline, not at 1000. WINDOWS.md entry 2 puts roughly plus or minus 13% on any single normalized figure, so a figure landing at 995ms is within the band's reach of a fail on identical code. A pass between 870 and 1000 is recorded as a thin pass with an explicit Key Decision, not as a quiet close.
 **UI hint**: no
 
 ### Phase 8: Export and the Canonical Arguments
