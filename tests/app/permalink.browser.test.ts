@@ -127,6 +127,10 @@ const SCENARIO_PERMALINK_PARAMS: PermalinkParams = {
   tier: 'strict',
   scale: 'log',
   bundleVersion: BUNDLE_VERSION,
+  // 07-06-PLAN.md Task 1: PermalinkParams' two new fields -- this scenario tests single-run
+  // parameter round-tripping, unaffected by either.
+  mode: 'single',
+  metric: 'multiple',
 }
 
 /** Drives the real parameter controls (dispatching the exact DOM events each control's own

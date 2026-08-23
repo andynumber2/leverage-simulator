@@ -490,6 +490,10 @@ test('6/7. a stacked bundle-mismatch plus cross-field-caveat explanation does no
     tier: 'strict',
     scale: 'log',
     bundleVersion: staleBundleVersion,
+    // 07-06-PLAN.md Task 1: PermalinkParams' two new fields -- this scenario tests the single-run
+    // screenshot region, unaffected by either.
+    mode: 'single',
+    metric: 'multiple',
   }
   const qs = encodeParams(params).toString()
   window.history.replaceState(null, '', `${window.location.pathname}?${qs}`)
