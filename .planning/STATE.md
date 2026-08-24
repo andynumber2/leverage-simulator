@@ -2,18 +2,18 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_phase: 07
-current_phase_name: sweep-engine-and-the-heatmap
-status: executing
-stopped_at: Phase 07 UI-SPEC approved
-last_updated: "2026-08-23T20:45:46.367Z"
-last_activity: 2026-08-23
-last_activity_desc: Phase 07 execution resumed (wave continue)
+current_phase: "07.1"
+current_phase_name: sweep-pool-tuning-inserted
+status: blocked
+stopped_at: Phase 07.1 executed and closed; PERF-03 still failing, merge bar not met
+last_updated: "2026-08-24T00:00:00.000Z"
+last_activity: 2026-08-24
+last_activity_desc: Session resumed; Phase 07.1 confirmed closed, no work in flight
 progress:
   total_phases: 8
   completed_phases: 6
   total_plans: 61
-  completed_plans: 53
+  completed_plans: 61
 ---
 
 # Project State
@@ -23,19 +23,23 @@ progress:
 See: .planning/PROJECT.md (updated 2026-08-16)
 
 **Core value:** Given a symbol, a leverage level, an entry point, and a contribution schedule, produce a defensible outcome and show which mechanism consumed the money, in a form that can be pasted into an argument.
-**Current focus:** Phase 07 — sweep-engine-and-the-heatmap
+**Current focus:** Phase 07.1 closed with PERF-03 escalated. Decision pending: spend a named lever, or accept the escalation and move to Phase 8.
 
 ## Current Position
 
-Phase: 07 (sweep-engine-and-the-heatmap) — EXECUTING
-Plan: 1 of 12
-Status: Ready to execute
-  Verification passed 4/4 roadmap success criteria. 697/697 unit tests pass.
-  Decision: form-2-filled-contour wins. Spec written to 06-HEATMAP-SPEC.md.
-  Carry-forwards: form 2 costs O(display area) and needs an offscreen cache in Phase 7;
-  contour levels not yet labelled; ruin hatch never visually exercised (fixture ruinedCount=0).
-Next: Phase 07 (sweep-engine-and-the-heatmap). Run /gsd-discuss-phase 07 to begin.
-Last activity: 2026-08-23 — Phase 07 execution started
+Phase: 07.1 (sweep-pool-tuning-inserted) — EXECUTED AND CLOSED, 6/6 plans complete
+Status: BLOCKED on a user decision, not on work in flight
+  Roadmap criteria 1, 3, 6 met. Criteria 2, 4, 5 escalated with named levers, all four
+  escalations recorded in PROJECT.md Key Decisions.
+  PERF-03 headline is FAILING on the D-17 4-core baseline: five production runs at
+  1120.86, 1208.38, 1115.92, 1191.34 (width 4), 1411.05ms normalized against 1000ms.
+  The solveIrr branch sits at roughly 3900-3992ms, still ~3.9x over the same budget.
+  Nothing was relaxed to get there; git diff against 7c21f0b proves no budget,
+  calibration constant, cap, or grid dimension moved.
+Next: user decision between spending lever 1 (kernel write-only per-bar output arrays,
+  reasoned but NOT measured, so measure first), or accepting the escalation and starting
+  Phase 8. PRs #7 and #8 stay unmerged either way until the two-consecutive-pass bar is met.
+Last activity: 2026-08-24 — session resumed, Phase 07.1 confirmed closed
 
 Progress: [████████░░] 75%  (6 of 8 roadmap phases complete)
 
@@ -179,7 +183,7 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-08-24
+Last session: 2026-08-24 (resumed same day)
 Stopped at: Phase 07.1 executed and closed. Clean stopping point, nothing in flight.
 Resume file: .planning/phases/07.1-sweep-pool-tuning-inserted/07.1-PERF-03-BASELINE.md
 
