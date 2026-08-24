@@ -27,16 +27,19 @@ const CHUNKS_PER_WORKER = 4
 const DEFAULT_CHUNK_TIMEOUT_MS = 10_000
 
 /**
- * `cores`, floored at a minimum of 1 (T-01-05's zero-workers floor still applies; the
- * one-core-reserved-for-the-caller reasoning it also carried is superseded by the Phase 7.1
- * worker-count Key Decision in PROJECT.md, adopted from measured 4-core D-17 baseline
- * contention-arm evidence showing a real throughput gain at width 4 with no measurable
- * interactivity cost against PERF-07a/07b). The pure flooring rule, extracted so both
- * `resolveWorkerCount` (follows the host) and `BASELINE_WORKER_COUNT` (fixed to the declared
- * baseline) share one implementation rather than two copies that could drift.
+ * `cores - 1`, floored at a minimum of 1 (T-01-05: reserve one core for the caller). The Phase
+ * 7.1 worker-count Key Decision in PROJECT.md adopted `cores` (width 4 on the 4-core D-17
+ * baseline) from the contention arm's throughput evidence, then reverted it: the authoritative
+ * D-17 baseline run this decision's own abort condition was written against (32676218114)
+ * crossed D-20's 70%-of-budget trigger on PERF-07b (76.9%), and measured no PERF-03 headline
+ * improvement at width 4 (1191.34ms normalized, inside the width-3 spread of 1115.92-1208.38ms,
+ * not below it) -- the profile's 25% projection assumed idle spare capacity a 4-core CI runner
+ * does not have. The pure flooring rule, extracted so both `resolveWorkerCount` (follows the
+ * host) and `BASELINE_WORKER_COUNT` (fixed to the declared baseline) share one implementation
+ * rather than two copies that could drift.
  */
 export function workerCountForCores(cores: number): number {
-  return Math.max(1, cores)
+  return Math.max(1, cores - 1)
 }
 
 /**

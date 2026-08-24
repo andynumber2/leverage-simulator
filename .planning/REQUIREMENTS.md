@@ -276,7 +276,7 @@ measured in CI, not an aspiration.
 | PERF-01 | Phase 1 | Complete |
 | PERF-01a | Phase 1 | Complete |
 | PERF-02 | Phase 3 | Complete |
-| PERF-03 | Phase 7 | Pending |
+| PERF-03 | Phase 7, re-measured and escalated in Phase 7.1 | Escalated, not met (see PROJECT.md's "PERF-03 headline outcome" Key Decision) |
 | PERF-04 | Phase 7 | Pending |
 | PERF-05 | Phase 7 | Pending |
 | PERF-06 | Phase 7 | Pending |
