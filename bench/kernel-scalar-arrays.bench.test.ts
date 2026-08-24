@@ -22,6 +22,9 @@ import { beforeAll, expect, test } from 'vitest'
 import type { KernelOutputs, KernelParams, KernelResult, KernelSeries } from '../src/kernel/backtest.types.ts'
 import { runBacktest } from '../src/kernel/backtest.ts'
 import { runBacktestScalarOnly } from './backtest-scalar-only.ts'
+import { measureBatchedMinOfN, normalize, REPEAT_COUNT } from './calibration.ts'
+import { resolveRunCalibration } from './canonical-calibration.ts'
+import { captureEnvironment } from './environment-block.ts'
 
 let returns: Float64Array
 let shortRate: Float64Array
@@ -178,4 +181,131 @@ test('equivalence: leverage below 1 (D-08 unclamped financing credit)', () => {
 
   assertFieldsBitIdentical('leverage-below-1', shipped, variant)
   equivalenceCasesProven++
+})
+
+// --- Timing: gated on all four equivalence cases above, over the zero-contribution branch ------
+
+const LEVER1_INFO_KEY = 'PERF-03-lever1-scalar-arrays'
+const SAMPLE_COUNT = 5
+const INITIAL_BATCH_SIZE = 250
+const MAX_BATCH_DOUBLINGS = 4
+
+/** Elision guard: both timed loops accumulate into this file-scoped sink so a kernel result the
+ * JIT can prove dead is never eligible to be elided from either arm's measured cost. */
+let elisionSink = 0
+
+test('PERF-03 lever 1: scalar-only vs shipped kernel, A/B ratio over five samples', async () => {
+  const armWallClockStart = performance.now()
+
+  // The gate: a faster wrong answer can never be reported as an improvement. Declaration order
+  // alone is not the guarantee (Vitest continues after a failed test); this check is what makes
+  // proof-before-timing mechanical rather than a convention.
+  if (equivalenceCasesProven !== 4) {
+    throw new Error(
+      `PERF-03 lever 1 timing test refuses to run: expected 4 proven equivalence cases, got ` +
+        `${equivalenceCasesProven}. A faster wrong answer must never be reported as an improvement.`,
+    )
+  }
+
+  // The zero-contribution branch only: the failing PERF-03 headline row measures this branch.
+  const params: KernelParams = { ...basePayloadParams, contributionAmount: 0 }
+  const series = makeSeries(allZeroFlags())
+
+  const score = await resolveRunCalibration()
+  await commands.recordEnvironment(captureEnvironment(score))
+
+  const shippedOutputs = makeOutputs()
+  const variantOutputs = makeOutputs()
+
+  function runShipped(): void {
+    const result = runBacktest(params, series, shippedOutputs)
+    elisionSink += result.finalValue
+  }
+  function runVariant(): void {
+    const result = runBacktestScalarOnly(params, series, variantOutputs)
+    elisionSink += result.finalValue
+  }
+
+  // Size the batch once, against the faster arm (the scalar variant), before any sample is
+  // recorded, so both arms in every sample share one batch size and the ratio stays apples to
+  // apples. Doubles on a caught throw (how the MIN_MEASUREMENT_MS floor reports a sub-floor
+  // batch), never lowers the floor itself.
+  let batchSize = INITIAL_BATCH_SIZE
+  let sized = false
+  for (let attempt = 0; attempt <= MAX_BATCH_DOUBLINGS && !sized; attempt++) {
+    try {
+      await measureBatchedMinOfN(REPEAT_COUNT, batchSize, runVariant)
+      sized = true
+    } catch {
+      if (attempt === MAX_BATCH_DOUBLINGS) {
+        throw new Error(
+          `PERF-03 lever 1: batch size ${batchSize} still under the MIN_MEASUREMENT_MS floor ` +
+            `after ${MAX_BATCH_DOUBLINGS} doublings; raise INITIAL_BATCH_SIZE`,
+        )
+      }
+      batchSize *= 2
+    }
+  }
+
+  interface Sample {
+    shippedNormalizedMs: number
+    variantNormalizedMs: number
+    ratio: number
+  }
+  const samples: Sample[] = []
+
+  // SAMPLE_COUNT independent A/B samples, arm order alternated between samples (shipped first on
+  // even-indexed samples, variant first on odd-indexed) so a monotone host drift over the test's
+  // own wall clock cannot bias one arm systematically.
+  for (let sampleIndex = 0; sampleIndex < SAMPLE_COUNT; sampleIndex++) {
+    const shippedFirst = sampleIndex % 2 === 0
+    let shippedRawMs: number
+    let variantRawMs: number
+    if (shippedFirst) {
+      shippedRawMs = await measureBatchedMinOfN(REPEAT_COUNT, batchSize, runShipped)
+      variantRawMs = await measureBatchedMinOfN(REPEAT_COUNT, batchSize, runVariant)
+    } else {
+      variantRawMs = await measureBatchedMinOfN(REPEAT_COUNT, batchSize, runVariant)
+      shippedRawMs = await measureBatchedMinOfN(REPEAT_COUNT, batchSize, runShipped)
+    }
+    const shippedNormalizedMs = normalize(shippedRawMs, score)
+    const variantNormalizedMs = normalize(variantRawMs, score)
+    samples.push({
+      shippedNormalizedMs,
+      variantNormalizedMs,
+      ratio: variantNormalizedMs / shippedNormalizedMs,
+    })
+  }
+
+  if (!Number.isFinite(elisionSink) || elisionSink === 0) {
+    throw new Error(
+      `PERF-03 lever 1: elision guard sink is ${elisionSink}; a kernel result the JIT can prove ` +
+        'dead would manufacture an arbitrarily good ratio for the arm with less to elide',
+    )
+  }
+
+  const ratios = samples.map((s) => s.ratio).sort((a, b) => a - b)
+  const min = ratios[0]!
+  const max = ratios[ratios.length - 1]!
+  const mid = Math.floor(ratios.length / 2)
+  const median = ratios.length % 2 === 0 ? (ratios[mid - 1]! + ratios[mid]!) / 2 : ratios[mid]!
+
+  const armWallClockMs = performance.now() - armWallClockStart
+
+  const sampleText = samples
+    .map(
+      (s, i) =>
+        `sample${i}(shippedNormalizedMs=${s.shippedNormalizedMs.toFixed(4)} ` +
+        `variantNormalizedMs=${s.variantNormalizedMs.toFixed(4)} ratio=${s.ratio.toFixed(4)})`,
+    )
+    .join(' ')
+
+  await commands.recordInfoLine(
+    LEVER1_INFO_KEY,
+    `PERF-03-lever1-scalar-arrays (scalar-only per-bar output arrays, timed over the ` +
+      `zero-contribution branch, the failing PERF-03 headline row): batchSize=${batchSize} sampleCount=${SAMPLE_COUNT} ` +
+      `barCount=${barCount} seriesId=${seriesId} hardwareConcurrency=${navigator.hardwareConcurrency} ` +
+      `calibrationScore=${score.toFixed(4)} ${sampleText} minRatio=${min.toFixed(4)} ` +
+      `medianRatio=${median.toFixed(4)} maxRatio=${max.toFixed(4)} armWallClockMs=${armWallClockMs.toFixed(2)}`,
+  )
 })
