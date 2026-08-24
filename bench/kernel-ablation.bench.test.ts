@@ -54,7 +54,17 @@ import { runBacktest } from '../src/kernel/backtest.ts'
 import type { KernelOutputs, KernelParams, KernelResult, KernelSeries } from '../src/kernel/backtest.types.ts'
 import { fromDaysSinceEpoch, indexOfDate, toDaysSinceEpoch } from '../tools/bundle-compiler/src/calendar.ts'
 import { computeChunkMetricsWithKernel } from './chunk-metrics-kernel-ablation.ts'
-import { runBacktestNoGuards } from './backtest-ablation-variants.ts'
+import {
+  type AblationKernel,
+  runBacktestCombined,
+  runBacktestDayCountLut,
+  runBacktestDayCountReciprocal,
+  runBacktestDedupDrawdown,
+  runBacktestDrawdownSkip,
+  runBacktestNoGuards,
+  runBacktestPeelBarZero,
+} from './backtest-ablation-variants.ts'
+import { runBacktestScalarOnly } from './backtest-scalar-only.ts'
 import { resolveRunCalibration } from './canonical-calibration.ts'
 import { captureEnvironment } from './environment-block.ts'
 
@@ -146,6 +156,20 @@ let provenCaseCount = 0
 let fidelityRealMs = 0
 let fidelityCloneMs = 0
 
+/** The four cases 260824-46s and bench/kernel-scalar-arrays.bench.test.ts both use, built once in
+ * beforeAll (the ruin case needs a leverage sweep against the real series) and looked up by index
+ * from the test bodies below -- test() calls register at module-load time, before beforeAll has
+ * run, so the registration loops below iterate a static list of case NAMES, never this array
+ * itself. */
+interface EquivalenceCase {
+  name: string
+  params: KernelParams
+  flags: Uint8Array
+  assertNonVacuous: (shipped: KernelResult) => void
+}
+const CASE_NAMES = ['zero-contribution', 'contribution-schedule', 'ruin', 'leverage-below-1'] as const
+let equivalenceCases: EquivalenceCase[] = []
+
 beforeAll(async () => {
   bundle = await loadBundleFromFetch()
   entryDates = buildEarlyEntryDates(bundle)
@@ -165,6 +189,74 @@ beforeAll(async () => {
     expenseRatio: payload.expenseRatio,
     longGapMinDays: payload.longGapMinDays,
   }
+
+  const zeroFlags = new Uint8Array(barCount)
+  const contribFlags = new Uint8Array(barCount)
+  for (let i = 0; i < barCount; i += 21) {
+    contribFlags[i] = 1
+  }
+
+  // Leverage swept upward from 20, exactly as 260824-46s did, until the real series actually
+  // ruins over this history, rather than assumed.
+  let ruinLeverage = 20
+  let probe = runBacktest(
+    { ...basePayloadParams, leverage: ruinLeverage, contributionAmount: 0 },
+    { returns, shortRate, calendarDaysElapsed, contributionFlags: zeroFlags },
+    { outValue: new Float64Array(barCount), outRuined: new Uint8Array(barCount), outLongGap: new Uint8Array(barCount) },
+  )
+  while (!probe.ruined && ruinLeverage < 1000) {
+    ruinLeverage *= 2
+    probe = runBacktest(
+      { ...basePayloadParams, leverage: ruinLeverage, contributionAmount: 0 },
+      { returns, shortRate, calendarDaysElapsed, contributionFlags: zeroFlags },
+      { outValue: new Float64Array(barCount), outRuined: new Uint8Array(barCount), outLongGap: new Uint8Array(barCount) },
+    )
+  }
+  if (!probe.ruined) {
+    throw new Error(`beforeAll: leverage swept up to ${ruinLeverage} without the real series ruining`)
+  }
+
+  equivalenceCases = [
+    {
+      name: 'zero-contribution',
+      params: { ...basePayloadParams, contributionAmount: 0 },
+      flags: zeroFlags,
+      assertNonVacuous: (shipped) => {
+        expect(shipped.barCount, 'zero-contribution case must span the full committed history').toBeGreaterThan(20000)
+      },
+    },
+    {
+      name: 'contribution-schedule',
+      params: { ...basePayloadParams, contributionAmount: 100 },
+      flags: contribFlags,
+      assertNonVacuous: (shipped) => {
+        expect(shipped.totalContributed, 'contributions must actually have been applied').toBeGreaterThan(
+          basePayloadParams.initialInvestment,
+        )
+      },
+    },
+    {
+      name: 'ruin',
+      params: { ...basePayloadParams, leverage: ruinLeverage, contributionAmount: 0 },
+      flags: zeroFlags,
+      assertNonVacuous: (shipped) => {
+        expect(shipped.ruined, 'ruin case must actually ruin').toBe(true)
+        expect(shipped.ruinBarIndex, 'ruin case must record a valid ruin bar index').toBeGreaterThanOrEqual(0)
+        expect(
+          shipped.maxDrawdown,
+          'a ruin crossing must drive maxDrawdown to exactly 1 against a strictly positive prior peak',
+        ).toBe(1)
+      },
+    },
+    {
+      name: 'leverage-below-1',
+      params: { ...basePayloadParams, leverage: 0.5, contributionAmount: 0 },
+      flags: zeroFlags,
+      assertNonVacuous: (shipped) => {
+        expect(shipped.ruined, 'leverage-below-1 case must exercise the negative-financing non-ruin path').toBe(false)
+      },
+    },
+  ]
 })
 
 function makeSeries(contributionFlags: Uint8Array): KernelSeries {
@@ -177,10 +269,6 @@ function makeOutputs(): KernelOutputs {
     outRuined: new Uint8Array(barCount),
     outLongGap: new Uint8Array(barCount),
   }
-}
-
-function allZeroFlags(): Uint8Array {
-  return new Uint8Array(barCount)
 }
 
 /** Per-field Object.is comparison (Vitest's toBe), never toEqual, for the same reason
@@ -241,106 +329,176 @@ describe.skipIf(!ABLATION_ENABLED)('kernel ablation (VITE_PERF03_ABLATION=1)', (
     provenCaseCount++
   })
 
-  // --- Equivalence: arm 1 (runBacktestNoGuards), the four cases 260824-46s used -----------------
+  // --- Equivalence: arms 1, 2-lut, 3(drawdown skip), 4(peel bar zero), 5(dedup drawdown),
+  // 6(scalar-only), 8(combined) -- every candidate EXPECTED bit-preserving, over the same four
+  // cases 260824-46s used. Table-driven per this task's own instruction: the expected proven-case
+  // count comes from this table's length, not a hand-written literal, so adding an arm without
+  // proving it cannot pass the gate below. Arm 3 (day-count reciprocal) is NOT in this table --
+  // it is not expected bit-preserving and is measured separately, by deviation, below.
 
-  test('equivalence: arm 1 (runBacktestNoGuards), zero contribution, the failing PERF-03 headline branch', () => {
-    const p: KernelParams = { ...basePayloadParams, contributionAmount: 0 }
-    const series = makeSeries(allZeroFlags())
-    const shipped = runBacktest(p, series, makeOutputs())
-    const variant = runBacktestNoGuards(p, series, makeOutputs())
+  const bitPreservingArms: Array<{ armLabel: string; kernel: AblationKernel }> = [
+    { armLabel: '1(noGuards)', kernel: runBacktestNoGuards },
+    { armLabel: '2(dayCountLut)', kernel: runBacktestDayCountLut },
+    { armLabel: '3(drawdownSkip)', kernel: runBacktestDrawdownSkip },
+    { armLabel: '4(peelBarZero)', kernel: runBacktestPeelBarZero },
+    { armLabel: '5(dedupDrawdown)', kernel: runBacktestDedupDrawdown },
+    { armLabel: '6(scalarOnly)', kernel: runBacktestScalarOnly },
+    { armLabel: '8(combined)', kernel: runBacktestCombined },
+  ]
 
-    expect(shipped.barCount, 'zero-contribution case must span the full committed history').toBeGreaterThan(20000)
-    assertKernelResultBitIdentical('zero-contribution', shipped, variant)
-    provenCaseCount++
-  })
+  for (const arm of bitPreservingArms) {
+    for (let caseIndex = 0; caseIndex < CASE_NAMES.length; caseIndex++) {
+      const caseName = CASE_NAMES[caseIndex]
+      test(`equivalence: arm ${arm.armLabel}, ${caseName}`, () => {
+        const c = equivalenceCases[caseIndex]!
+        const series = makeSeries(c.flags)
+        const shipped = runBacktest(c.params, series, makeOutputs())
+        const variant = arm.kernel(c.params, series, makeOutputs())
 
-  test('equivalence: arm 1 (runBacktestNoGuards), contribution schedule (D-21)', () => {
-    const p: KernelParams = { ...basePayloadParams, contributionAmount: 100 }
-    const flags = allZeroFlags()
-    for (let i = 0; i < barCount; i += 21) {
-      flags[i] = 1
+        c.assertNonVacuous(shipped)
+        assertKernelResultBitIdentical(`${arm.armLabel}:${caseName}`, shipped, variant)
+        provenCaseCount++
+      })
     }
-    const series = makeSeries(flags)
-    const shipped = runBacktest(p, series, makeOutputs())
-    const variant = runBacktestNoGuards(p, series, makeOutputs())
+  }
 
-    expect(shipped.totalContributed, 'contributions must actually have been applied').toBeGreaterThan(p.initialInvestment)
-    assertKernelResultBitIdentical('contribution-schedule', shipped, variant)
-    provenCaseCount++
-  })
+  // --- Deviation: arm 2 variant (runBacktestDayCountReciprocal), NOT expected bit-preserving.
+  // finalValue, maxDrawdown, droppedContributionsTotal and totalContributed are recorded as max
+  // absolute and max relative deviation from the shipped result across the four cases; ruined,
+  // ruinBarIndex, longGapBarCount and barCount are asserted EXACTLY equal (a broken variant fails
+  // loudly), and relative deviation on finalValue is asserted below 1e-9 (a genuine rounding
+  // difference is recorded, never hidden).
 
-  test('equivalence: arm 1 (runBacktestNoGuards), a run that ruins (D-22/D-23)', () => {
-    const flags = allZeroFlags()
-    let leverage = 20
-    let probe = runBacktest({ ...basePayloadParams, leverage, contributionAmount: 0 }, makeSeries(flags), makeOutputs())
-    while (!probe.ruined && leverage < 1000) {
-      leverage *= 2
-      probe = runBacktest({ ...basePayloadParams, leverage, contributionAmount: 0 }, makeSeries(flags), makeOutputs())
-    }
-    if (!probe.ruined) {
-      throw new Error(`equivalence ruin case: leverage swept up to ${leverage} without the real series ruining`)
-    }
+  const RECIPROCAL_DEVIATION_FIELDS = ['finalValue', 'maxDrawdown', 'droppedContributionsTotal', 'totalContributed'] as const
+  const reciprocalMaxAbsDeviation: Record<(typeof RECIPROCAL_DEVIATION_FIELDS)[number], number> = {
+    finalValue: 0,
+    maxDrawdown: 0,
+    droppedContributionsTotal: 0,
+    totalContributed: 0,
+  }
+  const reciprocalMaxRelDeviation: Record<(typeof RECIPROCAL_DEVIATION_FIELDS)[number], number> = {
+    finalValue: 0,
+    maxDrawdown: 0,
+    droppedContributionsTotal: 0,
+    totalContributed: 0,
+  }
+  let reciprocalDeviationCaseCount = 0
 
-    const p: KernelParams = { ...basePayloadParams, leverage, contributionAmount: 0 }
-    const shipped = runBacktest(p, makeSeries(flags), makeOutputs())
-    const variant = runBacktestNoGuards(p, makeSeries(flags), makeOutputs())
+  for (let caseIndex = 0; caseIndex < CASE_NAMES.length; caseIndex++) {
+    const caseName = CASE_NAMES[caseIndex]
+    test(`deviation: arm 2 variant (runBacktestDayCountReciprocal, NOT bit-preserving), ${caseName}`, () => {
+      const c = equivalenceCases[caseIndex]!
+      const series = makeSeries(c.flags)
+      const shipped = runBacktest(c.params, series, makeOutputs())
+      const variant = runBacktestDayCountReciprocal(c.params, series, makeOutputs())
 
-    expect(shipped.ruined, 'ruin case must actually ruin').toBe(true)
-    expect(shipped.ruinBarIndex, 'ruin case must record a valid ruin bar index').toBeGreaterThanOrEqual(0)
-    expect(
-      shipped.maxDrawdown,
-      'a ruin crossing must drive maxDrawdown to exactly 1 against a strictly positive prior peak',
-    ).toBe(1)
-    assertKernelResultBitIdentical('ruin', shipped, variant)
-    provenCaseCount++
-  })
+      c.assertNonVacuous(shipped)
 
-  test('equivalence: arm 1 (runBacktestNoGuards), leverage below 1 (D-08 unclamped financing credit)', () => {
-    const p: KernelParams = { ...basePayloadParams, leverage: 0.5, contributionAmount: 0 }
-    const series = makeSeries(allZeroFlags())
-    const shipped = runBacktest(p, series, makeOutputs())
-    const variant = runBacktestNoGuards(p, series, makeOutputs())
+      expect(variant.ruined, `${caseName}: ruined must be exactly equal (a broken variant fails loudly)`).toBe(shipped.ruined)
+      expect(variant.ruinBarIndex, `${caseName}: ruinBarIndex must be exactly equal`).toBe(shipped.ruinBarIndex)
+      expect(variant.longGapBarCount, `${caseName}: longGapBarCount must be exactly equal`).toBe(shipped.longGapBarCount)
+      expect(variant.barCount, `${caseName}: barCount must be exactly equal`).toBe(shipped.barCount)
 
-    expect(shipped.ruined, 'leverage-below-1 case must exercise the negative-financing non-ruin path').toBe(false)
-    assertKernelResultBitIdentical('leverage-below-1', shipped, variant)
-    provenCaseCount++
-  })
+      for (const field of RECIPROCAL_DEVIATION_FIELDS) {
+        const shippedValue = shipped[field]
+        const variantValue = variant[field]
+        const absDeviation = Math.abs(shippedValue - variantValue)
+        const relDeviation = shippedValue !== 0 ? absDeviation / Math.abs(shippedValue) : absDeviation
+        if (absDeviation > reciprocalMaxAbsDeviation[field]) {
+          reciprocalMaxAbsDeviation[field] = absDeviation
+        }
+        if (relDeviation > reciprocalMaxRelDeviation[field]) {
+          reciprocalMaxRelDeviation[field] = relDeviation
+        }
+      }
 
-  // --- Timing: gated on the proven-case counter, arm 1 only in this task -------------------------
+      expect(
+        reciprocalMaxRelDeviation.finalValue,
+        `${caseName}: relative deviation on finalValue must stay below 1e-9`,
+      ).toBeLessThan(1e-9)
 
-  const EXPECTED_PROVEN_CASES = 5 // fidelity (1) + arm-1 equivalence cases (4)
+      reciprocalDeviationCaseCount++
+    })
+  }
 
-  /** Elision guard: both arms accumulate into this file-scoped sink so neither's kernel result
-   * the JIT can prove dead is eligible to be elided from either arm's measured cost. */
+  // --- Timing: gated on both counters above, SAMPLE_COUNT rounds over all nine arms at the
+  // 17-column span, arm order rotated by round index so no arm sits systematically early or late.
+
+  const EXPECTED_PROVEN_CASES = 1 + bitPreservingArms.length * CASE_NAMES.length // fidelity + every bit-preserving arm's four cases
+  const EXPECTED_RECIPROCAL_DEVIATION_CASES = CASE_NAMES.length
+  const SAMPLE_COUNT = 3
+
+  interface NineArm {
+    name: string
+    kernel: AblationKernel
+    bitPreserving: boolean
+  }
+  const nineArms: NineArm[] = [
+    { name: 'shipped', kernel: runBacktest, bitPreserving: true },
+    { name: 'noGuards', kernel: runBacktestNoGuards, bitPreserving: true },
+    { name: 'dayCountLut', kernel: runBacktestDayCountLut, bitPreserving: true },
+    { name: 'dayCountReciprocal', kernel: runBacktestDayCountReciprocal, bitPreserving: false },
+    { name: 'drawdownSkip', kernel: runBacktestDrawdownSkip, bitPreserving: true },
+    { name: 'peelBarZero', kernel: runBacktestPeelBarZero, bitPreserving: true },
+    { name: 'dedupDrawdown', kernel: runBacktestDedupDrawdown, bitPreserving: true },
+    { name: 'scalarOnly', kernel: runBacktestScalarOnly, bitPreserving: true },
+    { name: 'combined', kernel: runBacktestCombined, bitPreserving: true },
+  ]
+
+  function minMedianMax(values: number[]): { min: number; median: number; max: number } {
+    const sorted = [...values].sort((a, b) => a - b)
+    const min = sorted[0]!
+    const max = sorted[sorted.length - 1]!
+    const mid = Math.floor(sorted.length / 2)
+    const median = sorted.length % 2 === 0 ? (sorted[mid - 1]! + sorted[mid]!) / 2 : sorted[mid]!
+    return { min, median, max }
+  }
+
+  /** Elision guard: every arm accumulates into this file-scoped sink so no arm's kernel result
+   * the JIT can prove dead is eligible to be elided from that arm's measured cost. */
   let elisionSink = 0
 
-  test('PERF-03 kernel ablation: arm 1 vs shipped, one round at the 17-column span', async () => {
+  test('PERF-03 kernel ablation: all nine arms, three rotated rounds at the 17-column span', async () => {
     if (provenCaseCount !== EXPECTED_PROVEN_CASES) {
       throw new Error(
-        `PERF-03 kernel ablation timing test refuses to run: expected ${EXPECTED_PROVEN_CASES} proven cases ` +
-          `(fidelity + arm-1 equivalence), got ${provenCaseCount}. A faster wrong answer must never be ` +
-          'reported as an improvement.',
+        `PERF-03 kernel ablation timing test refuses to run: expected ${EXPECTED_PROVEN_CASES} proven ` +
+          `bit-preserving cases (fidelity + every bit-preserving arm's four cases), got ${provenCaseCount}. ` +
+          'A faster wrong answer must never be reported as an improvement.',
+      )
+    }
+    if (reciprocalDeviationCaseCount !== EXPECTED_RECIPROCAL_DEVIATION_CASES) {
+      throw new Error(
+        `PERF-03 kernel ablation timing test refuses to run: expected ${EXPECTED_RECIPROCAL_DEVIATION_CASES} ` +
+          `reciprocal deviation cases recorded, got ${reciprocalDeviationCaseCount}.`,
       )
     }
 
+    const armStartMs = performance.now()
     const score = await resolveRunCalibration()
     await commands.recordEnvironment(captureEnvironment(score))
 
-    // One warm-up round over both arms, discarded.
-    elisionSink += computeChunkMetricsWithKernel(bundle, request17, runBacktest).multiples[0] ?? 0
-    elisionSink += computeChunkMetricsWithKernel(bundle, request17, runBacktestNoGuards).multiples[0] ?? 0
+    // One full warm-up round over all nine arms, discarded.
+    for (const arm of nineArms) {
+      elisionSink += computeChunkMetricsWithKernel(bundle, request17, arm.kernel).multiples[0] ?? 0
+    }
 
-    // One measured round: single-call performance.now() deltas, no batching -- a span-17 call is
-    // roughly 113ms on this sandbox, comfortably clear of MIN_MEASUREMENT_MS.
-    const shippedStart = performance.now()
-    const shippedResult = computeChunkMetricsWithKernel(bundle, request17, runBacktest)
-    const shippedMs = performance.now() - shippedStart
-    elisionSink += shippedResult.multiples[0] ?? 0
-
-    const variantStart = performance.now()
-    const variantResult = computeChunkMetricsWithKernel(bundle, request17, runBacktestNoGuards)
-    const variantMs = performance.now() - variantStart
-    elisionSink += variantResult.multiples[0] ?? 0
+    // SAMPLE_COUNT measured rounds. Every arm runs exactly once per round; arm order rotates by
+    // round index. Each round's ratios are computed against that SAME round's own shipped-arm
+    // time, never against a different round's.
+    const roundRawMs: Array<Record<string, number>> = []
+    for (let round = 0; round < SAMPLE_COUNT; round++) {
+      const offset = round % nineArms.length
+      const order = [...nineArms.slice(offset), ...nineArms.slice(0, offset)]
+      const raw: Record<string, number> = {}
+      for (const arm of order) {
+        const start = performance.now()
+        const result = computeChunkMetricsWithKernel(bundle, request17, arm.kernel)
+        const elapsed = performance.now() - start
+        elisionSink += result.multiples[0] ?? 0
+        raw[arm.name] = elapsed
+      }
+      roundRawMs.push(raw)
+    }
 
     if (!Number.isFinite(elisionSink) || elisionSink === 0) {
       throw new Error(
@@ -349,15 +507,41 @@ describe.skipIf(!ABLATION_ENABLED)('kernel ablation (VITE_PERF03_ABLATION=1)', (
       )
     }
 
-    const ratio = variantMs / shippedMs
+    const ratiosByArm: Record<string, number[]> = {}
+    for (const arm of nineArms) {
+      ratiosByArm[arm.name] = []
+    }
+    for (const raw of roundRawMs) {
+      const shippedMs = raw.shipped!
+      for (const arm of nineArms) {
+        ratiosByArm[arm.name]!.push(raw[arm.name]! / shippedMs)
+      }
+    }
+
     const cellCount = REAL_CHUNK_COLS * SWEEP_ROWS
+    const perArmText = nineArms
+      .filter((a) => a.name !== 'shipped')
+      .map((a) => {
+        const stats = minMedianMax(ratiosByArm[a.name]!)
+        return (
+          `${a.name}(bitPreserving=${a.bitPreserving} minRatio=${stats.min.toFixed(4)} ` +
+          `medianRatio=${stats.median.toFixed(4)} maxRatio=${stats.max.toFixed(4)})`
+        )
+      })
+      .join(' ')
+
+    const armWallClockMs = performance.now() - armStartMs
 
     await commands.recordInfoLine(
       'PERF-03-kernel-ablation',
-      `PERF-03-kernel-ablation (Task 1, arm 1 only): hardwareConcurrency=${navigator.hardwareConcurrency} ` +
-        `calibrationScore=${score.toFixed(4)} barCount=${barCount} cellCount=${cellCount} ` +
+      `PERF-03-kernel-ablation (Task 2, all nine arms, ${SAMPLE_COUNT} rotated rounds at the 17-column span): ` +
+        `hardwareConcurrency=${navigator.hardwareConcurrency} calibrationScore=${score.toFixed(4)} ` +
+        `barCount=${barCount} cellCount=${cellCount} sampleCount=${SAMPLE_COUNT} ` +
         `fidelityRealMs=${fidelityRealMs.toFixed(4)} fidelityCloneMs=${fidelityCloneMs.toFixed(4)} ` +
-        `shippedMs=${shippedMs.toFixed(4)} noGuardsMs=${variantMs.toFixed(4)} noGuardsRatio=${ratio.toFixed(4)}`,
+        `${perArmText} ` +
+        `dayCountReciprocalMaxAbsDeviation=${JSON.stringify(reciprocalMaxAbsDeviation)} ` +
+        `dayCountReciprocalMaxRelDeviation=${JSON.stringify(reciprocalMaxRelDeviation)} ` +
+        `armWallClockMs=${armWallClockMs.toFixed(2)}`,
     )
   })
 })
