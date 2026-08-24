@@ -44,11 +44,13 @@ const CHUNKS_PER_WORKER = 4
  * stalling the sweep forever. */
 const DEFAULT_CHUNK_TIMEOUT_MS = 10_000
 
-/** `cores - 1`, floored at a minimum of 1 -- identical rule to `bench/sweep-pool.ts`'s
- * `workerCountForCores`, re-declared here (not imported from `bench/`) since production code
- * never imports from the `bench/` tree. */
+/** `cores`, floored at a minimum of 1. Adopted from `cores - 1` per the Phase 7.1 worker-count
+ * Key Decision (PROJECT.md): the 4-core D-17 baseline's own contention-arm evidence showed a
+ * real throughput gain at width 4 with no measurable interactivity cost against PERF-07a/07b.
+ * Identical rule to `bench/sweep-pool.ts`'s `workerCountForCores`, re-declared here (not
+ * imported from `bench/`) since production code never imports from the `bench/` tree. */
 export function workerCountForCores(cores: number): number {
-  return Math.max(1, cores - 1)
+  return Math.max(1, cores)
 }
 
 function resolveWorkerCount(): number {

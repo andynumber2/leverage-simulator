@@ -27,13 +27,16 @@ const CHUNKS_PER_WORKER = 4
 const DEFAULT_CHUNK_TIMEOUT_MS = 10_000
 
 /**
- * `cores - 1`, floored at a minimum of 1 (T-01-05: never spawn zero workers, and reserve one
- * core for the calling thread so the pool cannot saturate every core). The pure flooring rule,
- * extracted so both `resolveWorkerCount` (follows the host) and `BASELINE_WORKER_COUNT` (fixed
- * to the declared baseline) share one implementation rather than two copies that could drift.
+ * `cores`, floored at a minimum of 1 (T-01-05's zero-workers floor still applies; the
+ * one-core-reserved-for-the-caller reasoning it also carried is superseded by the Phase 7.1
+ * worker-count Key Decision in PROJECT.md, adopted from measured 4-core D-17 baseline
+ * contention-arm evidence showing a real throughput gain at width 4 with no measurable
+ * interactivity cost against PERF-07a/07b). The pure flooring rule, extracted so both
+ * `resolveWorkerCount` (follows the host) and `BASELINE_WORKER_COUNT` (fixed to the declared
+ * baseline) share one implementation rather than two copies that could drift.
  */
 export function workerCountForCores(cores: number): number {
-  return Math.max(1, cores - 1)
+  return Math.max(1, cores)
 }
 
 /**
