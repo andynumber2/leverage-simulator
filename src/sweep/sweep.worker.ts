@@ -35,6 +35,16 @@
  * or browser global context): the Node `unit` test project has no `self`, and `Comlink.expose`'s
  * default `ep = globalThis` would otherwise throw on `ep.addEventListener` at module import time,
  * making `computeChunkMetrics` unimportable from `tests/sweep/metrics-one-pass.test.ts`.
+ *
+ * quick-260824-52h Task 1: `chunkProfilingEnabled` is a module-scope flag, default false, set
+ * only through the exposed `setChunkProfiling` method -- reachable exclusively through the
+ * Comlink endpoint the production pool never calls, so it stays false in every production
+ * worker, and each `Worker` instance carries its own module state so no bench file can leak the
+ * flag into another. `runChunk` below branches once on this flag, at its very top: the disabled
+ * path is the original unmodified body, unreachable from any timer call, allocation or message
+ * post the profiling path adds. This is measured, not asserted -- see
+ * `bench/sweep-residual.bench.test.ts` for the runtime proof that a full-grid sweep with
+ * profiling never enabled emits exactly zero profile messages.
  */
 
 import * as Comlink from 'comlink'
@@ -250,11 +260,44 @@ export function computeChunkMetrics(bundle: LoadedBundle, request: SweepChunkReq
   return { multiples, drawdowns, annualized, flags }
 }
 
+/** quick-260824-52h Task 1: reserved key marking a raw profiling side-channel message. Comlink's
+ * `expose` callback switches on `data.type` and returns early for any unknown type (`default:
+ * return`), and its own main-side per-call listener returns early on any message whose `id` does
+ * not match its own call -- a raw message carrying only this key is therefore inert with respect
+ * to every Comlink RPC round trip, in both directions. Exported so a bench-side listener and this
+ * file agree on the exact key without redeclaring it. */
+export const SWEEP_PROFILE_MESSAGE_KEY = '__sweepProfile'
+
+export interface SweepChunkProfileMessage {
+  [SWEEP_PROFILE_MESSAGE_KEY]: true
+  generation: number
+  /** `request.columnIndices[0]`, or `-1` for a chunk whose column list is somehow empty. */
+  firstColumn: number
+  columnCount: number
+  cellCount: number
+  /** Wall clock spent inside the `computeChunkMetrics` call alone. */
+  computeMs: number
+  /** Wall clock spent writing the four typed-array views into the transferred buffer. */
+  wireMs: number
+  /** Wall clock for this profiled `runChunk` call's whole body, from just after the (already
+   * cached, after the first chunk) bundle await to just before the transferred return. */
+  totalMs: number
+}
+
+let chunkProfilingEnabled = false
+
 const sweepWorkerApi = {
   /**
    * Writes `computeChunkMetrics`'s `multiples`/`drawdowns`/`annualized`/`flags` into a
    * `ArrayBuffer` view per this file's own `chunkBufferByteLength` layout, and returns the same
    * buffer, transferred rather than cloned.
+   *
+   * quick-260824-52h Task 1: branches once, at the very top, on `chunkProfilingEnabled`. The
+   * `false` path below is the original, unmodified body -- no timer call, no allocation, no
+   * message post, only the one boolean load and branch this guard itself costs. The two bodies
+   * are intentionally duplicated rather than sharing helpers behind conditionals, so the disabled
+   * path's zero-added-cost guarantee is visible by inspection, not inferred from a branch buried
+   * inside a shared function.
    */
   async runChunk(request: SweepChunkRequest, buffer: ArrayBuffer): Promise<ArrayBuffer> {
     const bundle = await getBundle()
@@ -269,8 +312,31 @@ const sweepWorkerApi = {
       )
     }
 
-    const metrics = computeChunkMetrics(bundle, request)
+    if (!chunkProfilingEnabled) {
+      const metrics = computeChunkMetrics(bundle, request)
 
+      const multiplesView = new Float32Array(buffer, 0, cellCount)
+      const drawdownsView = new Float32Array(buffer, cellCount * 4, cellCount)
+      const annualizedView = new Float32Array(buffer, cellCount * 4 * 2, cellCount)
+      const flagsView = new Uint8Array(buffer, cellCount * 4 * 3, cellCount)
+      multiplesView.set(metrics.multiples)
+      drawdownsView.set(metrics.drawdowns)
+      annualizedView.set(metrics.annualized)
+      flagsView.set(metrics.flags)
+
+      return Comlink.transfer(buffer, [buffer])
+    }
+
+    // Profiling path: identical work to the disabled branch above, plus timing reads around
+    // computeChunkMetrics and around the four typed-array writes, then one raw side-channel
+    // message emitted BEFORE the transferred return, so message order is profile-then-response.
+    const runStart = performance.now()
+
+    const computeStart = performance.now()
+    const metrics = computeChunkMetrics(bundle, request)
+    const computeMs = performance.now() - computeStart
+
+    const wireStart = performance.now()
     const multiplesView = new Float32Array(buffer, 0, cellCount)
     const drawdownsView = new Float32Array(buffer, cellCount * 4, cellCount)
     const annualizedView = new Float32Array(buffer, cellCount * 4 * 2, cellCount)
@@ -279,8 +345,29 @@ const sweepWorkerApi = {
     drawdownsView.set(metrics.drawdowns)
     annualizedView.set(metrics.annualized)
     flagsView.set(metrics.flags)
+    const wireMs = performance.now() - wireStart
+
+    const totalMs = performance.now() - runStart
+    const profileMessage: SweepChunkProfileMessage = {
+      [SWEEP_PROFILE_MESSAGE_KEY]: true,
+      generation: request.generation,
+      firstColumn: request.columnIndices[0] ?? -1,
+      columnCount: colCount,
+      cellCount,
+      computeMs,
+      wireMs,
+      totalMs,
+    }
+    self.postMessage(profileMessage)
 
     return Comlink.transfer(buffer, [buffer])
+  },
+
+  /** quick-260824-52h Task 1: the ONLY way `chunkProfilingEnabled` is ever set. Reached
+   * exclusively through this Comlink endpoint, which the production pool (`src/sweep/
+   * sweep-pool.ts`) never calls -- the flag stays `false` in every production worker. */
+  setChunkProfiling(enabled: boolean): void {
+    chunkProfilingEnabled = enabled
   },
 }
 
