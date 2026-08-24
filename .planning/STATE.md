@@ -179,6 +179,54 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-08-22T21:31:10.226Z
-Stopped at: Phase 07 UI-SPEC approved
-Resume file: .planning/phases/07-sweep-engine-and-the-heatmap/07-UI-SPEC.md
+Last session: 2026-08-24
+Stopped at: Phase 07.1 executed and closed. Clean stopping point, nothing in flight.
+Resume file: .planning/phases/07.1-sweep-pool-tuning-inserted/07.1-PERF-03-BASELINE.md
+
+### Where things stand
+
+Branch `gsd/phase-07.1-sweep-pool-tuning` (off Phase 7's branch), pushed, working tree clean
+at `11df7c5`. Two PRs open, both deliberately:
+
+- **PR #7** (Phase 7, ready) left open on purpose as the accurate record of the failing baseline.
+- **PR #8** (Phase 7.1, draft) carries Phase 7 plus the tuning work. Opened to get CI runs, since
+  `.github/workflows/ci.yml` triggers on `pull_request` only. **Neither is merged.**
+
+**Merge bar, user decision 2026-08-23:** merge only when the PERF-03 headline row reads at or
+under 1000ms normalized, `source=production`, `hardwareConcurrency=4`, on TWO CONSECUTIVE runs.
+One pass is not enough. That bar is NOT met, which is why nothing merged.
+
+### The state of the number
+
+PERF-03 across five D-17 runs, all `verdict=fail`: 1120.86, 1208.38, 1115.92, 1191.34 (width 4),
+1411.05ms normalized against a 1000ms budget. Phase 7.1 closed with roadmap criteria 1, 3 and 6
+met and criteria 2, 4 and 5 escalated with named levers. All four escalations are in PROJECT.md's
+Key Decisions table.
+
+### What is spent and what is left
+
+Spent and measured worthless on the headline: worker width 4 (1191.34ms, inside the width-3
+spread, reverted; PERF-07b also crossed D-20's 70% trigger on that run). Spent earlier and
+counterproductive: WASM (roughly 1.20x slower, 01-04).
+
+Spent and genuinely useful, but not on the headline: the `solveIrr` convergence fix. It tested
+`|npv|` in dollars against `1e-9`, unreachable on thousand-dollar cash flows, so the loop burned
+105 iterations for a 36-iteration answer. That branch went 8961.84 to roughly 3900ms with every
+displayed figure provably unchanged to 3.20e-10. It remains roughly 3.9x over budget.
+
+Unspent levers for PERF-03, in the order the evidence favours:
+1. The kernel's write-only per-bar output arrays in `src/kernel/backtest.ts`. Reasoned, NOT
+   measured.
+2. D-03's coarser default grid. Deliberately held in reserve so the headline figure keeps
+   describing the fixed 200x50 default view.
+3. Newton-with-bisection-fallback for `solveIrr`, scoped to the sweep call site. Reopens D-08,
+   so it needs its own Key Decision.
+
+### The warning worth carrying forward
+
+Three projections in Phase 7.1 were tested against measurement and all three were wrong:
+`solveIrr` 3.14x became 1.83x, worker width 4's 25% became zero, and a four-run "roughly 4%
+spread" on the gated metric became 26% on the fifth sample. Every derived-not-measured number
+that got tested failed; every directly measured number held. Lever 1 above is reasoned, not
+measured. **Measure before planning against it.** The corrected variance finding is written up
+in `07.1-PERF-03-BASELINE.md` section 2 under an explicit CORRECTION block.
