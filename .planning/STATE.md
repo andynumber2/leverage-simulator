@@ -5,10 +5,10 @@ milestone_name: milestone
 current_phase: "07.1"
 current_phase_name: sweep-pool-tuning-inserted
 status: blocked
-stopped_at: Phase 07.1 executed and closed; PERF-03 still failing, merge bar not met
-last_updated: "2026-08-24T00:00:00.000Z"
+stopped_at: "Completed quick-260824-46s: measured PERF-03 lever 1, refuted"
+last_updated: "2026-08-24T03:20:48.204Z"
 last_activity: 2026-08-24
-last_activity_desc: Session resumed; Phase 07.1 confirmed closed, no work in flight
+last_activity_desc: Completed quick-260824-46s, measured and refuted PERF-03 lever 1
 progress:
   total_phases: 8
   completed_phases: 6
@@ -36,10 +36,14 @@ Status: BLOCKED on a user decision, not on work in flight
   The solveIrr branch sits at roughly 3900-3992ms, still ~3.9x over the same budget.
   Nothing was relaxed to get there; git diff against 7c21f0b proves no budget,
   calibration constant, cap, or grid dimension moved.
-Next: user decision between spending lever 1 (kernel write-only per-bar output arrays,
-  reasoned but NOT measured, so measure first), or accepting the escalation and starting
-  Phase 8. PRs #7 and #8 stay unmerged either way until the two-consecutive-pass bar is met.
-Last activity: 2026-08-24 — session resumed, Phase 07.1 confirmed closed
+Next: lever 1 (kernel write-only per-bar output arrays) is now MEASURED and REFUTED
+  (quick-260824-46s: five-sample A/B ratio min=0.9810 median=0.9841 max=0.9904, projects to
+  ~1105-1113ms normalized, still over the 1000ms budget and above the best failing run).
+  User decision remains between spending a different named lever (D-03's coarser default
+  grid, or Newton-with-bisection-fallback for solveIrr) or accepting the escalation and
+  starting Phase 8. PRs #7 and #8 stay unmerged either way until the two-consecutive-pass
+  bar is met.
+Last activity: 2026-08-24, quick-260824-46s: measured and refuted PERF-03 lever 1
 
 Progress: [████████░░] 75%  (6 of 8 roadmap phases complete)
 
@@ -85,6 +89,7 @@ Progress: [████████░░] 75%  (6 of 8 roadmap phases complete)
 | Phase 01 P05 | 15min | 2 tasks | 10 files |
 | Phase 01 P06 | 16min | 3 tasks | 23 files |
 | Phase 04 P01 | ~5h (paused for container restart) | 3 tasks | 27 files |
+| Phase quick-260824-46s P01 | 3min | 3 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -122,6 +127,7 @@ Recent decisions affecting current work:
 - [Phase ?]: 04-01: Y-axis gutter is measured from the labels uPlot is about to draw (axis.size hook), not left at uPlot's fixed 50px default, and measured on a private CSS-sized canvas context with no devicePixelRatio arithmetic -- closes the plan's backstop must_have with regressions
 - [Phase ?]: 04-01: Package legitimacy gate approved solid-js, vite-plugin-solid, vite despite SUS 'too-new' verdicts (publish-date heuristic); all three resolved to canonical github.com/solidjs and github.com/vitejs repos at millions of weekly downloads
 - [quick-260820-4qx]: uPlot's built-in `logAxisSplits` cannot advance below a roughly 1e-22 log y-scale minimum (the NDX/leverage-10/entry-1999-03-04 permalink hit this and killed the renderer), so the log y axis now supplies its own decade splits (`log-axis-splits.ts`) plus an identity `filter`, chosen over clamping the scale range or truncating the series so the full curve stays visible
+- [quick-260824-46s]: PERF-03 lever 1 (kernel write-only per-bar output arrays) measured, not spent: bit-identical equivalence proof plus five-sample A/B ratio (min=0.9810 median=0.9841 max=0.9904) refutes 07.1-PERF-03-BASELINE.md section 9's reasoning -- the arrays cost roughly 1-2% of kernel compute time, too small to close 1120.86-1411.05ms normalized to under the 1000ms budget alone. src/kernel/backtest.ts stays byte-identical; the variant lives only in bench/.
 
 ### Pending Todos
 
@@ -172,6 +178,7 @@ Recent decisions affecting current work:
 | 260816-qae | Record the D-20 escalation for PERF-03 against the real CI baseline and correct docs citing sandbox figures | 2026-08-16 | 8c5a250 |  | [260816-qae-record-the-d-20-escalation-for-perf-03-a](./quick/260816-qae-record-the-d-20-escalation-for-perf-03-a/) |
 | 260818-v2d | resolve WINDOWS #2 calibration runner-variance in bench/calibration.ts | 2026-08-18 | cc3d715 | Verified | [260818-v2d-resolve-windows-2-calibration-runner-var](./quick/260818-v2d-resolve-windows-2-calibration-runner-var/) |
 | 260820-4qx | Fix uPlot log-scale renderer hang in the equity curve chart; close phase 04's narrow-viewport UAT | 2026-08-20 | a55b611 |  | [260820-4qx-fix-uplot-log-scale-renderer-hang-in-equ](./quick/260820-4qx-fix-uplot-log-scale-renderer-hang-in-equ/) |
+| 260824-46s | Measure PERF-03 lever 1 (kernel write-only per-bar output arrays); refuted | 2026-08-24 | a9c1feb | Verified | [260824-46s-measure-lever-1-for-perf-03-what-the-ker](./quick/260824-46s-measure-lever-1-for-perf-03-what-the-ker/) |
 
 ## Deferred Items
 
@@ -183,9 +190,9 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-08-24 (resumed same day)
-Stopped at: Phase 07.1 executed and closed. Clean stopping point, nothing in flight.
-Resume file: .planning/phases/07.1-sweep-pool-tuning-inserted/07.1-PERF-03-BASELINE.md
+Last session: 2026-08-24T03:20:48.179Z
+Stopped at: Completed quick-260824-46s: measured PERF-03 lever 1, refuted
+Resume file: None
 
 ### Where things stand
 
@@ -219,8 +226,11 @@ Spent and genuinely useful, but not on the headline: the `solveIrr` convergence 
 displayed figure provably unchanged to 3.20e-10. It remains roughly 3.9x over budget.
 
 Unspent levers for PERF-03, in the order the evidence favours:
-1. The kernel's write-only per-bar output arrays in `src/kernel/backtest.ts`. Reasoned, NOT
-   measured.
+1. The kernel's write-only per-bar output arrays in `src/kernel/backtest.ts`. MEASURED and
+   REFUTED (quick-260824-46s): five-sample A/B ratio min=0.9810 median=0.9841 max=0.9904.
+   Projects to roughly 1105-1113ms normalized against the D-17 attribution, still over the
+   1000ms budget and above the best of the five failing runs. Not spent; `backtest.ts` stays
+   byte-identical. See `260824-46s-FINDINGS.md`.
 2. D-03's coarser default grid. Deliberately held in reserve so the headline figure keeps
    describing the fixed 200x50 default view.
 3. Newton-with-bisection-fallback for `solveIrr`, scoped to the sweep call site. Reopens D-08,
