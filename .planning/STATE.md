@@ -5,10 +5,10 @@ milestone_name: milestone
 current_phase: "07.1"
 current_phase_name: sweep-pool-tuning-inserted
 status: blocked
-stopped_at: "Completed quick-260824-52h: PERF-03 residual isolated; budget looks structurally unreachable"
+stopped_at: "Completed quick-260824-r5d: PERF-03 measured unreachable by every lever tested; awaiting user decision on the merge bar"
 last_updated: "2026-08-24T03:20:48.204Z"
 last_activity: 2026-08-24
-last_activity_desc: Completed quick-260824-52h, isolated the PERF-03 residual as an extrapolation artifact
+last_activity_desc: Completed quick-260824-r5d, kernel compute measured not reducible; PERF-03 lever list exhausted
 progress:
   total_phases: 8
   completed_phases: 6
@@ -36,24 +36,31 @@ Status: BLOCKED on a user decision, not on work in flight
   The solveIrr branch sits at roughly 3900-3992ms, still ~3.9x over the same budget.
   Nothing was relaxed to get there; git diff against 7c21f0b proves no budget,
   calibration constant, cap, or grid dimension moved.
-Next: USER DECISION on the merge bar, now materially better informed. Two measurements
-  landed 2026-08-24 and both point the same way:
-  - quick-260824-46s: lever 1 (kernel write-only per-bar output arrays) MEASURED and REFUTED.
-    Five-sample A/B ratio min=0.9810 median=0.9841 max=0.9904. Buys 1-2% of kernel compute.
-  - quick-260824-52h: the 273.98ms residual ISOLATED at the real 10,000-cell grid. It is not
-    a poolable-away overhead. Buffer allocation, merge and wire time total 0.14ms across the
-    whole grid; worker-drain imbalance is 7.50ms; concurrencyFactor is 1.05. The residual is
-    substantially an artifact of PROFILE.md's own narrow-arm extrapolation (spanRatio=0.51:
-    per-cell cost at the real 17-column chunk span is roughly HALF the cost at the 2-column
-    span the source figure was measured at). Correcting that error makes the residual LARGER
-    (projected 691.16ms, 58.6%), not smaller.
-  Conclusion recorded in 260824-52h-FINDINGS.md section 5, in plain words: the 1000ms budget
-  looks structurally unreachable by any lever this project has identified or tested. The only
-  place remaining headroom could come from is real per-cell kernel compute at the 17-column
-  chunk shape, and nothing has measured whether that is reducible.
+Next: USER DECISION on the merge bar. The lever list is now EXHAUSTED. Three measurement
+  tasks ran 2026-08-24 and all three refuted their lever:
+  - quick-260824-46s: the kernel's write-only per-bar output arrays. Ratio 0.9810-0.9904,
+    roughly 1-2% of kernel compute. REFUTED.
+  - quick-260824-52h: the 273.98ms residual. Not a poolable-away overhead at all. Allocation,
+    merge and wire total 0.14ms across the whole grid; drain imbalance 7.50ms;
+    concurrencyFactor 1.05. Real per-chunk computeMs over workerCount explains 98.3% of wall
+    clock. spanRatio=0.51 proved the residual was substantially an artifact of PROFILE.md's own
+    2-column-span extrapolation; correcting it GROWS the residual to a projected 691.16ms.
+    REFUTED, and no pool lever remains.
+  - quick-260824-r5d: per-cell kernel compute at the real 17-column chunk span. Nine arms, six
+    bit-preserving candidates stacked. Combined ratio min=0.9740 median=1.0036 max=1.1012.
+    Six of eight arms measured SLOWER than the shipped kernel at the median. REFUTED.
+  The precomputed decision rule (rCombined <= 0.7833 clears the robust 21.3% threshold,
+  <= 0.8907 clears the weaker 10.8% one) is missed at EVERY measured point including the single
+  best round. The 1000ms PERF-03 budget is measured unreachable on the D-17 4-core host by pool
+  tuning, worker count, per-bar output arrays, and per-cell kernel compute itself.
+  The two remaining named levers cannot change this: D-03's coarser grid redefines what the
+  number measures rather than closing it, and Newton-with-bisection for solveIrr cannot touch
+  the gated zero-contribution branch, which has no cash flows.
+  The decision is therefore between releasing the merge bar under an explicit PERF-01a Key
+  Decision, or leaving Phase 8 and main blocked behind a budget nothing tested can reach.
   PRs #7 and #8 stay unmerged until the two-consecutive-pass bar is met or the bar is
   explicitly released by a Key Decision under PERF-01a.
-Last activity: 2026-08-24, quick-260824-52h: isolated the PERF-03 residual
+Last activity: 2026-08-24, quick-260824-r5d: kernel compute measured not reducible
 
 Progress: [████████░░] 75%  (6 of 8 roadmap phases complete)
 
@@ -139,6 +146,7 @@ Recent decisions affecting current work:
 - [quick-260820-4qx]: uPlot's built-in `logAxisSplits` cannot advance below a roughly 1e-22 log y-scale minimum (the NDX/leverage-10/entry-1999-03-04 permalink hit this and killed the renderer), so the log y axis now supplies its own decade splits (`log-axis-splits.ts`) plus an identity `filter`, chosen over clamping the scale range or truncating the series so the full curve stays visible
 - [quick-260824-46s]: PERF-03 lever 1 (kernel write-only per-bar output arrays) measured, not spent: bit-identical equivalence proof plus five-sample A/B ratio (min=0.9810 median=0.9841 max=0.9904) refutes 07.1-PERF-03-BASELINE.md section 9's reasoning -- the arrays cost roughly 1-2% of kernel compute time, too small to close 1120.86-1411.05ms normalized to under the 1000ms budget alone. src/kernel/backtest.ts stays byte-identical; the variant lives only in bench/.
 - [quick-260824-52h]: The 273.98ms PERF-03 residual is not a separate poolable overhead. Instrumenting one real 10,000-cell sweep at the production pool boundary measured buffer allocation at 0.03ms, mergeChunkResult at 0.01ms and wire-write at 0.10ms across the WHOLE grid, worker-drain imbalance at 7.50ms (1.6%), and concurrencyFactor at 1.05. Real per-chunk computeMs summed and divided by workerCount explains 98.3% of wall clock with no extrapolation. spanRatio=0.51 confirms 07.1-PERF-03-PROFILE.md's own unverified candidate (b): its perCellKernelUs=255.42 was measured at a 2-column chunk span while the grid actually runs 17-column chunks, so idealParallelFullGridMs=851.39 is roughly double the real cost. Correcting it GROWS the residual to a projected 691.16ms (58.6%), it does not shrink it. src/sweep/sweep-pool.ts needed no edit: SweepPoolOptions.workerFactory is an existing production seam. Only src/sweep/sweep.worker.ts gained an inert profiling flag, proven inert at runtime (zero profile messages on a full sweep with it off).
+- [quick-260824-r5d]: Per-cell kernel compute is NOT reducible enough to close PERF-03. Nine ablation arms measured at the real 17-column chunk span (not a narrow span, per 52h's spanRatio lesson), each proven bit-identical on all eight KernelResult fields across four canonical cases before any clock started (28 proven cases, runtime-gated). Combined bit-preserving arm: min=0.9740 median=1.0036 max=1.1012, missing both the 0.7833 and 0.8907 decision thresholds at every point. Six of eight arms measured SLOWER than the shipped kernel at the median (dedupDrawdown worst at 1.1605), so the hand micro-optimizations regress what V8 already does well. The non-bit-preserving reciprocal-multiply arm measured EXACTLY zero deviation on the real series across all four cases despite being provably non-bit-identical for isolated day-count values (the perturbation sits orders of magnitude below the rounding granularity of the `value -=` subtraction it feeds), and it was also slower (median 1.1040), so there is no case for it on either correctness or speed. src/kernel/backtest.ts stays byte-identical; all variants live in bench/.
 
 ### Pending Todos
 
@@ -191,6 +199,7 @@ Recent decisions affecting current work:
 | 260820-4qx | Fix uPlot log-scale renderer hang in the equity curve chart; close phase 04's narrow-viewport UAT | 2026-08-20 | a55b611 |  | [260820-4qx-fix-uplot-log-scale-renderer-hang-in-equ](./quick/260820-4qx-fix-uplot-log-scale-renderer-hang-in-equ/) |
 | 260824-46s | Measure PERF-03 lever 1 (kernel write-only per-bar output arrays); refuted | 2026-08-24 | a9c1feb | Verified | [260824-46s-measure-lever-1-for-perf-03-what-the-ker](./quick/260824-46s-measure-lever-1-for-perf-03-what-the-ker/) |
 | 260824-52h | Isolate the 273.98ms PERF-03 residual; found it substantially an extrapolation artifact, no pool lever left | 2026-08-24 | 718d7e0 | Verified | [260824-52h-isolate-the-273-98ms-unexplained-residua](./quick/260824-52h-isolate-the-273-98ms-unexplained-residua/) |
+| 260824-r5d | Measure whether per-cell kernel compute is reducible at the 17-column chunk shape; refuted, lever list exhausted | 2026-08-24 | de11744 | Verified | [260824-r5d-measure-whether-per-cell-kernel-compute-](./quick/260824-r5d-measure-whether-per-cell-kernel-compute-/) |
 
 ## Deferred Items
 
@@ -253,9 +262,14 @@ Unspent levers for PERF-03, after two measurement tasks on 2026-08-24:
    branch has no cash flows and never calls `solveIrr`. Worth doing on its own merits, since
    `npvEvaluationsPerSolve` measured 105.01 against a Newton expectation near 10, and that
    branch makes contribution-schedule users wait roughly 4 seconds.
-5. Real per-cell kernel compute at the 17-column chunk shape the grid actually runs. This is
-   the ONLY place 260824-52h's measurement leaves any remaining headroom. Nobody has measured
-   whether it is reducible. Measure before planning against it.
+5. Real per-cell kernel compute at the 17-column chunk shape. MEASURED and REFUTED
+   (quick-260824-r5d): nine arms, combined bit-preserving ratio min=0.9740 median=1.0036
+   max=1.1012, clearing neither the 21.3% nor the 10.8% threshold at any measured point. Six of
+   eight arms measured slower than the shipped kernel. This was the last unmeasured lever.
+
+**The lever list is exhausted.** Levers 1, 2 and 5 are measured and refuted. Lever 3 redefines
+the measurement rather than closing it. Lever 4 cannot reach the gated branch. Nothing untested
+remains that could plausibly close a 10.8% to 21.3% gap.
 
 ### The calibration-score variance finding, 2026-08-24
 
