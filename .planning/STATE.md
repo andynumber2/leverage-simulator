@@ -8,8 +8,8 @@ stopped_at: Phase 8 context gathered
 last_updated: "2026-08-25T19:29:50.907Z"
 last_activity: 2026-08-25, PERF-03 bar released, PR 8 merged to main (e23d5d0), PR 7 auto-resolved
 progress:
-  total_phases: 9
-  completed_phases: 8
+  total_phases: 8
+  completed_phases: 6
   total_plans: 61
   completed_plans: 61
 current_phase_name: sweep-pool-tuning-inserted
