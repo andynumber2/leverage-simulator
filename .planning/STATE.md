@@ -8,7 +8,7 @@ status: ready
 stopped_at: "PERF-03 merge bar released by Key Decision; Phase 7/7.1 shipped; Phase 8 unblocked"
 last_updated: "2026-08-24T03:20:48.204Z"
 last_activity: 2026-08-24
-last_activity_desc: PERF-03 merge bar released under PERF-01a; PR 8 merged, PR 7 closed
+last_activity_desc: PERF-03 merge bar released under PERF-01a; PR 8 merged to main, PR 7 auto-merged as contained
 progress:
   total_phases: 8
   completed_phases: 6
@@ -40,7 +40,7 @@ Status: READY for Phase 8
   FAILED and is not claimed met. Only the two-consecutive-pass MERGE BAR was released, so the
   milestone stops blocking behind a budget no available lever can reach.
 Next: Phase 8 (export and the canonical arguments). Run /gsd-discuss-phase 8 to begin.
-Last activity: 2026-08-25, PERF-03 bar released, PR 8 merged, PR 7 closed
+Last activity: 2026-08-25, PERF-03 bar released, PR 8 merged to main (e23d5d0), PR 7 auto-resolved
 
 Progress: [████████░░] 75%  (6 of 8 roadmap phases complete)
 
@@ -197,16 +197,15 @@ Resume file: None
 
 ### Where things stand
 
-Branch `gsd/phase-07.1-sweep-pool-tuning` (off Phase 7's branch), pushed, working tree clean
-at `11df7c5`. Two PRs open, both deliberately:
+Both PRs are resolved as of 2026-08-25. PR #8 merged to `main` at `e23d5d0`
+(merge commit, matching the repo's existing merge style). PR #7 was NOT closed manually: GitHub
+marked it MERGED automatically, because its branch was fully contained in #8's (zero commits in
+#7 that #8 lacked, 76 versus 132 against main), so merging #8 put every one of its commits on
+`main`.
 
-- **PR #7** (Phase 7, ready) left open on purpose as the accurate record of the failing baseline.
-- **PR #8** (Phase 7.1, draft) carries Phase 7 plus the tuning work. Opened to get CI runs, since
-  `.github/workflows/ci.yml` triggers on `pull_request` only. **Neither is merged.**
-
-**Merge bar, user decision 2026-08-23:** merge only when the PERF-03 headline row reads at or
-under 1000ms normalized, `source=production`, `hardwareConcurrency=4`, on TWO CONSECUTIVE runs.
-One pass is not enough. That bar is NOT met, which is why nothing merged.
+`main` now carries Phases 1 through 7.1 and the three PERF-03 measurement tasks. CI runs on
+`pull_request` only, so `main` itself does not run the bench suite; the PERF-03 assertion is
+still red on any PR that runs it, and that is the accurate state, not a regression to chase.
 
 ### The state of the number
 
