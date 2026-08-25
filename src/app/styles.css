@@ -260,6 +260,33 @@ body {
   padding: var(--space-xs);
 }
 
+/* 07-06-PLAN.md Task 2/3, 07-UI-SPEC.md Color table: SweepModeToggle and MetricToggle mirror
+   .holding-mode-choice/.holding-mode-option's shape exactly. Each is one of this phase's three
+   new accent uses -- the active segment's label goes accent, following
+   .log-scale-toggle__button--active's own active-state convention rather than a third one. E2
+   overflow/long-text (07-UI-SPEC.md backstop rows): flex-wrap lets the three-segment
+   MetricToggle compress or wrap at the narrowest supported viewport instead of overflowing its
+   column. */
+.sweep-mode-choice,
+.metric-toggle-choice {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+  font-size: var(--font-size-body);
+}
+
+.sweep-mode-option,
+.metric-toggle-option {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.sweep-mode-option--active,
+.metric-toggle-option--active {
+  color: var(--color-accent);
+}
+
 /* CRED-05/D-22 (05-08-PLAN.md Task 3): the initial-investment control, reusing the contribution
    control's classes where the shape matches rather than duplicating rules. */
 .initial-investment-control {

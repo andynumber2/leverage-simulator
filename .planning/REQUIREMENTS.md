@@ -276,7 +276,7 @@ measured in CI, not an aspiration.
 | PERF-01 | Phase 1 | Complete |
 | PERF-01a | Phase 1 | Complete |
 | PERF-02 | Phase 3 | Complete |
-| PERF-03 | Phase 7 | Pending |
+| PERF-03 | Phase 7, re-measured and escalated in Phase 7.1, lever list exhausted 2026-08-25 | Escalated, NOT MET, and no longer blocking. Five levers measured and refuted (WASM, worker width 4, per-bar output arrays, pool overhead, per-cell kernel compute). Budget stays 1000ms. See PROJECT.md's "PERF-03 merge bar released" Key Decision |
 | PERF-04 | Phase 7 | Pending |
 | PERF-05 | Phase 7 | Pending |
 | PERF-06 | Phase 7 | Pending |

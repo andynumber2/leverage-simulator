@@ -6,6 +6,11 @@
  * function proof), and four committed golden URLs run end to end against the real bundle, each
  * asserting IRR, CAGR, maximum drawdown and final value within a named tolerance (D-16's second
  * half -- the half a round-trip property alone cannot catch, since it never touches the kernel).
+ *
+ * 07-06-PLAN.md Task 1: extends the round-trip arbitrary and the negative-case battery to cover
+ * `mode`/`metric`, and adds the backward-compatibility proof that a query string carrying neither
+ * key (every golden fixture below, and every link generated before this plan shipped) still
+ * decodes to `'ok'`, landing on Single run / the multiple-of-contributed metric (D-18).
  */
 
 import fc from 'fast-check'
@@ -83,10 +88,12 @@ const permalinkParamsArb: fc.Arbitrary<PermalinkParams> = fc
     tier: fc.constantFrom('strict', 'extended'),
     scale: fc.constantFrom('log', 'linear'),
     bundleVersion: bundleVersionArb,
+    mode: fc.constantFrom('single', 'sweep'),
+    metric: fc.constantFrom('multiple', 'drawdown', 'annualized'),
   })
   .map(({ holdAndBars, ...rest }) => ({ ...rest, ...holdAndBars }) as PermalinkParams)
 
-/** A concrete `PermalinkParams` in "fixed" mode -- exercises all fifteen keys, including the
+/** A concrete `PermalinkParams` in "fixed" mode -- exercises all seventeen keys, including the
  * conditional `holdingPeriodBars`. Reused by several structural tests below. */
 function fixedModeExample(overrides: Partial<PermalinkParams> = {}): PermalinkParams {
   return {
@@ -105,6 +112,8 @@ function fixedModeExample(overrides: Partial<PermalinkParams> = {}): PermalinkPa
     tier: 'strict',
     scale: 'log',
     bundleVersion: '45a9f1ae6444',
+    mode: 'single',
+    metric: 'multiple',
     ...overrides,
   }
 }
@@ -207,20 +216,104 @@ describe('encodeParams: determinism and key order', () => {
     expect(first).toBe(second)
   })
 
-  test('emits all fifteen keys, in PERMALINK_KEYS order, in "fixed" hold mode', () => {
+  test('emits all seventeen keys, in PERMALINK_KEYS order, in "fixed" hold mode', () => {
     const encoded = encodeParams(fixedModeExample())
     expect(Array.from(encoded.keys())).toEqual([...PERMALINK_KEYS])
   })
 
-  test('omits holdingPeriodBars, emitting the other fourteen keys in PERMALINK_KEYS order, in "end-of-data" hold mode', () => {
+  test('omits holdingPeriodBars, emitting the other sixteen keys in PERMALINK_KEYS order, in "end-of-data" hold mode', () => {
     const encoded = encodeParams(endOfDataExample())
     const expectedKeys = PERMALINK_KEYS.filter((key) => key !== 'holdingPeriodBars')
     expect(Array.from(encoded.keys())).toEqual([...expectedKeys])
     expect(encoded.has('holdingPeriodBars')).toBe(false)
   })
 
-  test('PERMALINK_KEYS carries exactly the fifteen keys the checkpoint decided', () => {
-    expect(PERMALINK_KEYS.length).toBe(15)
+  test('PERMALINK_KEYS carries exactly the seventeen keys the checkpoint decided plus 07-06\'s mode/metric extension', () => {
+    expect(PERMALINK_KEYS.length).toBe(17)
+    expect(PERMALINK_KEYS).toContain('mode')
+    expect(PERMALINK_KEYS).toContain('metric')
+  })
+})
+
+describe('permalink: mode/metric (07-06-PLAN.md Task 1, D-04)', () => {
+  test('round-trips every mode-by-metric combination (2 modes x 3 metrics = 6 cases)', () => {
+    const modes = ['single', 'sweep'] as const
+    const metrics = ['multiple', 'drawdown', 'annualized'] as const
+    for (const mode of modes) {
+      for (const metric of metrics) {
+        const params = fixedModeExample({ mode, metric })
+        const decoded = decodeParams(encodeParams(params))
+        expect(decoded.status).toBe('ok')
+        if (decoded.status === 'ok') {
+          expect(decoded.params.mode).toBe(mode)
+          expect(decoded.params.metric).toBe(metric)
+        }
+      }
+    }
+  })
+
+  test('a URL with no "mode" key decodes to Single run (D-18) -- every link shared before this plan keeps working', () => {
+    const qs = encodeParams(fixedModeExample({ mode: 'sweep' }))
+    qs.delete('mode')
+    const decoded = decodeParams(qs)
+    expect(decoded.status).toBe('ok')
+    if (decoded.status === 'ok') expect(decoded.params.mode).toBe('single')
+  })
+
+  test('a URL with no "metric" key decodes to the multiple-of-contributed default', () => {
+    const qs = encodeParams(fixedModeExample({ metric: 'drawdown' }))
+    qs.delete('metric')
+    const decoded = decodeParams(qs)
+    expect(decoded.status).toBe('ok')
+    if (decoded.status === 'ok') expect(decoded.params.metric).toBe('multiple')
+  })
+
+  test('a URL carrying neither "mode" nor "metric" (pre-07-06 shape) still decodes to "ok"', () => {
+    const qs = encodeParams(fixedModeExample())
+    qs.delete('mode')
+    qs.delete('metric')
+    const decoded = decodeParams(qs)
+    expect(decoded.status).toBe('ok')
+    if (decoded.status === 'ok') {
+      expect(decoded.params.mode).toBe('single')
+      expect(decoded.params.metric).toBe('multiple')
+    }
+  })
+
+  test('an unrecognized mode value is rejected loudly, naming the offending value', () => {
+    const qs = encodeParams(fixedModeExample())
+    qs.set('mode', 'both')
+    const result = decodeParams(qs)
+    expect(result.status).toBe('error')
+    if (result.status === 'error') {
+      expect(result.error).toContain('mode')
+      expect(result.error).toContain('both')
+    }
+  })
+
+  test('an unrecognized metric value is rejected loudly, naming the offending value', () => {
+    const qs = encodeParams(fixedModeExample())
+    qs.set('metric', 'sharpe')
+    const result = decodeParams(qs)
+    expect(result.status).toBe('error')
+    if (result.status === 'error') {
+      expect(result.error).toContain('metric')
+      expect(result.error).toContain('sharpe')
+    }
+  })
+
+  test('a duplicated "mode" key decodes to a named error identifying the duplicated key', () => {
+    const qs = encodeParams(fixedModeExample())
+    qs.append('mode', 'sweep')
+    const result = decodeParams(qs)
+    expect(result.status).toBe('error')
+    if (result.status === 'error') expect(result.error).toContain('mode')
+  })
+
+  test('no key is added for the zoom or pan viewport (D-35)', () => {
+    expect(PERMALINK_KEYS).not.toContain('zoom')
+    expect(PERMALINK_KEYS).not.toContain('pan')
+    expect(PERMALINK_KEYS).not.toContain('viewport')
   })
 })
 

@@ -76,7 +76,7 @@
 import { createSignal } from 'solid-js'
 import { createStore } from 'solid-js/store'
 
-import { fromDaysSinceEpoch, toDaysSinceEpoch } from '../../tools/bundle-compiler/src/calendar.ts'
+import { fromDaysSinceEpoch, indexOfDate, toDaysSinceEpoch } from '../../tools/bundle-compiler/src/calendar.ts'
 import type { LoadedBundle } from '../data/bundle-source.ts'
 import { loadBundleFromFetch } from '../data/load-bundle-browser.ts'
 import { buildKernelInputs, type BacktestRequest, type KernelInputs } from '../data/kernel-inputs.ts'
@@ -86,9 +86,14 @@ import { solveCagr } from '../metrics/cagr.ts'
 import { buildCashFlows, solveIrr } from '../metrics/irr.ts'
 import { computeAttribution, type AttributionResult } from '../validation/attribution.ts'
 import { FINANCING_SPREAD_DEFAULT, GENERIC_3X_EXPENSE_RATIO } from '../validation/cost-parameters.ts'
+import { DOMAIN_LOG_MAX, DOMAIN_LOG_MIN } from '../colorscale/value-to-color.ts'
+import { CELL_FLAG_INCOMPLETE, CELL_FLAG_RUINED } from '../data/sweep-fixture-format.ts'
 import { BUNDLE_VERSION } from '../data-bundle.generated.ts'
-import type { Tier } from './bounds.ts'
+import { resolveEntryDateBounds, type Tier } from './bounds.ts'
 import { decodeParams, encodeParams, type PermalinkParams } from './permalink.ts'
+import { createSweepGrid, leverageForRow, SWEEP_COLS, SWEEP_ROWS, type SweepGrid, type SweepGridMeta } from '../sweep/sweep-grid.ts'
+import { createSweepPool, type SweepPool, type SweepRunRequest } from '../sweep/sweep-pool.ts'
+import type { Metric } from '../heatmap/field-sampler.ts'
 
 export type LoadStatus = 'loading' | 'ready' | 'failed'
 export type ScaleMode = 'log' | 'linear'
@@ -170,6 +175,410 @@ export function currentAttribution(): AttributionResult | null {
   return attribution()
 }
 
+/** 07-01-PLAN.md Task 2, D-18: the result column's two mounts -- `'single'` (Phase 4/5's existing
+ * chart/metrics stack) or `'sweep'` (the heatmap, `HeatmapPanel`). A fresh visit seeds `'single'`
+ * (D-18); `resetAppState` restores that seed. */
+export type ResultMode = 'single' | 'sweep'
+
+const [resultModeSignal, setResultModeSignal] = createSignal<ResultMode>('single')
+
+export function resultMode(): ResultMode {
+  return resultModeSignal()
+}
+
+/** Switches the result column's mount. Entering `'sweep'` mode schedules a sweep against the
+ * current parameters (`scheduleSweep`) so the heatmap has something to paint the moment it
+ * mounts; leaving it does not clear `sweepGrid()` -- the last resolved grid stays available so a
+ * user flipping back and forth does not repay the sweep cost every toggle (a later plan may add
+ * cache invalidation on a parameter change; this task's own scope is the single click-to-paint
+ * path).
+ *
+ * 07-06-PLAN.md Task 1 (D-04): also marks the permalink dirty through the SAME trailing-edge sync
+ * every other field uses (`schedulePermalinkSync`/`writePermalinkUrl`), so a mode switch flows
+ * into the address bar exactly like an ordinary parameter edit -- no second write path, no direct
+ * `history.replaceState` call here. A no-op before the first run has ever completed
+ * (`kernelInputs()` still `null`): there is nothing yet to re-serialize, and the next completed
+ * run's own `storeSuccessfulRun` call schedules the sync with the current mode regardless. */
+export function setResultMode(mode: ResultMode): void {
+  setResultModeSignal(mode)
+  if (mode === 'sweep') scheduleSweep()
+  const inputs = kernelInputs()
+  if (inputs !== null) schedulePermalinkSync(inputs)
+}
+
+/** The most recently resolved live sweep grid, or `null` before any sweep has ever completed.
+ * `{ equals: false }`: `scheduleSweep` mutates the SAME `SweepGrid` object's typed arrays across
+ * its own run (`sweep-pool.ts`'s `runSweep` writes in place) and calls this signal's setter with
+ * that same reference once the sweep resolves -- Solid's default `Object.is` equality would treat
+ * a same-reference write as a no-op and never notify `HeatmapPanel`'s effect, which is exactly
+ * the reactivity a 10,000-cell typed-array grid needs to avoid paying a clone cost on every
+ * completed sweep.
+ *
+ * 07-05-PLAN.md Task 2 (D-12/D-14): this signal is written TWICE per sweep -- once with the
+ * coarse pass's complete low-resolution grid (paints within PERF-04's 100ms), then once more with
+ * the full pass's complete grid, which REPLACES the coarse one whole. `HeatmapPanel.tsx` needs no
+ * change for this: it already repaints on every write to this signal, coarse or full alike, and
+ * `paint-contour.ts`'s `paintSweepField` is grid-size agnostic (F-07), so a 51x14 coarse grid and
+ * a 200x50 full grid both paint through the identical canvas/effect. `coarseSweepGrid` (below) is
+ * a second, INTROSPECTION-ONLY signal for callers that need to know which pass most recently
+ * resolved (e.g. a future caption/legend distinguishing "still refining" from "settled"); the
+ * canvas itself only ever reads this one. */
+const [sweepGridSignal, setSweepGridSignal] = createSignal<SweepGrid | null>(null, { equals: false })
+
+export function sweepGrid(): SweepGrid | null {
+  return sweepGridSignal()
+}
+
+/** 07-05-PLAN.md Task 2 (D-12): the most recently resolved COARSE pass grid, or `null` before any
+ * coarse pass has ever completed. Does not drive `HeatmapPanel`'s canvas on its own (see
+ * `sweepGrid`'s doc comment above) -- this is introspection for later plans (07-06 through
+ * 07-08) that need to know a sweep's coarse result specifically, e.g. to distinguish "the coarse
+ * pass just landed" from "the full pass has since replaced it," without re-deriving that from
+ * `sweepGrid()`'s own generation. */
+const [coarseSweepGridSignal, setCoarseSweepGridSignal] = createSignal<SweepGrid | null>(null, { equals: false })
+
+export function coarseSweepGrid(): SweepGrid | null {
+  return coarseSweepGridSignal()
+}
+
+/** Monotonic sweep id, incremented once per `scheduleSweep` dispatch. Threaded into every
+ * `SweepChunkRequest.generation` this run's chunks carry (via `SweepRunRequest.generation`), and
+ * shared by BOTH the coarse and full passes of one sweep (07-05-PLAN.md Task 2: they are the same
+ * generation, not two). `sweepGeneration()` exposes the live counter value as a signal so a
+ * caller (and this plan's own browser test) can observe the exact frame the bump lands on. */
+let sweepGenerationCounter = 0
+const [sweepGenerationSignal, setSweepGenerationSignal] = createSignal<number>(0)
+
+export function sweepGeneration(): number {
+  return sweepGenerationSignal()
+}
+
+/** 07-05-PLAN.md Task 1/2 (T-07-12): the number of cells the most recently completed sweep (its
+ * coarse pass plus its full pass) flagged `CELL_FLAG_INCOMPLETE` because a chunk's worker call
+ * timed out or failed -- summed across both passes. Distinct from `sweepGrid()?.meta
+ * .incompleteCount`, which also counts D-28's per-cell incomplete-hold cells (a normal,
+ * correctness-driven outcome, not a failure); this signal is specifically the pool-level failure
+ * count plan 07-07's caption strip reads to render the chunk-failure line (key_links). */
+const [sweepFailedCellCountSignal, setSweepFailedCellCountSignal] = createSignal<number>(0)
+
+export function sweepFailedCellCount(): number {
+  return sweepFailedCellCountSignal()
+}
+
+/** 07-05-PLAN.md Task 2 (D-23/D-24): which of the sweep's computed metrics the heatmap currently
+ * displays. Seeded to `'multiple'` (multiple-of-contributed), the default the UI-SPEC's E2
+ * MetricToggle names. Defined here so plan 07-06's metric toggle reads/writes one signal rather
+ * than each future consumer inventing its own; this plan wires no UI to it. */
+const [displayedMetricSignal, setDisplayedMetricSignalInternal] = createSignal<Metric>('multiple')
+
+export function displayedMetric(): Metric {
+  return displayedMetricSignal()
+}
+
+/** 07-06-PLAN.md Task 1 (D-04): same trailing-edge permalink sync `setResultMode` uses above --
+ * never `scheduleSweep`, never `sweepGeneration` (D-23/D-24: a metric change re-colors the cached
+ * grid, it does not re-run the sweep). */
+export function setDisplayedMetric(metric: Metric): void {
+  setDisplayedMetricSignalInternal(metric)
+  const inputs = kernelInputs()
+  if (inputs !== null) schedulePermalinkSync(inputs)
+}
+
+/** 07-05-PLAN.md Task 2 (D-19 through D-22): the sweep grid cell the crosshair is currently
+ * committed to, or `null` before any cell has ever been picked. A grid position (`col`/`row`
+ * indices into the live `sweepGrid()`), not an entry-date/leverage pair, so it stays correct
+ * across a grid whose dimensions can differ between the coarse and full passes (F-07). Defined
+ * here so plans 07-07/07-08's hover-readout and crosshair-rendering work read/write one signal;
+ * this plan wires no pointer interaction to it. */
+export interface CrosshairCell {
+  col: number
+  row: number
+}
+
+const [crosshairCellSignal, setCrosshairCellSignalInternal] = createSignal<CrosshairCell | null>(null)
+
+export function crosshairCell(): CrosshairCell | null {
+  return crosshairCellSignal()
+}
+
+export function setCrosshairCell(cell: CrosshairCell | null): void {
+  setCrosshairCellSignalInternal(cell)
+}
+
+/** 07-05-PLAN.md Task 2 (D-12): every 4th entry-date column plus the last, giving 51 coarse
+ * columns out of `SWEEP_COLS` (200) -- see `strideIndices` below for the general rule. The exact
+ * stride is Claude's Discretion per `07-CONTEXT.md`, provided the coarse pass lands inside
+ * PERF-04's 100ms and paints a complete field; declared as a named constant (not inlined) so
+ * `bench/sweep-progressive.bench.test.ts`'s measured coarse-pass cost can re-tune this value
+ * against a number later rather than guessing again. */
+export const COARSE_COL_STRIDE = 4
+
+/** 07-05-PLAN.md Task 2 (D-12): every 4th leverage row plus the last, giving 14 coarse rows out
+ * of `SWEEP_ROWS` (50) -- together with `COARSE_COL_STRIDE` above, the coarse pass covers 51 x 14
+ * = 714 cells, roughly one-fourteenth of the full 10,000-cell grid. */
+export const COARSE_ROW_STRIDE = 4
+
+/** Every `stride`-th index from `0` up to `total - 1`, plus `total - 1` itself when the stride
+ * does not already land on it. Including both axis endpoints matters (D-12): marching squares
+ * needs the field's own extremes, and a coarse field that stops one column or row short of the
+ * domain edge produces a boundary curve that moves when the full pass lands. For
+ * `(SWEEP_COLS, COARSE_COL_STRIDE) = (200, 4)` this yields the 51 indices `0, 4, ..., 196, 199`;
+ * for `(SWEEP_ROWS, COARSE_ROW_STRIDE) = (50, 4)` this yields the 14 indices `0, 4, ..., 48, 49`.
+ */
+export function strideIndices(total: number, stride: number): number[] {
+  const indices: number[] = []
+  for (let i = 0; i < total; i += stride) {
+    indices.push(i)
+  }
+  const last = total - 1
+  if (indices[indices.length - 1] !== last) {
+    indices.push(last)
+  }
+  return indices
+}
+
+/** Constructed lazily, on the first `scheduleSweep` call, so a session that never enters sweep
+ * mode never spins up a Worker pool. `createSweepPool`'s own contract is to construct its workers
+ * ONCE and keep them alive; this module-level singleton is what lets a later sweep reuse the same
+ * live pool rather than rebuilding it. */
+let sweepPool: SweepPool | null = null
+
+function getSweepPool(): SweepPool {
+  if (sweepPool === null) {
+    sweepPool = createSweepPool()
+  }
+  return sweepPool
+}
+
+/** D-02: 200 evenly-spaced trading-calendar positions across `bounds`, by interpolating between
+ * `bounds`' two absolute CALENDAR INDICES (never a naive evenly-spaced-in-calendar-days scheme,
+ * which would drift off actual trading sessions and could even land midweek on a non-trading
+ * day) -- the same "even spacing in INDEX space, not value space" principle
+ * `src/sweep/sweep-grid.ts`'s `leverageForRow` uses for the leverage axis. */
+function resolveSweepEntryDates(
+  currentBundle: LoadedBundle,
+  bounds: { firstDate: string; lastDate: string },
+): string[] {
+  const firstAbsIndex = indexOfDate({ days: currentBundle.calendar }, toDaysSinceEpoch(bounds.firstDate))
+  const lastAbsIndex = indexOfDate({ days: currentBundle.calendar }, toDaysSinceEpoch(bounds.lastDate))
+  if (firstAbsIndex === -1 || lastAbsIndex === -1) {
+    throw new Error(
+      `app: sweep entry-date bounds [${bounds.firstDate}, ${bounds.lastDate}] do not resolve to trading ` +
+        'sessions in the compiled calendar',
+    )
+  }
+  const dates: string[] = new Array(SWEEP_COLS)
+  for (let col = 0; col < SWEEP_COLS; col++) {
+    const t = SWEEP_COLS > 1 ? col / (SWEEP_COLS - 1) : 0
+    const absIndex = Math.round(firstAbsIndex + t * (lastAbsIndex - firstAbsIndex))
+    dates[col] = fromDaysSinceEpoch(currentBundle.calendar[absIndex] ?? 0)
+  }
+  return dates
+}
+
+/** Scans the resolved grid once (10,000 cells, cheap next to the sweep itself) and fills in
+ * `meta`'s telemetry fields, mirroring `scripts/build-sweep-fixture.ts`'s own aggregation
+ * (`ruinedCount`/`incompleteCount`/`minMultiple`/`maxMultiple`/`clippedBelowCount`/
+ * `clippedAboveCount`) so the live grid's meta carries the same real figures the committed design
+ * fixture's did, not placeholders. */
+function fillSweepMetaStats(grid: SweepGrid): void {
+  let ruinedCount = 0
+  let incompleteCount = 0
+  let minMultiple = Number.POSITIVE_INFINITY
+  let maxMultiple = Number.NEGATIVE_INFINITY
+  let clippedBelowCount = 0
+  let clippedAboveCount = 0
+  const domainMin = 10 ** DOMAIN_LOG_MIN
+  const domainMax = 10 ** DOMAIN_LOG_MAX
+  const cellCount = grid.cols * grid.rows
+
+  for (let i = 0; i < cellCount; i++) {
+    const flag = grid.flags[i] ?? 0
+    if ((flag & CELL_FLAG_RUINED) !== 0) ruinedCount++
+    if ((flag & CELL_FLAG_INCOMPLETE) !== 0) {
+      incompleteCount++
+      continue
+    }
+    const multiple = grid.multiples[i] ?? 0
+    if (multiple < minMultiple) minMultiple = multiple
+    if (multiple > maxMultiple) maxMultiple = multiple
+    if (multiple < domainMin) clippedBelowCount++
+    if (multiple > domainMax) clippedAboveCount++
+  }
+
+  if (!Number.isFinite(minMultiple)) minMultiple = 0
+  if (!Number.isFinite(maxMultiple)) maxMultiple = 0
+
+  grid.meta.ruinedCount = ruinedCount
+  grid.meta.incompleteCount = incompleteCount
+  grid.meta.minMultiple = minMultiple
+  grid.meta.maxMultiple = maxMultiple
+  grid.meta.clippedBelowCount = clippedBelowCount
+  grid.meta.clippedAboveCount = clippedAboveCount
+}
+
+/** D-03/Pattern 5, applied to the sweep path: any number of `scheduleSweep` calls within one
+ * animation frame collapse into exactly one sweep dispatch. */
+let sweepScheduled = false
+
+/**
+ * Builds the sweep request from the EXISTING `backtestRequest()` fields plus `activeTier()` --
+ * never a parallel request shape -- resolving the entry-date axis as 200 evenly-spaced
+ * trading-calendar positions across `resolveEntryDateBounds(activeTier())` (D-02) and the
+ * leverage axis from `leverageForRow` (D-01). Coalesced through `requestAnimationFrame` exactly
+ * the way `scheduleRun` coalesces the single-run path.
+ */
+export function scheduleSweep(): void {
+  if (sweepScheduled) return
+  sweepScheduled = true
+  requestAnimationFrame(() => {
+    sweepScheduled = false
+    void runSweepNow()
+  })
+}
+
+/** Builds a `SweepGridMeta` for a grid whose own `entryDates`/`rowIndices` may be the coarse
+ * pass's narrowed axes or the full pass's complete ones -- shared by both so the two can never
+ * describe the same sweep's parameters differently. `rowIndices` are ABSOLUTE row indices into
+ * the `SWEEP_ROWS` leverage axis (per `SweepRunRequest.rowIndices`'s own contract); `leverages`
+ * is derived from them via `leverageForRow`, matching the grid's own row positions 1:1. */
+function buildSweepGridMeta(
+  currentBundle: LoadedBundle,
+  req: BacktestRequest,
+  boundsResult: { lastDate: string },
+  entryDatesForGrid: readonly string[],
+  rowIndicesForGrid: readonly number[],
+): SweepGridMeta {
+  return {
+    bundleVersion: currentBundle.manifest.bundleVersion,
+    symbol: req.symbol,
+    dividendReinvest: req.dividendReinvest,
+    entryDates: entryDatesForGrid,
+    leverages: rowIndicesForGrid.map((row) => leverageForRow(row)),
+    // Deferred to the plan that surfaces this in the UI (07-06's caption/legend work): not read
+    // anywhere in this task's own rendering path, and `holdMode` is the contractual source of
+    // truth a consumer must check first regardless.
+    holdingYears: 0,
+    initialInvestment: req.initialInvestment,
+    expenseRatioPercent: req.expenseRatioPercent,
+    financingSpreadPercent: req.financingSpreadPercent,
+    ruinedCount: 0,
+    incompleteCount: 0,
+    minMultiple: 0,
+    maxMultiple: 0,
+    clippedBelowCount: 0,
+    clippedAboveCount: 0,
+    holdMode: req.holdingPeriodBars === null ? 'end-of-data' : 'fixed',
+    endOfDataDate: boundsResult.lastDate,
+    // 07-07-PLAN.md Task 3 (Rule 2 addition): the caption strip's VIZ-04 mode statement needs the
+    // exact requested bar count in fixed mode, which `holdingYears` above never carries for the
+    // live grid (see that field's own comment) -- carried straight from the request that
+    // dispatched this sweep, not re-derived.
+    holdingPeriodBars: req.holdingPeriodBars,
+  }
+}
+
+/** The full `SWEEP_ROWS`-tall row-index axis, `0..SWEEP_ROWS - 1` -- the full pass's own
+ * `rowIndices`, matching `ALL_ROW_INDICES`'s role in `sweep-pool.ts` (not imported from there:
+ * that module intentionally keeps its default private, this is the one caller that needs its own
+ * copy to build the full grid's meta). */
+const FULL_ROW_INDICES: readonly number[] = Array.from({ length: SWEEP_ROWS }, (_, i) => i)
+
+/**
+ * 07-05-PLAN.md Task 2 (D-12/D-13/D-14): splits every sweep into two passes over the SAME
+ * persistent pool and the SAME generation. The coarse pass sweeps a strided subsample
+ * (`strideIndices`) and builds a COMPLETE 51x14 grid, painted the moment it resolves -- this is
+ * the entire "loading" treatment (no spinner, no bar, no percentage, D-14): the field's own
+ * coarse-to-sharp refinement is the feedback. The full pass then refines to the complete 200x50
+ * grid and REPLACES the coarse one whole once it resolves.
+ *
+ * A superseded pass (`handle.stale`) never touches `sweepGrid()`/`coarseSweepGrid()` at all: the
+ * PREVIOUS sweep's complete field -- coarse or full, whichever most recently painted -- stays on
+ * screen untouched until this generation's own coarse pass lands, so there is never a half-old
+ * and half-new blended field and never an empty flash (D-13).
+ */
+async function runSweepNow(): Promise<void> {
+  const currentBundle = bundle()
+  if (currentBundle === null || status() !== 'ready') return
+
+  const req = { ...request }
+
+  const boundsResult = resolveEntryDateBounds(currentBundle.manifest, req.symbol, req.dividendReinvest, activeTier())
+  if (!boundsResult.ok) {
+    // Mirrors the single-run path's D-11/D-12 eviction discipline: a sweep whose entry-date
+    // bounds cannot resolve has nothing to paint. No sweep-specific explanation surface exists
+    // yet in this tracer (a later plan adds one); the grid is simply left at its last value.
+    return
+  }
+
+  const entryDates = resolveSweepEntryDates(currentBundle, boundsResult)
+
+  sweepGenerationCounter += 1
+  const generation = sweepGenerationCounter
+  setSweepGenerationSignal(generation)
+
+  const baseParams: SweepRunRequest['params'] = {
+    symbol: req.symbol,
+    dividendReinvest: req.dividendReinvest,
+    initialInvestment: req.initialInvestment,
+    contributionAmount: req.contributionAmount,
+    contributionFrequency: req.contributionFrequency,
+    expenseRatioPercent: req.expenseRatioPercent,
+    financingSpreadPercent: req.financingSpreadPercent,
+    holdingPeriodBars: req.holdingPeriodBars,
+  }
+
+  const pool = getSweepPool()
+
+  // --- Coarse pass (D-12): a complete low-resolution field within PERF-04's 100ms. ---
+  const coarseColPositions = strideIndices(SWEEP_COLS, COARSE_COL_STRIDE)
+  const coarseRowIndices = strideIndices(SWEEP_ROWS, COARSE_ROW_STRIDE)
+  const coarseEntryDates = coarseColPositions.map((i) => entryDates[i] ?? '')
+  const coarseGrid = createSweepGrid(
+    coarseColPositions.length,
+    coarseRowIndices.length,
+    buildSweepGridMeta(currentBundle, req, boundsResult, coarseEntryDates, coarseRowIndices),
+  )
+  const coarseRequest: SweepRunRequest = {
+    generation,
+    entryDates: coarseEntryDates,
+    rowIndices: coarseRowIndices,
+    params: baseParams,
+  }
+
+  const coarseHandle = await pool.runSweep(coarseGrid, coarseRequest)
+  if (coarseHandle.stale) {
+    // D-13: a newer sweep has already superseded this one; that generation's own coarse pass
+    // owns painting from here. Nothing of this sweep is ever displayed.
+    return
+  }
+  setCoarseSweepGridSignal(coarseGrid)
+  setSweepGridSignal(coarseGrid)
+
+  // --- Full pass: refines to the complete grid, replacing the coarse one whole once resolved. ---
+  const fullGrid = createSweepGrid(
+    SWEEP_COLS,
+    SWEEP_ROWS,
+    buildSweepGridMeta(currentBundle, req, boundsResult, entryDates, FULL_ROW_INDICES),
+  )
+  const fullRequest: SweepRunRequest = {
+    generation,
+    entryDates,
+    params: baseParams,
+  }
+
+  const fullHandle = await pool.runSweep(fullGrid, fullRequest)
+  if (fullHandle.stale) {
+    // D-13: superseded between the coarse and full passes -- the coarse field this generation
+    // already painted stays on screen (still complete, still correct for the moment it was the
+    // live sweep) until the newer generation's own coarse pass replaces it.
+    return
+  }
+  fillSweepMetaStats(fullGrid)
+  setSweepGridSignal(fullGrid)
+  setSweepFailedCellCountSignal(coarseHandle.failedCellCount + fullHandle.failedCellCount)
+}
+
 /** D-06: the resolved calendar date of `ruinBarIndex`, read through the same absolute-calendar-
  * index arithmetic `kernel-inputs.ts` uses (`window.entryIndex + ruinBarIndex`), never
  * recomputed via a bar-count-per-year approximation. */
@@ -195,13 +604,36 @@ export function backtestRequest(): BacktestRequest {
   return request
 }
 
+/** 07-08-PLAN.md Task 3 (Rule 3 deviation, documented in this plan's own SUMMARY.md): `state.ts`
+ * is not in 07-08-PLAN.md's declared `files_modified`, but committing a crosshair cell click
+ * needs a write path that patches `entryDate`/`leverage` WITHOUT re-sweeping, which no existing
+ * exported function provided. Adding an optional, default-`false` option here is the smallest
+ * change that satisfies that requirement without altering any existing call site's behavior. */
+export interface UpdateBacktestRequestOptions {
+  /** True for a crosshair-cell commit (`HeatmapPanel.tsx`'s click handler, D-19/D-22): the click
+   * moves the crosshair to a cell WITHIN an already-computed field, it is not a sweep input
+   * change, so it must not itself schedule a re-sweep (proven by a `sweepGeneration()`-unchanged
+   * browser assertion). Every other caller (the parameter column controls) omits this and keeps
+   * today's behavior of re-sweeping live while in sweep mode (D-32). */
+  skipSweep?: boolean
+}
+
 /** Writes a partial patch onto the reactive request store and schedules the coalesced recompute
  * (D-03). No parameter control exists yet in this plan (04-04/04-05 fill the parameter column);
  * this is the one write path both those future controls and this plan's browser test use to
  * change what `scheduleRun` computes against. */
-export function updateBacktestRequest(patch: Partial<BacktestRequest>): void {
+export function updateBacktestRequest(patch: Partial<BacktestRequest>, options?: UpdateBacktestRequestOptions): void {
   setRequestStore(patch)
   scheduleRun()
+  // 07-05-PLAN.md Task 2, D-32: a parameter change made while sweep mode is active re-sweeps
+  // live, cancelling and discarding whatever sweep was already in flight. This is what makes
+  // dragging the holding-period control (HoldingModeControl's bar-count input) start a sweep per
+  // drag position: `scheduleSweep`'s own requestAnimationFrame coalescing (the same coalescing
+  // `scheduleRun` above already uses) is the only rate limiting -- deliberately no debounce and
+  // no commit-on-release, so the cancellation path this exercises is the one D-32 calls out as
+  // the hardest test of PERF-06/PERF-07. 07-08-PLAN.md Task 3: skipped entirely when
+  // `options.skipSweep` is true (a crosshair-cell commit).
+  if (resultModeSignal() === 'sweep' && options?.skipSweep !== true) scheduleSweep()
 }
 
 export function scaleMode(): ScaleMode {
@@ -355,6 +787,11 @@ function writePermalinkUrl(inputs: KernelInputs): void {
     tier: activeTier(),
     scale: scale(),
     bundleVersion: BUNDLE_VERSION,
+    // 07-06-PLAN.md Task 1 (D-04): read live, same discipline as every other field above -- the
+    // only way either changes is through setResultMode/setDisplayedMetric, both of which
+    // reschedule this same sync with fresh values before a stale call could ever fire.
+    mode: resultMode(),
+    metric: displayedMetric(),
   }
   const qs = encodeParams(params)
   // T-05-20: re-adds the methodology flag when the overlay is currently open -- this is the
@@ -585,6 +1022,17 @@ export function resetAppState(): void {
   setLinkBundleVersion(null)
   setTierSignal('strict')
   setMethodologyOverlayOpenSignal(false)
+  // 07-01-PLAN.md Task 2, D-18: a fresh visit (and every test's reset) seeds resultMode back to
+  // 'single'. The last resolved sweepGrid/coarseSweepGrid/sweepGeneration/sweepFailedCellCount
+  // are intentionally left in place -- they are a pure function of a subsequent scheduleSweep()
+  // call, not app-load state (the same discipline `sweepPool` itself follows, never rebuilt
+  // here), so clearing them would only force a redundant recompute the next time a test or a
+  // real user re-enters sweep mode.
+  setResultModeSignal('single')
+  // 07-05-PLAN.md Task 2: displayedMetric/crosshairCell ARE fresh-visit UI state (matching
+  // tier/methodologyOverlayOpen above), unlike the sweep-result signals just described.
+  setDisplayedMetricSignalInternal('multiple')
+  setCrosshairCellSignalInternal(null)
 }
 
 /**
@@ -639,6 +1087,16 @@ function applyPermalinkFromLocation(): void {
     })
     setScaleSignal(params.scale)
     setActiveTier(params.tier)
+    // 07-06-PLAN.md Task 1 (D-04/D-18): raw signal writes, not `setResultMode`/
+    // `setDisplayedMetric` -- those exported setters also mark the permalink dirty
+    // (`schedulePermalinkSync`), which would be a no-op here anyway (no run has completed yet)
+    // but is pointless work at boot, and `setResultMode`'s own `scheduleSweep()` call would fire
+    // before the bundle has loaded (`runSweepNow`'s own guard bails out while `status()` is still
+    // 'loading'). `applyLoadedBundle` (below) is what actually schedules the sweep once the
+    // bundle is ready, for a decoded `mode: 'sweep'` link exactly as it does for `mode: 'single'`
+    // via `scheduleRun()`.
+    setResultModeSignal(params.mode)
+    setDisplayedMetricSignalInternal(params.metric)
   } else if (decoded.status === 'error') {
     permalinkDecodeFailedAtBoot = true
     clearForEviction(decoded.error)
@@ -751,6 +1209,14 @@ function applyLoadedBundle(loaded: LoadedBundle): void {
     return
   }
   scheduleRun()
+  // 07-06-PLAN.md Task 1 (D-04/D-18): a decoded permalink that already resolved to sweep mode
+  // (`applyPermalinkFromLocation`, which runs before this, at the top of `initializeApp`) needs
+  // its own sweep scheduled once the bundle is actually ready -- a `scheduleSweep()` call made at
+  // decode time would have been a harmless no-op, since `runSweepNow`'s own guard bails out while
+  // `status()` is still 'loading'. Mirrors `updateBacktestRequest`'s own `resultModeSignal() ===
+  // 'sweep'` check (D-32), applied here to the one path a parameter EDIT never covers: landing
+  // directly on sweep mode from a link, with no edit ever firing.
+  if (resultModeSignal() === 'sweep') scheduleSweep()
 }
 
 async function runInitialLoad(): Promise<void> {

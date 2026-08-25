@@ -2,18 +2,18 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_phase: 06
-current_phase_name: heatmap-design-pass
-status: completed
-stopped_at: Phase 6 complete (verification passed)
-last_updated: "2026-08-21T19:28:37.700Z"
-last_activity: 2026-08-21
-last_activity_desc: Phase 06 execution complete, form-2-filled-contour chosen
+current_phase: "07.1"
+current_phase_name: sweep-pool-tuning-inserted
+status: ready
+stopped_at: "PERF-03 merge bar released by Key Decision; Phase 7/7.1 shipped; Phase 8 unblocked"
+last_updated: "2026-08-24T03:20:48.204Z"
+last_activity: 2026-08-24
+last_activity_desc: PERF-03 merge bar released under PERF-01a; PR 8 merged, PR 7 closed
 progress:
   total_phases: 8
   completed_phases: 6
-  total_plans: 43
-  completed_plans: 43
+  total_plans: 61
+  completed_plans: 61
 ---
 
 # Project State
@@ -23,19 +23,24 @@ progress:
 See: .planning/PROJECT.md (updated 2026-08-16)
 
 **Core value:** Given a symbol, a leverage level, an entry point, and a contribution schedule, produce a defensible outcome and show which mechanism consumed the money, in a form that can be pasted into an argument.
-**Current focus:** Phase 07 - sweep-engine-and-the-heatmap (not started)
+**Current focus:** Phase 8 (export and the canonical arguments). PERF-03 is a standing, documented escalation and no longer blocks.
 
 ## Current Position
 
-Phase: 06 (heatmap-design-pass) - COMPLETE
-Plan: 6 of 6
-Status: Phase 6 complete
-  Verification passed 4/4 roadmap success criteria. 697/697 unit tests pass.
-  Decision: form-2-filled-contour wins. Spec written to 06-HEATMAP-SPEC.md.
-  Carry-forwards: form 2 costs O(display area) and needs an offscreen cache in Phase 7;
-  contour levels not yet labelled; ruin hatch never visually exercised (fixture ruinedCount=0).
-Next: Phase 07 (sweep-engine-and-the-heatmap). Run /gsd-discuss-phase 07 to begin.
-Last activity: 2026-08-21 - Phase 06 execution complete
+Phase: 07.1 complete. PERF-03 merge bar RELEASED 2026-08-25 by explicit Key Decision under PERF-01a.
+Status: READY for Phase 8
+  The 1000ms PERF-03 budget is measured unreachable on the D-17 4-core host. Five levers
+  measured and refuted: WASM (1.20x slower, 01-04), worker width 4 (zero, 07.1-06), per-bar
+  output arrays (1-2%, quick-260824-46s), pool and dispatch overhead (0.14ms across the whole
+  grid, quick-260824-52h), and per-cell kernel compute itself (combined ratio median 1.0036,
+  six of eight arms slower than shipped, quick-260824-r5d).
+  Nothing was relaxed to get here. PERF-03.thresholdMs stays 1000, NOMINAL_REFERENCE_MS stays
+  40, BENCH_TOTAL_RUNTIME_CAP_MS stays 30000, the grid stays 200x50, and
+  src/kernel/backtest.ts is byte-identical across all three measurement tasks. PERF-03 remains
+  FAILED and is not claimed met. Only the two-consecutive-pass MERGE BAR was released, so the
+  milestone stops blocking behind a budget no available lever can reach.
+Next: Phase 8 (export and the canonical arguments). Run /gsd-discuss-phase 8 to begin.
+Last activity: 2026-08-25, PERF-03 bar released, PR 8 merged, PR 7 closed
 
 Progress: [████████░░] 75%  (6 of 8 roadmap phases complete)
 
@@ -81,6 +86,7 @@ Progress: [████████░░] 75%  (6 of 8 roadmap phases complete)
 | Phase 01 P05 | 15min | 2 tasks | 10 files |
 | Phase 01 P06 | 16min | 3 tasks | 23 files |
 | Phase 04 P01 | ~5h (paused for container restart) | 3 tasks | 27 files |
+| Phase quick-260824-46s P01 | 3min | 3 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -118,6 +124,9 @@ Recent decisions affecting current work:
 - [Phase ?]: 04-01: Y-axis gutter is measured from the labels uPlot is about to draw (axis.size hook), not left at uPlot's fixed 50px default, and measured on a private CSS-sized canvas context with no devicePixelRatio arithmetic -- closes the plan's backstop must_have with regressions
 - [Phase ?]: 04-01: Package legitimacy gate approved solid-js, vite-plugin-solid, vite despite SUS 'too-new' verdicts (publish-date heuristic); all three resolved to canonical github.com/solidjs and github.com/vitejs repos at millions of weekly downloads
 - [quick-260820-4qx]: uPlot's built-in `logAxisSplits` cannot advance below a roughly 1e-22 log y-scale minimum (the NDX/leverage-10/entry-1999-03-04 permalink hit this and killed the renderer), so the log y axis now supplies its own decade splits (`log-axis-splits.ts`) plus an identity `filter`, chosen over clamping the scale range or truncating the series so the full curve stays visible
+- [quick-260824-46s]: PERF-03 lever 1 (kernel write-only per-bar output arrays) measured, not spent: bit-identical equivalence proof plus five-sample A/B ratio (min=0.9810 median=0.9841 max=0.9904) refutes 07.1-PERF-03-BASELINE.md section 9's reasoning -- the arrays cost roughly 1-2% of kernel compute time, too small to close 1120.86-1411.05ms normalized to under the 1000ms budget alone. src/kernel/backtest.ts stays byte-identical; the variant lives only in bench/.
+- [quick-260824-52h]: The 273.98ms PERF-03 residual is not a separate poolable overhead. Instrumenting one real 10,000-cell sweep at the production pool boundary measured buffer allocation at 0.03ms, mergeChunkResult at 0.01ms and wire-write at 0.10ms across the WHOLE grid, worker-drain imbalance at 7.50ms (1.6%), and concurrencyFactor at 1.05. Real per-chunk computeMs summed and divided by workerCount explains 98.3% of wall clock with no extrapolation. spanRatio=0.51 confirms 07.1-PERF-03-PROFILE.md's own unverified candidate (b): its perCellKernelUs=255.42 was measured at a 2-column chunk span while the grid actually runs 17-column chunks, so idealParallelFullGridMs=851.39 is roughly double the real cost. Correcting it GROWS the residual to a projected 691.16ms (58.6%), it does not shrink it. src/sweep/sweep-pool.ts needed no edit: SweepPoolOptions.workerFactory is an existing production seam. Only src/sweep/sweep.worker.ts gained an inert profiling flag, proven inert at runtime (zero profile messages on a full sweep with it off).
+- [quick-260824-r5d]: Per-cell kernel compute is NOT reducible enough to close PERF-03. Nine ablation arms measured at the real 17-column chunk span (not a narrow span, per 52h's spanRatio lesson), each proven bit-identical on all eight KernelResult fields across four canonical cases before any clock started (28 proven cases, runtime-gated). Combined bit-preserving arm: min=0.9740 median=1.0036 max=1.1012, missing both the 0.7833 and 0.8907 decision thresholds at every point. Six of eight arms measured SLOWER than the shipped kernel at the median (dedupDrawdown worst at 1.1605), so the hand micro-optimizations regress what V8 already does well. The non-bit-preserving reciprocal-multiply arm measured EXACTLY zero deviation on the real series across all four cases despite being provably non-bit-identical for isolated day-count values (the perturbation sits orders of magnitude below the rounding granularity of the `value -=` subtraction it feeds), and it was also slower (median 1.1040), so there is no case for it on either correctness or speed. src/kernel/backtest.ts stays byte-identical; all variants live in bench/.
 
 ### Pending Todos
 
@@ -168,6 +177,9 @@ Recent decisions affecting current work:
 | 260816-qae | Record the D-20 escalation for PERF-03 against the real CI baseline and correct docs citing sandbox figures | 2026-08-16 | 8c5a250 |  | [260816-qae-record-the-d-20-escalation-for-perf-03-a](./quick/260816-qae-record-the-d-20-escalation-for-perf-03-a/) |
 | 260818-v2d | resolve WINDOWS #2 calibration runner-variance in bench/calibration.ts | 2026-08-18 | cc3d715 | Verified | [260818-v2d-resolve-windows-2-calibration-runner-var](./quick/260818-v2d-resolve-windows-2-calibration-runner-var/) |
 | 260820-4qx | Fix uPlot log-scale renderer hang in the equity curve chart; close phase 04's narrow-viewport UAT | 2026-08-20 | a55b611 |  | [260820-4qx-fix-uplot-log-scale-renderer-hang-in-equ](./quick/260820-4qx-fix-uplot-log-scale-renderer-hang-in-equ/) |
+| 260824-46s | Measure PERF-03 lever 1 (kernel write-only per-bar output arrays); refuted | 2026-08-24 | a9c1feb | Verified | [260824-46s-measure-lever-1-for-perf-03-what-the-ker](./quick/260824-46s-measure-lever-1-for-perf-03-what-the-ker/) |
+| 260824-52h | Isolate the 273.98ms PERF-03 residual; found it substantially an extrapolation artifact, no pool lever left | 2026-08-24 | 718d7e0 | Verified | [260824-52h-isolate-the-273-98ms-unexplained-residua](./quick/260824-52h-isolate-the-273-98ms-unexplained-residua/) |
+| 260824-r5d | Measure whether per-cell kernel compute is reducible at the 17-column chunk shape; refuted, lever list exhausted | 2026-08-24 | de11744 | Verified | [260824-r5d-measure-whether-per-cell-kernel-compute-](./quick/260824-r5d-measure-whether-per-cell-kernel-compute-/) |
 
 ## Deferred Items
 
@@ -179,6 +191,86 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-08-21T04:04:09.762Z
-Stopped at: Phase 6 UI-SPEC approved
-Resume file: .planning/phases/06-heatmap-design-pass/06-UI-SPEC.md
+Last session: 2026-08-24T03:20:48.179Z
+Stopped at: Completed quick-260824-46s: measured PERF-03 lever 1, refuted
+Resume file: None
+
+### Where things stand
+
+Branch `gsd/phase-07.1-sweep-pool-tuning` (off Phase 7's branch), pushed, working tree clean
+at `11df7c5`. Two PRs open, both deliberately:
+
+- **PR #7** (Phase 7, ready) left open on purpose as the accurate record of the failing baseline.
+- **PR #8** (Phase 7.1, draft) carries Phase 7 plus the tuning work. Opened to get CI runs, since
+  `.github/workflows/ci.yml` triggers on `pull_request` only. **Neither is merged.**
+
+**Merge bar, user decision 2026-08-23:** merge only when the PERF-03 headline row reads at or
+under 1000ms normalized, `source=production`, `hardwareConcurrency=4`, on TWO CONSECUTIVE runs.
+One pass is not enough. That bar is NOT met, which is why nothing merged.
+
+### The state of the number
+
+PERF-03 across five D-17 runs, all `verdict=fail`: 1120.86, 1208.38, 1115.92, 1191.34 (width 4),
+1411.05ms normalized against a 1000ms budget. Phase 7.1 closed with roadmap criteria 1, 3 and 6
+met and criteria 2, 4 and 5 escalated with named levers. All four escalations are in PROJECT.md's
+Key Decisions table.
+
+### What is spent and what is left
+
+Spent and measured worthless on the headline: worker width 4 (1191.34ms, inside the width-3
+spread, reverted; PERF-07b also crossed D-20's 70% trigger on that run). Spent earlier and
+counterproductive: WASM (roughly 1.20x slower, 01-04).
+
+Spent and genuinely useful, but not on the headline: the `solveIrr` convergence fix. It tested
+`|npv|` in dollars against `1e-9`, unreachable on thousand-dollar cash flows, so the loop burned
+105 iterations for a 36-iteration answer. That branch went 8961.84 to roughly 3900ms with every
+displayed figure provably unchanged to 3.20e-10. It remains roughly 3.9x over budget.
+
+Unspent levers for PERF-03, after two measurement tasks on 2026-08-24:
+
+1. The kernel's write-only per-bar output arrays. MEASURED and REFUTED (quick-260824-46s):
+   five-sample A/B ratio min=0.9810 median=0.9841 max=0.9904, roughly 1-2% of kernel compute.
+   Not spent; `backtest.ts` stays byte-identical.
+2. Pool and dispatch overhead. MEASURED and EXHAUSTED (quick-260824-52h): allocation, merge and
+   wire total 0.14ms across the whole 10,000-cell grid, drain imbalance 7.50ms,
+   concurrencyFactor 1.05. There is no meaningful pool-overhead lever left to spend.
+3. D-03's coarser default grid. Still unspent and still held in reserve. It does not close the
+   number, it redefines what the number measures, and `.claude/CLAUDE.md` states the sweep as
+   "~10,000 backtests" in the project's own constraints.
+4. Newton-with-bisection-fallback for `solveIrr`, scoped to the sweep call site. Reopens D-08,
+   so it needs its own Key Decision. Cannot affect the gated headline: the zero-contribution
+   branch has no cash flows and never calls `solveIrr`. Worth doing on its own merits, since
+   `npvEvaluationsPerSolve` measured 105.01 against a Newton expectation near 10, and that
+   branch makes contribution-schedule users wait roughly 4 seconds.
+5. Real per-cell kernel compute at the 17-column chunk shape. MEASURED and REFUTED
+   (quick-260824-r5d): nine arms, combined bit-preserving ratio min=0.9740 median=1.0036
+   max=1.1012, clearing neither the 21.3% nor the 10.8% threshold at any measured point. Six of
+   eight arms measured slower than the shipped kernel. This was the last unmeasured lever.
+
+**The lever list is exhausted.** Levers 1, 2 and 5 are measured and refuted. Lever 3 redefines
+the measurement rather than closing it. Lever 4 cannot reach the gated branch. Nothing untested
+remains that could plausibly close a 10.8% to 21.3% gap.
+
+### The calibration-score variance finding, 2026-08-24
+
+CI run 32686531154 (`hardwareConcurrency=4`, `source=production`, `verdict=fail`) recorded
+`measuredMs=1156.60`, `normalizedMs=1270.99`, `calibrationScore=0.9100`. Against run
+32669644628 (`measuredMs=1179.70`, `normalizedMs=1120.86`, `calibrationScore=1.0525`), the RAW
+figure FELL 23.10ms while the NORMALIZED figure ROSE 150.13ms. The entire move came from the
+normalizer, on a run whose measured work was slightly faster. Raw figures across these two runs
+span 1156.60 to 1179.70; normalized figures across all six span 1115.92 to 1411.05. Most of the
+visible instability in the gated metric is in the calibration score, not in the sweep.
+
+This is recorded, NOT acted on. Retuning or reweighting the calibration anchor in response to a
+measurement is exactly what PERF-01a prohibits and what the 01-04 escalation already litigated
+once; the only effect would be to un-trip a gate rather than make anything faster. It does mean
+the two-consecutive-pass merge bar is being asked to clear a normalizer with a 13.5% swing.
+
+### The warning worth carrying forward
+
+Three projections in Phase 7.1 were tested against measurement and all three were wrong:
+`solveIrr` 3.14x became 1.83x, worker width 4's 25% became zero, and a four-run "roughly 4%
+spread" on the gated metric became 26% on the fifth sample. Every derived-not-measured number
+that got tested failed; every directly measured number held. Lever 1 above is reasoned, not
+measured. **Measure before planning against it.** The corrected variance finding is written up
+in `07.1-PERF-03-BASELINE.md` section 2 under an explicit CORRECTION block.

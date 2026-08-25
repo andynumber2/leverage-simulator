@@ -38,6 +38,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 5: Attribution and the Credibility Surface** - Name which mechanism consumed the money, and let a skeptic check every assumption (completed 2026-08-21)
 - [ ] **Phase 6: Heatmap Design Pass** - Argue the entry-date x leverage treatment from throwaway mockups, since there is no prior art to copy
 - [ ] **Phase 7: Sweep Engine and the Heatmap** - 10,000 backtests fanned across workers and painted progressively without stalling the UI
+- [x] **Phase 7.1: Sweep Pool Tuning** (INSERTED) - Executed 2026-08-24. 3 of 6 criteria met; PERF-03 remains FAILED at 1116-1411ms normalized across five 4-core runs, escalated with two unspent levers named
 - [ ] **Phase 8: Export and the Canonical Arguments** - Get the result out of the app as a picture, a CSV, or a curated permalink
 
 ## Phase Details
@@ -312,8 +313,84 @@ Plans:
   4. Changing the heatmap's displayed metric re-colors the cached grid in under 16ms and never triggers a re-sweep, because the sweep computes every display metric per cell in a single pass.
   5. Changing a parameter mid-sweep cancels the in-flight sweep within one frame and discards its superseded results rather than painting them, and heatmap pan and zoom sustain 60fps at full cell count. Both figures come from measurement, not from watching the screen.
 
-**Plans**: TBD
+**Plans:** 12/12 plans executed (2 gap-closure plans added after 07-VERIFICATION.md)
+
+Plans:
+**Wave 1**
+
+- [x] 07-01-PLAN.md: Tracer. Graduate the Phase 6 geometry into `src/heatmap/`, then wire one real sweep over the real bundle through the real kernel onto a painted filled-contour field
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [x] 07-02-PLAN.md: D-25's sequential drawdown ramp, a stops-parameterized interpolator, and three fixed per-metric colour domains under the VIZ-07 perceptual and colourblind bars
+- [x] 07-03-PLAN.md: METR-06's one-pass per-cell record (multiple, drawdown, annualized, flags), and PERF-03 repointed at the production pool over the real bundle
+- [x] 07-04-PLAN.md: D-05's polygon fill and ring stitcher, the D-07 equivalence-and-repaint gate, the D-06 escalation checkpoint, and PERF-05 repointed at the shipped renderer
+- [x] 07-05-PLAN.md: D-12's coarse-to-fine progressive paint and generation-token cancellation, with PERF-04 and PERF-06 measured
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [x] 07-06-PLAN.md: D-15's Single run and Sweep switch, D-23's metric toggle, and D-04's two new permalink keys
+- [x] 07-07-PLAN.md: D-16's two marginal slice charts, the two-variant legend, and D-30's caption strip carrying the VIZ-04 mode statement and the VIZ-10 caveat
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
+- [x] 07-08-PLAN.md: D-19's ghost and committed crosshairs, D-20's per-cell hover readout, and D-22's drill-down
+- [x] 07-09-PLAN.md: The named ruin verification sweep closing Finding F-02, D-29's short-horizon boundary rule, and D-33's inline breakeven label
+
+**Wave 5** *(blocked on Wave 4 completion)*
+
+- [x] 07-10-PLAN.md: D-34's pan and zoom over the already-rendered field, with PERF-09 measured at full cell count
+
+**Wave 6** *(gap closure, blocked on Wave 5 completion)*
+
+- [x] 07-11-PLAN.md: Land a real, non-withheld PERF-03 verdict from a D-17 (4-core) CI run, and clear the run-level invariant that would discard it
+
+**Wave 7** *(blocked on Wave 6 completion)*
+
+- [x] 07-12-PLAN.md: Record the PROJECT.md Key Decision resolving the contribution-schedule (`solveIrr`) sweep's measured PERF-03 overrun
+
 **UI hint**: yes
+
+### Phase 7.1: Sweep Pool Tuning (INSERTED)
+
+**Goal**: The 10,000-cell sweep completes inside its 1000ms budget on the declared 4-core baseline, closing Phase 7's third success criterion by making the number true rather than by moving the number
+**Mode:** mvp
+**Depends on**: Phase 7 (tunes `src/sweep/sweep-pool.ts` and `src/sweep/sweep.worker.ts` as shipped there, and re-runs the same `bench/sweep.bench.test.ts` recorder)
+**Requirements**: PERF-03 (re-measurement; primary mapping stays Phase 7), PERF-01a (no-relaxation constraint)
+**Inserted because**: 07-VERIFICATION.md closed 4/5 success criteria and left criterion 3 measured-failing: the zero-contribution headline row recorded normalizedMs=1168.59 against a 1000ms budget on the D-17 baseline (CI run 32654061079, hardwareConcurrency=4, workerCount=3, source=production, verdict=fail), and the contribution-schedule (`solveIrr`) branch recorded normalizedMs=8961.84. PROJECT.md's "PERF-03 D-17 baseline escalation (Phase 7)" row names pool tuning as the lever to spend and defers implementation to a follow-up phase. This is that phase.
+
+**Success Criteria** (what must be TRUE):
+
+  1. Where the 4-core baseline sweep actually spends its wall clock is a measured breakdown, not an inference. The current PROJECT.md row states outright that a shared worker-pool root cause for the two overruns is "an inference from the pool configuration, not a profiled finding"; this phase replaces that inference with attributed figures covering at least worker startup, chunk dispatch and transfer, per-cell kernel time, and idle time at `workerCount=3`, so the tuning that follows is aimed rather than guessed.
+  2. The zero-contribution headline PERF-03 row measures at or under its 1000ms budget on the declared D-17 baseline (GitHub Actions `ubuntu-latest`, `hardwareConcurrency=4`), reported by `npm run bench` with `source=production` and `verdict=pass`, and the verdict is real rather than withheld. The figure covers the same fixed 200x50 default grid Phase 7 measured, so it stays comparable to 1168.59ms.
+  3. Nothing was relaxed to get there. `PERF-03.thresholdMs` stays 1000, `NOMINAL_REFERENCE_MS` stays 40, D-19's lock holds on all eight budgets, D-03's coarser default grid stays unspent and in reserve, and `git diff` proves no calibration constant, run-level cap, or budget value moved in response to a measurement. Any relaxation instead escalates as a Key Decision under PERF-01a rather than being edited in.
+  4. The contribution-schedule (`solveIrr`) branch is re-measured on the same baseline at a sample count large enough to carry a verdict rather than an anecdote, and its result is either inside the same 1000ms budget or recorded as a PROJECT.md Key Decision naming the specific remaining lever and why pool tuning alone could not reach it. It is not left as an unresolved informational row a second time.
+  5. The bench suite's own total runtime is back inside `BENCH_TOTAL_RUNTIME_CAP_MS` (30,000ms) on the baseline host, and `assertRunInvariants` reports a cap breach independently of whether a verdict-fail fires first, so the 43,259ms breach that 07-VERIFICATION.md carried forward can no longer be masked.
+  6. The sweep still computes what it computed before. The Phase 7 correctness suite (per-cell one-pass metrics, cancellation, pool-versus-serial equality, ruin and short-horizon rules) passes unchanged, and pool-versus-serial equality is asserted against the tuned partition shape so a faster wrong answer cannot pass as an improvement.
+
+**Plans:** 6 plans
+
+Plans:
+**Wave 1**
+
+- [ ] 07.1-01-PLAN.md (wave 1, tracer) - One measured D-17 baseline verdict this branch can read back, carrying criterion 1's attributed breakdown for both the CAGR and the `solveIrr` branch
+- [ ] 07.1-02-PLAN.md (wave 1) - Both anti-regression clamps, landed before any tuning: `assertRunInvariants` reports a budget failure and a runtime-cap breach together, and `partitionColumns` is proven to cover every column exactly once
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 07.1-03-PLAN.md (wave 2) - Cut the `solveIrr` branch's per-solve cost, re-measure it at a real sample count inside a stated runtime ceiling, and decide its disposition
+- [ ] 07.1-04-PLAN.md (wave 2) - Measure main-thread responsiveness under a real in-flight sweep at width 3 and width 4, decide the `cores - 1` rule against it, and re-validate correctness at the shipped partition shape
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [ ] 07.1-05-PLAN.md (wave 3) - Bring the bench suite's runtime back inside its cap, aimed by the baseline per-file attribution, with a stop rule and an escalation path that is never a raised cap
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
+- [ ] 07.1-06-PLAN.md (wave 4) - The authoritative D-17 baseline gate run, transcribed, with a disposition for all six criteria and the Key Decisions this phase owes
+
+**Margin target:** the headline PERF-03 row aims at `normalizedMs <= 870` on the D-17 baseline, not at 1000. WINDOWS.md entry 2 puts roughly plus or minus 13% on any single normalized figure, so a figure landing at 995ms is within the band's reach of a fail on identical code. A pass between 870 and 1000 is recorded as a thin pass with an explicit Key Decision, not as a quiet close.
+**UI hint**: no
 
 ### Phase 8: Export and the Canonical Arguments
 
@@ -334,7 +411,7 @@ Plans:
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
+Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 7.1 → 8
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -344,12 +421,16 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | 4. First Defensible Backtest in the Browser | 8/8 | In Progress|  |
 | 5. Attribution and the Credibility Surface | 9/9 | Complete    | 2026-08-21 |
 | 6. Heatmap Design Pass | 6/6 | Complete    | 2026-08-21 |
-| 7. Sweep Engine and the Heatmap | 0/TBD | Not started | - |
+| 7. Sweep Engine and the Heatmap | 12/12 | Complete (PERF-03 escalated, not met) | 2026-08-25 |
+| 7.1. Sweep Pool Tuning (INSERTED) | 6/6 | Complete (3/6 criteria met, 3 escalated; PERF-03 merge bar released 2026-08-25) | 2026-08-24 |
 | 8. Export and the Canonical Arguments | 0/TBD | Not started | - |
 
 ## Coverage
 
 All 72 v1 requirements map to exactly one phase. No orphans, no duplicates.
+
+Phase 7.1 (INSERTED) adds no new requirement mapping. It re-measures PERF-03, whose primary
+mapping stays Phase 7, and works under PERF-01a, whose primary mapping stays Phase 1.
 
 | Category | Total | Phase mapping |
 |----------|-------|---------------|

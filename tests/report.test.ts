@@ -241,6 +241,24 @@ describe('assertRunInvariants', () => {
     expect(() => assertRunInvariants(zeroRow, 500, someEnvironment)).not.toThrow()
   })
 
+  test('a row set with one failing budget AND a runtime cap breach throws ONE error containing both the failed-budget substring and the exceeds-cap substring (07.1-02)', () => {
+    const withFailure = fullRowSet.map((r) =>
+      r.budgetId === 'PERF-05' ? { ...r, normalizedMs: 100, verdict: 'fail' as const } : r,
+    )
+    let message = ''
+    let thrownCount = 0
+    try {
+      assertRunInvariants(withFailure, BENCH_TOTAL_RUNTIME_CAP_MS + 1)
+    } catch (error) {
+      thrownCount += 1
+      message = (error as Error).message
+    }
+    expect(thrownCount).toBe(1)
+    expect(message).toMatch(/failed budget/i)
+    expect(message).toMatch(/PERF-05/)
+    expect(message).toMatch(/exceeds/i)
+  })
+
   test('two failing rows supplied in reverse budget-id order produce the same message as ascending order', () => {
     const ascending = fullRowSet.map((r) => {
       if (r.budgetId === 'PERF-05') return { ...r, normalizedMs: 100, verdict: 'fail' as const }

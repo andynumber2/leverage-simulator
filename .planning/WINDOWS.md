@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 0
+open_count: 3
 waived_count: 1
 fixed_count: 4
-total_count: 5
-last_updated: 2026-08-21T01:57:23.313Z
+total_count: 8
+last_updated: 2026-08-23T23:45:14.753Z
 ---
 
 # Broken Windows Ledger
@@ -20,6 +20,9 @@ last_updated: 2026-08-21T01:57:23.313Z
 | 3 | 03 | unmet-truth | tests/validation/upro-tqqq-gate.test.ts |  | VALID-01/02 gate was RED on first run for both UPRO (tracking error 3.164% vs 0.66% tolerance, drift -6.968%) and TQQQ (3.565% vs 0.66%, drift -3.861%); plan 03-06 correctly halted rather than force a D-20 classification. RESOLVED in commit 330724a: the residual was two residuals. (1) Drift was a dividend-convention structural defect in the gate harness, the synthetic being built from the price-return index while compared against the dividend-inclusive fund series -- D-20 outcome 1, synthetic rebuilt from the total-return index, drift moved to +0.254% and +0.399%, D-10 amended in 03-CONTEXT.md. (2) Tracking error was a floor in the reference data itself: each fund's own daily return against 3x its own benchmark, with NO cost model applied, already measures 3.198% and 3.519% annualized, because UPRO/TQQQ are Yahoo market closes rather than NAV -- D-20 outcome 2, the named fund-nav-vs-market-close-pricing-basis mechanism repriced from a reasoned 15bp to that measured 352bp, so TRACKING_ERROR_TOLERANCE recomputed 0.66% -> 3.955% without any tolerance constant being edited directly. No cost parameter was changed at any point (VALID-03 verified from git history by the phase verifier). Gate now GREEN: UPRO TE 3.2149% drift +0.2538%, TQQQ TE 3.5331% drift +0.3986%. Full evidence in 03-GATE-DIAGNOSIS.md | fixed |  | 2026-08-18T04:32:41.779Z | 2026-08-18T04:57:51.944Z |
 | 4 | 04 | deviation | tests/metrics/irr.test.ts |  | Plan's monthly-contribution-schedule test case stated IRR solves strictly below the naive ratio-based return; verified by hand this is backwards for a front-loaded schedule with monotonic growth (later money compounds for less time, so the required annualized rate is higher). Test asserts the mathematically correct direction (IRR greater than naive). | fixed |  | 2026-08-19T19:33:39.696Z | 2026-08-20T04:16:52.275Z |
 | 5 | 05 | deviation | perf-budgets.ts |  | ATTR-01/ATTR-02's counterfactual Shapley decomposition (src/validation/attribution.ts's buildSubsetValues) performs 3 extra runBacktest calls per recompute beyond the 1 base run scheduleRun already makes -- 05-09 Task 1 measured PERF-07b (the recompute this attribution now runs inside of) at 7.90ms normalized, 49.4% of its 16ms budget, this dev-sandbox run (not the D-17 CI baseline), comfortable headroom for a single-run parameter change. PERF-03 (the full 10,000-cell sweep) is already the project's highest-percentage budget: 807.92ms normalized, 80.8% of its 1000ms budget on the D-17 baseline, with a recorded D-20 escalation in PROJECT.md Key Decisions and no budget relaxed. If attribution's per-recompute cost were computed for every heatmap cell rather than once per single-run parameter change, it would multiply the sweep's per-cell kernel work by attribution's own 3-extra-arm (4x total including the base run) factor, landing on the budget with the least headroom in the project. Phase 6 and 7 must therefore decide, not assume: (1) whether the heatmap needs per-cell attribution at all, and (2) if it does, whether that computation belongs in the sweep worker pool rather than on the recompute path. Not decided here -- this phase has no heatmap and no authority over its design. | waived | Not a defect: a forward-looking finding for Phase 6/7 to inherit, per 05-09-PLAN.md Task 2. This phase has no heatmap and no authority to decide whether per-cell attribution belongs in the sweep worker pool -- that decision is explicitly deferred to Phase 6/7, which must read this entry before assuming per-cell attribution is free. | 2026-08-21T01:57:19.129Z | 2026-08-21T01:57:23.313Z |
+| 6 | 07.1 | deviation | bench/sweep-pool-profile.bench.test.ts |  | Rule 3 fix: adapted this 07.1-01-owned diagnostic file to the new CashFlows typed-array shape (irr.ts Lever B) so it kept compiling; not in 07.1-03's declared files_modified. | open |  | 2026-08-23T22:46:51.998Z |  |
+| 7 | 07.1 | deviation | bench/sweep.bench.test.ts |  | 07.1-03 Task 2: raised the solveIrr contribution-schedule arm's sampleCount from 1 to 2 per the plan's acceptance criteria, but this task's own ceiling derivation (Task 1's measured 1.83x local reduction, well short of the profile's 3.14x iteration-count projection) shows N=2 projects to ~7975ms baseline, ~9.2% OVER the arm's own stated 7,303.90ms bench-runtime ceiling. Disclosed in the arm's own info line (runtimeCeilingDisposition=outside) and carried into the Task 3 checkpoint rather than resolved unilaterally. Plan 07.1-06's CI run against the real D-17 baseline settles it. | open |  | 2026-08-23T22:46:57.437Z |  |
+| 8 | 07.1 | deviation | bench/sweep-contention.bench.test.ts |  | 07.1-05 Task 1: read the plan's 'keep the cold-versus-warm pair' instruction as keeping the warm/cold STRUCTURE, not the warm sweep's exact size, and narrowed both the warm-baseline and in-flight sweeps to a shared CONTENTION_COLS axis rather than only the in-flight one -- a literal-only reading would have left the arm's budget unreachable in principle. Disclosed in 07.1-05-SUMMARY.md's Deviations section. | open |  | 2026-08-23T23:45:14.753Z |  |
 
 ````json
 [
@@ -82,6 +85,42 @@ last_updated: 2026-08-21T01:57:23.313Z
     "reason": "Not a defect: a forward-looking finding for Phase 6/7 to inherit, per 05-09-PLAN.md Task 2. This phase has no heatmap and no authority to decide whether per-cell attribution belongs in the sweep worker pool -- that decision is explicitly deferred to Phase 6/7, which must read this entry before assuming per-cell attribution is free.",
     "recorded_at": "2026-08-21T01:57:19.129Z",
     "resolved_at": "2026-08-21T01:57:23.313Z"
+  },
+  {
+    "id": 6,
+    "kind": "deviation",
+    "phase": "07.1",
+    "file": "bench/sweep-pool-profile.bench.test.ts",
+    "line": null,
+    "description": "Rule 3 fix: adapted this 07.1-01-owned diagnostic file to the new CashFlows typed-array shape (irr.ts Lever B) so it kept compiling; not in 07.1-03's declared files_modified.",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-23T22:46:51.998Z",
+    "resolved_at": null
+  },
+  {
+    "id": 7,
+    "kind": "deviation",
+    "phase": "07.1",
+    "file": "bench/sweep.bench.test.ts",
+    "line": null,
+    "description": "07.1-03 Task 2: raised the solveIrr contribution-schedule arm's sampleCount from 1 to 2 per the plan's acceptance criteria, but this task's own ceiling derivation (Task 1's measured 1.83x local reduction, well short of the profile's 3.14x iteration-count projection) shows N=2 projects to ~7975ms baseline, ~9.2% OVER the arm's own stated 7,303.90ms bench-runtime ceiling. Disclosed in the arm's own info line (runtimeCeilingDisposition=outside) and carried into the Task 3 checkpoint rather than resolved unilaterally. Plan 07.1-06's CI run against the real D-17 baseline settles it.",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-23T22:46:57.437Z",
+    "resolved_at": null
+  },
+  {
+    "id": 8,
+    "kind": "deviation",
+    "phase": "07.1",
+    "file": "bench/sweep-contention.bench.test.ts",
+    "line": null,
+    "description": "07.1-05 Task 1: read the plan's 'keep the cold-versus-warm pair' instruction as keeping the warm/cold STRUCTURE, not the warm sweep's exact size, and narrowed both the warm-baseline and in-flight sweeps to a shared CONTENTION_COLS axis rather than only the in-flight one -- a literal-only reading would have left the arm's budget unreachable in principle. Disclosed in 07.1-05-SUMMARY.md's Deviations section.",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-23T23:45:14.753Z",
+    "resolved_at": null
   }
 ]
 ````

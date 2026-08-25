@@ -1,8 +1,11 @@
 /**
  * tests/field-sampler.test.ts: 06-03-PLAN.md Task 1, pure determinism and interpolation
- * assertions for `mockups/shared/field-sampler.ts`'s two rendering primitives, against analytic
+ * assertions for `src/heatmap/field-sampler.ts`'s two rendering primitives, against analytic
  * fields, in the style `tests/canvas-grid.test.ts` uses. Runs in the fast Node `unit` project:
  * `field-sampler.ts` has no DOM dependency.
+ *
+ * 07-01-PLAN.md Task 1, D-11: import path updated after `field-sampler.ts` graduated from
+ * `.planning/phases/06-heatmap-design-pass/mockups/shared/` to `src/heatmap/`.
  */
 
 import { describe, expect, test } from 'vitest'
@@ -13,8 +16,15 @@ import {
   type SweepFixture,
   type SweepFixtureMeta,
 } from '../src/data/sweep-fixture-format.ts'
-import { DOMAIN_LOG_MAX, DOMAIN_LOG_MIN, rampPositionFor } from '../src/colorscale/value-to-color.ts'
-import { BAND_LEVELS, bandIndexFor, resampleField, sampleField } from '../.planning/phases/06-heatmap-design-pass/mockups/shared/field-sampler.ts'
+import {
+  bandLevelsForMetric,
+  DOMAIN_LOG_MAX,
+  DOMAIN_LOG_MIN,
+  interpolateRamp,
+  interpolateSequentialRamp,
+  rampPositionFor,
+} from '../src/colorscale/value-to-color.ts'
+import { BAND_LEVELS, bandIndexFor, resampleField, sampleField } from '../src/heatmap/field-sampler.ts'
 
 function makeMeta(cols: number, rows: number): SweepFixtureMeta {
   return {
@@ -278,5 +288,61 @@ describe('sampleField: nearest-cell tie rule (edge assumption A-E3)', () => {
 
     const sample = sampleField(fixture, 'multiple', 0.5, 0)
     expect(sample.categorical).toBe('ruined')
+  })
+})
+
+// -------------------------------------------------------------------------------------------
+// 07-02-PLAN.md Task 3: field-sampler.ts routes by metric through value-to-color.ts instead of
+// choosing a ramp or a band-boundary array itself.
+// -------------------------------------------------------------------------------------------
+
+describe('sampleField: routes through the correct ramp per metric', () => {
+  test('a drawdown field samples through the sequential ramp and a multiple field through the diverging one, at the same numeric value', () => {
+    const cols = 4
+    const rows = 4
+    const value = 0.4
+    const multiples = new Float32Array(cols * rows).fill(value)
+    const drawdowns = new Float32Array(cols * rows).fill(value)
+    const fixture: SweepFixture = {
+      cols,
+      rows,
+      meta: makeMeta(cols, rows),
+      multiples,
+      drawdowns,
+      flags: new Uint8Array(cols * rows),
+    }
+
+    const multipleSample = sampleField(fixture, 'multiple', 1, 1)
+    const drawdownSample = sampleField(fixture, 'drawdown', 1, 1)
+
+    expect(multipleSample.categorical).toBeNull()
+    expect(drawdownSample.categorical).toBeNull()
+    // The multiple metric routes 0.4 through the symlog transform; the drawdown metric routes it
+    // through a linear transform over [0, 0.8] -- the two ramp positions must differ.
+    expect(multipleSample.rampPosition).not.toBeCloseTo(drawdownSample.rampPosition, 6)
+
+    // The same numeric value samples to different colours under 'multiple' (diverging ramp) and
+    // under 'drawdown' (sequential ramp) -- each metric's own ramp position through its own ramp
+    // family, not a coincidental band-quantised comparison.
+    const multipleColour = interpolateRamp(multipleSample.rampPosition)
+    const drawdownColour = interpolateSequentialRamp(drawdownSample.rampPosition)
+    expect(multipleColour).not.toEqual(drawdownColour)
+  })
+})
+
+describe('bandLevelsForMetric: drawdown boundaries match field-sampler.ts own tie rule', () => {
+  test('bandLevelsForMetric("drawdown") is strictly ascending, starting at 0 and ending at 1', () => {
+    const levels = bandLevelsForMetric('drawdown')
+    expect(levels[0]).toBe(0)
+    expect(levels[levels.length - 1]).toBe(1)
+    for (let i = 1; i < levels.length; i++) {
+      expect(levels[i]!, `levels[${i}] must exceed levels[${i - 1}]`).toBeGreaterThan(levels[i - 1]!)
+    }
+  })
+
+  test('a value exactly equal to a drawdown interior boundary resolves to the UPPER band, matching the multiple metric tie rule', () => {
+    const levels = bandLevelsForMetric('drawdown')
+    const boundary = levels[1]!
+    expect(bandIndexFor(boundary, levels)).toBe(1)
   })
 })

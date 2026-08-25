@@ -94,6 +94,10 @@ const VALID_PARAMS: PermalinkParams = {
   tier: 'strict',
   scale: 'log',
   bundleVersion: '0123456789ab',
+  // 07-06-PLAN.md Task 1: PermalinkParams' two new fields -- this suite tests the methodology
+  // overlay flag, unaffected by either.
+  mode: 'single',
+  metric: 'multiple',
 }
 
 function withMethodologyFlag(qs: string): string {

@@ -12,6 +12,13 @@
  * `src/app/theme.ts` pulls in `solid-js`, which `vite dev` already resolves as an existing
  * dependency and which never reaches `vite build`'s output (this whole directory is outside the
  * root `index.html` entry graph, per this plan's "Resolved before execution" note 1).
+ *
+ * 07-01-PLAN.md Task 1, D-11/Pitfall 7: `makeHatchPattern`, `integerLeverageTicks` and
+ * `VIZ10_CAVEAT_SENTENCES` graduated out to `src/heatmap/hatch-pattern.ts` and
+ * `src/heatmap/sweep-copy.ts` and are re-imported from there, so each has exactly one definition
+ * shared with Phase 7's production renderer. `renderLegend`, `renderCaveat`, `mountMockup` and
+ * `loadSweepFixture` stay here: they are DOM/fetch-facing mockup-page scaffolding, not pure
+ * geometry or copy.
  */
 
 import '../../../../../src/app/styles.css'
@@ -31,21 +38,15 @@ import {
   RUIN_BASE_RGBA,
   rampPositionFor,
   valueToColor,
-  type Rgba,
 } from '../../../../../src/colorscale/value-to-color.ts'
 import { decodeSweepFixture, type SweepFixture } from '../../../../../src/data/sweep-fixture-format.ts'
+import { integerLeverageTicks, makeHatchPattern } from '../../../../../src/heatmap/hatch-pattern.ts'
+import { VIZ10_CAVEAT_SENTENCES } from '../../../../../src/heatmap/sweep-copy.ts'
 
 const DOMAIN_MIN_MULTIPLE = 10 ** DOMAIN_LOG_MIN
 const DOMAIN_MAX_MULTIPLE = 10 ** DOMAIN_LOG_MAX
 
-/** D-22: reframe first, then name the overlap mechanism, within the two-sentence structure
- * D-22 locks. The exact wording is Claude's discretion; the string "independent backtests" must
- * never appear anywhere in it (PITFALLS D5). */
-export const VIZ10_CAVEAT_SENTENCES: readonly [string, string] = [
-  'The same market history, viewed from every possible starting point.',
-  'Adjacent columns share nearly all their data, so this is a sensitivity analysis over one ' +
-    'past, not 10,000 independent trials.',
-]
+export { VIZ10_CAVEAT_SENTENCES, integerLeverageTicks, makeHatchPattern }
 
 /**
  * UI-SPEC E1 error: replaces the entire page body with a visible, non-blank failure block naming
@@ -104,48 +105,6 @@ export function renderCaveat(container: HTMLElement): void {
   p.style.color = 'var(--color-text)'
   p.textContent = VIZ10_CAVEAT_SENTENCES.join(' ')
   container.appendChild(p)
-}
-
-/**
- * D-18: builds a `CanvasPattern` from a small offscreen tile filled with `rgba` and overdrawn
- * with 45-degree strokes at a 6-display-pixel period and a 2px stroke width (F-03's geometry,
- * Claude's discretion). Three half-overlapping diagonal segments per tile (the main corner-to-
- * corner line plus one partial segment at each of the other two corners) are what keep the
- * diagonal visually continuous once the tile repeats -- a single corner-to-corner stroke alone
- * would break at every tile boundary. Defined in DISPLAY pixels and applied as a fill (typically
- * under a clip path over the union of flagged cells), so it stays legible at any form's own cell
- * size (D-12).
- */
-export function makeHatchPattern(ctx: CanvasRenderingContext2D, rgba: Rgba): CanvasPattern {
-  const period = 6
-  const tile = document.createElement('canvas')
-  tile.width = period
-  tile.height = period
-  const tileCtx = tile.getContext('2d')
-  if (!tileCtx) {
-    throw new Error('mockup-runtime: 2D context unavailable for the hatch tile')
-  }
-
-  const [r, g, b, a] = rgba
-  tileCtx.fillStyle = `rgba(${r}, ${g}, ${b}, ${a / 255})`
-  tileCtx.fillRect(0, 0, period, period)
-
-  tileCtx.strokeStyle = 'rgba(255, 255, 255, 0.4)'
-  tileCtx.lineWidth = 2
-  tileCtx.beginPath()
-  tileCtx.moveTo(0, period)
-  tileCtx.lineTo(period, 0)
-  tileCtx.moveTo(-period / 2, period / 2)
-  tileCtx.lineTo(period / 2, -period / 2)
-  tileCtx.moveTo(period / 2, period * 1.5)
-  tileCtx.lineTo(period * 1.5, period / 2)
-  tileCtx.stroke()
-
-  const pattern = ctx.createPattern(tile, 'repeat')
-  if (!pattern) {
-    throw new Error('mockup-runtime: createPattern returned null for the hatch tile')
-  }
-  return pattern
 }
 
 const SWATCH_SIZE_PX = 16
@@ -296,57 +255,6 @@ export function renderLegend(container: HTMLElement, width: number): void {
   legend.appendChild(swatchesRow)
 
   container.appendChild(legend)
-}
-
-/**
- * The fractional fixture row (0 at `leverages[0]`, `leverages.length - 1` at the last entry)
- * whose value equals `target`, via linear interpolation between the two entries bracketing it.
- * Assumes `leverages` is monotonically ascending (D-08's fixture construction), but does NOT
- * assume EVEN spacing between rows -- this still works if a future fixture's leverage axis is
- * not evenly stepped. Out-of-range `target` clamps to the nearest end index rather than
- * extrapolating.
- */
-export function fixtureRowForLeverage(leverages: readonly number[], target: number): number {
-  const n = leverages.length
-  if (n === 0) return 0
-  const first = leverages[0]!
-  const last = leverages[n - 1]!
-  if (target <= first) return 0
-  if (target >= last) return n - 1
-  for (let i = 0; i < n - 1; i++) {
-    const a = leverages[i]!
-    const b = leverages[i + 1]!
-    if (target >= a && target <= b) {
-      const span = b - a
-      const t = span === 0 ? 0 : (target - a) / span
-      return i + t
-    }
-  }
-  return n - 1
-}
-
-/**
- * Integer leverage values spanning `leverages`' own actual range (`Math.ceil` of the minimum to
- * `Math.floor` of the maximum, inclusive), each paired with its fractional fixture row position
- * via `fixtureRowForLeverage`. D-08 fixes 50 rows over 1x-5x, but this derives the label set and
- * placement from the fixture's own meta rather than hardcoding either the row count or the 1/5
- * bounds, so it stays correct if D-08's own range is ever revisited. Integer leverages do NOT, in
- * general, land on exact row indices (1x-5x over 50 rows steps by 4/49), so callers place each
- * label by interpolating its VALUE to a pixel position, never by picking a nearest row.
- */
-export function integerLeverageTicks(
-  leverages: readonly number[],
-): ReadonlyArray<{ leverage: number; rowF: number }> {
-  if (leverages.length === 0) return []
-  const first = leverages[0]!
-  const last = leverages[leverages.length - 1]!
-  const start = Math.ceil(first)
-  const end = Math.floor(last)
-  const ticks: Array<{ leverage: number; rowF: number }> = []
-  for (let leverage = start; leverage <= end; leverage++) {
-    ticks.push({ leverage, rowF: fixtureRowForLeverage(leverages, leverage) })
-  }
-  return ticks
 }
 
 /** A form's own display geometry (D-12): pixel size of its canvas and the logical cell grid it
