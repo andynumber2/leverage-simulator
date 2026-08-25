@@ -2,18 +2,18 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_phase: "07.1"
-current_phase_name: sweep-pool-tuning-inserted
+current_phase: 07.1
 status: ready
-stopped_at: "PERF-03 merge bar released by Key Decision; Phase 7/7.1 shipped; Phase 8 unblocked"
-last_updated: "2026-08-24T03:20:48.204Z"
-last_activity: 2026-08-24
-last_activity_desc: PERF-03 merge bar released under PERF-01a; PR 8 merged to main, PR 7 auto-merged as contained
+stopped_at: Phase 8 context gathered
+last_updated: "2026-08-25T19:29:50.907Z"
+last_activity: 2026-08-25, PERF-03 bar released, PR 8 merged to main (e23d5d0), PR 7 auto-resolved
 progress:
-  total_phases: 8
-  completed_phases: 6
+  total_phases: 9
+  completed_phases: 8
   total_plans: 61
   completed_plans: 61
+current_phase_name: sweep-pool-tuning-inserted
+last_activity_desc: PERF-03 merge bar released under PERF-01a; PR 8 merged to main, PR 7 auto-merged as contained
 ---
 
 # Project State
@@ -198,9 +198,9 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-08-24T03:20:48.179Z
-Stopped at: Completed quick-260824-46s: measured PERF-03 lever 1, refuted
-Resume file: None
+Last session: 2026-08-25T19:29:50.869Z
+Stopped at: Phase 8 context gathered
+Resume file: .planning/phases/08-export-and-the-canonical-arguments/08-CONTEXT.md
 
 ### Where things stand
 
@@ -237,17 +237,21 @@ Unspent levers for PERF-03, after two measurement tasks on 2026-08-24:
 1. The kernel's write-only per-bar output arrays. MEASURED and REFUTED (quick-260824-46s):
    five-sample A/B ratio min=0.9810 median=0.9841 max=0.9904, roughly 1-2% of kernel compute.
    Not spent; `backtest.ts` stays byte-identical.
+
 2. Pool and dispatch overhead. MEASURED and EXHAUSTED (quick-260824-52h): allocation, merge and
    wire total 0.14ms across the whole 10,000-cell grid, drain imbalance 7.50ms,
    concurrencyFactor 1.05. There is no meaningful pool-overhead lever left to spend.
+
 3. D-03's coarser default grid. Still unspent and still held in reserve. It does not close the
    number, it redefines what the number measures, and `.claude/CLAUDE.md` states the sweep as
    "~10,000 backtests" in the project's own constraints.
+
 4. Newton-with-bisection-fallback for `solveIrr`, scoped to the sweep call site. Reopens D-08,
    so it needs its own Key Decision. Cannot affect the gated headline: the zero-contribution
    branch has no cash flows and never calls `solveIrr`. Worth doing on its own merits, since
    `npvEvaluationsPerSolve` measured 105.01 against a Newton expectation near 10, and that
    branch makes contribution-schedule users wait roughly 4 seconds.
+
 5. Real per-cell kernel compute at the 17-column chunk shape. MEASURED and REFUTED
    (quick-260824-r5d): nine arms, combined bit-preserving ratio min=0.9740 median=1.0036
    max=1.1012, clearing neither the 21.3% nor the 10.8% threshold at any measured point. Six of
