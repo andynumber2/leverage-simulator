@@ -30,13 +30,13 @@ measured in CI, not an aspiration.
 - [ ] **PERF-03**: A full sweep (10,000 cells) completes in under 1000ms on a 4-core baseline
       machine, measured wall-clock from user action to final cell
 
-- [ ] **PERF-04**: A sweep paints its first partial results within 100ms and repaints
+- [x] **PERF-04**: A sweep paints its first partial results within 100ms and repaints
       progressively as cells complete, so the user never faces a blank pane with a spinner
 
-- [ ] **PERF-05**: Changing the heatmap's displayed metric re-colors the cached grid in under
+- [x] **PERF-05**: Changing the heatmap's displayed metric re-colors the cached grid in under
       16ms and never triggers a re-sweep
 
-- [ ] **PERF-06**: An in-flight sweep is cancelled within one frame when the user changes a
+- [x] **PERF-06**: An in-flight sweep is cancelled within one frame when the user changes a
       parameter, and superseded results are discarded rather than painted
 
 - [x] **PERF-07**: No main-thread task exceeds 50ms during any interaction, verified by long-task
@@ -45,7 +45,7 @@ measured in CI, not an aspiration.
 - [x] **PERF-08**: Cold load reaches interactive in under 1500ms and completes data load and
       decode in under 1000ms on a typical broadband connection; warm load is under 300ms
 
-- [ ] **PERF-09**: Heatmap pan and zoom sustain 60fps at full cell count
+- [x] **PERF-09**: Heatmap pan and zoom sustain 60fps at full cell count
 - [x] **PERF-10**: A benchmark suite runnable locally with one command reports all of the above,
       so performance is checkable at any point during development rather than only in CI
 
@@ -146,7 +146,7 @@ measured in CI, not an aspiration.
 - [x] **METR-05**: A ruin flag is computed and reported, and is presented as a categorical outcome
       distinct from a merely bad numeric result
 
-- [ ] **METR-06**: A sweep computes all display metrics per cell in a single pass, so switching the
+- [x] **METR-06**: A sweep computes all display metrics per cell in a single pass, so switching the
       displayed metric is a re-color rather than a re-run
 
 ### Attribution
@@ -162,27 +162,27 @@ measured in CI, not an aspiration.
 
 ### Visualization
 
-- [ ] **VIZ-01**: Fixed leverage, sweep entry date: a chart showing how outcome varies by when you
+- [x] **VIZ-01**: Fixed leverage, sweep entry date: a chart showing how outcome varies by when you
       started
 
-- [ ] **VIZ-02**: Fixed entry date, sweep leverage: a chart showing how outcome varies by how much
+- [x] **VIZ-02**: Fixed entry date, sweep leverage: a chart showing how outcome varies by how much
       leverage you took
 
-- [ ] **VIZ-03**: A 2D heatmap over entry date and leverage, colored by the selected outcome metric
-- [ ] **VIZ-04**: A sweep-mode toggle between fixed holding period and hold-to-today, with the
+- [x] **VIZ-03**: A 2D heatmap over entry date and leverage, colored by the selected outcome metric
+- [x] **VIZ-04**: A sweep-mode toggle between fixed holding period and hold-to-today, with the
       chart stating which mode produced it
 
 - [x] **VIZ-05**: The heatmap design is validated against throwaway mockups before implementation,
       since no existing tool pairs these axes and there is no pattern to copy
 
-- [ ] **VIZ-06**: Ruined cells are rendered categorically distinct from the continuous color
+- [x] **VIZ-06**: Ruined cells are rendered categorically distinct from the continuous color
       scale, never as merely the darkest end of it
 
 - [x] **VIZ-07**: Color scales are perceptually uniform and colorblind-safe, and outcomes spanning
       orders of magnitude use a log or otherwise non-linear mapping rather than linear color
 
 - [x] **VIZ-08**: Equity curves offer a log scale, and the choice of scale is visible
-- [ ] **VIZ-09**: In hold-to-today mode, the short-horizon artifact at the recent edge is visually
+- [x] **VIZ-09**: In hold-to-today mode, the short-horizon artifact at the recent edge is visually
       marked, so the right side of the chart is not read as comparable to the left
 
 - [x] **VIZ-10**: The heatmap carries visible copy stating that entry windows overlap and that the
@@ -271,18 +271,39 @@ measured in CI, not an aspiration.
 
 ## Traceability
 
+> **Reconciliation, 2026-08-25.** Eleven Phase 7 requirements (PERF-04, PERF-05, PERF-06, PERF-09,
+> METR-06, VIZ-01, VIZ-02, VIZ-03, VIZ-04, VIZ-06, VIZ-09) were marked complete here. They had read
+> `[ ]` / Pending since Phase 7 closed, not because they were unmet, but because 07-VERIFICATION.md
+> found the phase could not close against its own roadmap contract while PERF-03 failed, and the
+> checkboxes were held with it. PERF-03's disposition is now settled by the "PERF-03 merge bar
+> released" Key Decision in PROJECT.md, so the other eleven were reconciled against evidence rather
+> than left blocked behind it.
+>
+> Evidence used, verified independently rather than carried forward from the report:
+> - PERF-04 (48.90ms of 100ms), PERF-05 (10.37ms of 16ms), PERF-06 (0.01ms of 16ms) and PERF-09
+>   (1.75ms of 16ms) all measured `verdict=pass`, `source=production`, `hardwareConcurrency=4` on
+>   the real D-17 baseline in CI run 32686531154, against the merged code. This is a current
+>   measurement, not the "carried forward, unchanged" citation 07-VERIFICATION.md used.
+> - METR-06 and the six VIZ requirements rest on the named test files in 07-VERIFICATION.md's
+>   Requirements Coverage table. All seven files were confirmed present, and both suites were
+>   re-run green at reconciliation time: 819/819 unit, 170/170 app, `npm run typecheck` exit 0.
+>
+> PERF-03 stays `[ ]` and stays Escalated. It is not met, is not claimed met, and its budget is
+> unchanged at 1000ms.
+
+
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | PERF-01 | Phase 1 | Complete |
 | PERF-01a | Phase 1 | Complete |
 | PERF-02 | Phase 3 | Complete |
 | PERF-03 | Phase 7, re-measured and escalated in Phase 7.1, lever list exhausted 2026-08-25 | Escalated, NOT MET, and no longer blocking. Five levers measured and refuted (WASM, worker width 4, per-bar output arrays, pool overhead, per-cell kernel compute). Budget stays 1000ms. See PROJECT.md's "PERF-03 merge bar released" Key Decision |
-| PERF-04 | Phase 7 | Pending |
-| PERF-05 | Phase 7 | Pending |
-| PERF-06 | Phase 7 | Pending |
+| PERF-04 | Phase 7 | Complete |
+| PERF-05 | Phase 7 | Complete |
+| PERF-06 | Phase 7 | Complete |
 | PERF-07 | Phase 4 | Complete |
 | PERF-08 | Phase 4 | Complete |
-| PERF-09 | Phase 7 | Pending |
+| PERF-09 | Phase 7 | Complete |
 | PERF-10 | Phase 1 | Complete |
 | PERF-11 | Phase 1 | Complete |
 | DATA-01 | Phase 2 | Complete |
@@ -315,19 +336,19 @@ measured in CI, not an aspiration.
 | METR-03 | Phase 4 | Complete |
 | METR-04 | Phase 4 | Complete |
 | METR-05 | Phase 4 | Complete |
-| METR-06 | Phase 7 | Pending |
+| METR-06 | Phase 7 | Complete |
 | ATTR-01 | Phase 5 | Complete |
 | ATTR-02 | Phase 5 | Complete |
 | ATTR-03 | Phase 5 | Complete |
-| VIZ-01 | Phase 7 | Pending |
-| VIZ-02 | Phase 7 | Pending |
-| VIZ-03 | Phase 7 | Pending |
-| VIZ-04 | Phase 7 | Pending |
+| VIZ-01 | Phase 7 | Complete |
+| VIZ-02 | Phase 7 | Complete |
+| VIZ-03 | Phase 7 | Complete |
+| VIZ-04 | Phase 7 | Complete |
 | VIZ-05 | Phase 6 | Complete |
-| VIZ-06 | Phase 7 | Pending |
+| VIZ-06 | Phase 7 | Complete |
 | VIZ-07 | Phase 6 | Complete |
 | VIZ-08 | Phase 4 | Complete |
-| VIZ-09 | Phase 7 | Pending |
+| VIZ-09 | Phase 7 | Complete |
 | VIZ-10 | Phase 6 | Complete |
 | VIZ-11 | Phase 4 | Complete |
 | CRED-01 | Phase 5 | Complete |

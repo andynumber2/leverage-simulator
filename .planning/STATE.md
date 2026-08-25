@@ -40,6 +40,13 @@ Status: READY for Phase 8
   FAILED and is not claimed met. Only the two-consecutive-pass MERGE BAR was released, so the
   milestone stops blocking behind a budget no available lever can reach.
 Next: Phase 8 (export and the canonical arguments). Run /gsd-discuss-phase 8 to begin.
+  Requirements reconciled 2026-08-25: the eleven Phase 7 requirements that had read Pending only
+  because PERF-03 held the phase open (PERF-04/05/06/09, METR-06, VIZ-01/02/03/04/06/09) are now
+  marked complete against real evidence. PERF-04, 05, 06 and 09 measured verdict=pass,
+  source=production, hardwareConcurrency=4 on CI run 32686531154 against the merged code; the
+  rest rest on named test files, all present, with 819/819 unit and 170/170 app green.
+  v1.0 now owes exactly four requirements: SHARE-04, SHARE-05, SHARE-06 (all Phase 8), and
+  PERF-03, which stays unmet by decision.
 Last activity: 2026-08-25, PERF-03 bar released, PR 8 merged to main (e23d5d0), PR 7 auto-resolved
 
 Progress: [████████░░] 75%  (6 of 8 roadmap phases complete)
