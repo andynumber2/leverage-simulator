@@ -421,8 +421,8 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 7.1 �
 | 4. First Defensible Backtest in the Browser | 8/8 | In Progress|  |
 | 5. Attribution and the Credibility Surface | 9/9 | Complete    | 2026-08-21 |
 | 6. Heatmap Design Pass | 6/6 | Complete    | 2026-08-21 |
-| 7. Sweep Engine and the Heatmap | 12/12 | In Progress|  |
-| 7.1. Sweep Pool Tuning (INSERTED) | 6/6 | Executed (3/6 criteria met, 3 escalated) | 2026-08-24 |
+| 7. Sweep Engine and the Heatmap | 12/12 | Complete (PERF-03 escalated, not met) | 2026-08-25 |
+| 7.1. Sweep Pool Tuning (INSERTED) | 6/6 | Complete (3/6 criteria met, 3 escalated; PERF-03 merge bar released 2026-08-25) | 2026-08-24 |
 | 8. Export and the Canonical Arguments | 0/TBD | Not started | - |
 
 ## Coverage

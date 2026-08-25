@@ -4,11 +4,11 @@ milestone: v1.0
 milestone_name: milestone
 current_phase: "07.1"
 current_phase_name: sweep-pool-tuning-inserted
-status: blocked
-stopped_at: "Completed quick-260824-r5d: PERF-03 measured unreachable by every lever tested; awaiting user decision on the merge bar"
+status: ready
+stopped_at: "PERF-03 merge bar released by Key Decision; Phase 7/7.1 shipped; Phase 8 unblocked"
 last_updated: "2026-08-24T03:20:48.204Z"
 last_activity: 2026-08-24
-last_activity_desc: Completed quick-260824-r5d, kernel compute measured not reducible; PERF-03 lever list exhausted
+last_activity_desc: PERF-03 merge bar released under PERF-01a; PR 8 merged, PR 7 closed
 progress:
   total_phases: 8
   completed_phases: 6
@@ -23,44 +23,24 @@ progress:
 See: .planning/PROJECT.md (updated 2026-08-16)
 
 **Core value:** Given a symbol, a leverage level, an entry point, and a contribution schedule, produce a defensible outcome and show which mechanism consumed the money, in a form that can be pasted into an argument.
-**Current focus:** Phase 07.1 closed with PERF-03 escalated. Decision pending: spend a named lever, or accept the escalation and move to Phase 8.
+**Current focus:** Phase 8 (export and the canonical arguments). PERF-03 is a standing, documented escalation and no longer blocks.
 
 ## Current Position
 
-Phase: 07.1 (sweep-pool-tuning-inserted) — EXECUTED AND CLOSED, 6/6 plans complete
-Status: BLOCKED on a user decision, not on work in flight
-  Roadmap criteria 1, 3, 6 met. Criteria 2, 4, 5 escalated with named levers, all four
-  escalations recorded in PROJECT.md Key Decisions.
-  PERF-03 headline is FAILING on the D-17 4-core baseline: five production runs at
-  1120.86, 1208.38, 1115.92, 1191.34 (width 4), 1411.05ms normalized against 1000ms.
-  The solveIrr branch sits at roughly 3900-3992ms, still ~3.9x over the same budget.
-  Nothing was relaxed to get there; git diff against 7c21f0b proves no budget,
-  calibration constant, cap, or grid dimension moved.
-Next: USER DECISION on the merge bar. The lever list is now EXHAUSTED. Three measurement
-  tasks ran 2026-08-24 and all three refuted their lever:
-  - quick-260824-46s: the kernel's write-only per-bar output arrays. Ratio 0.9810-0.9904,
-    roughly 1-2% of kernel compute. REFUTED.
-  - quick-260824-52h: the 273.98ms residual. Not a poolable-away overhead at all. Allocation,
-    merge and wire total 0.14ms across the whole grid; drain imbalance 7.50ms;
-    concurrencyFactor 1.05. Real per-chunk computeMs over workerCount explains 98.3% of wall
-    clock. spanRatio=0.51 proved the residual was substantially an artifact of PROFILE.md's own
-    2-column-span extrapolation; correcting it GROWS the residual to a projected 691.16ms.
-    REFUTED, and no pool lever remains.
-  - quick-260824-r5d: per-cell kernel compute at the real 17-column chunk span. Nine arms, six
-    bit-preserving candidates stacked. Combined ratio min=0.9740 median=1.0036 max=1.1012.
-    Six of eight arms measured SLOWER than the shipped kernel at the median. REFUTED.
-  The precomputed decision rule (rCombined <= 0.7833 clears the robust 21.3% threshold,
-  <= 0.8907 clears the weaker 10.8% one) is missed at EVERY measured point including the single
-  best round. The 1000ms PERF-03 budget is measured unreachable on the D-17 4-core host by pool
-  tuning, worker count, per-bar output arrays, and per-cell kernel compute itself.
-  The two remaining named levers cannot change this: D-03's coarser grid redefines what the
-  number measures rather than closing it, and Newton-with-bisection for solveIrr cannot touch
-  the gated zero-contribution branch, which has no cash flows.
-  The decision is therefore between releasing the merge bar under an explicit PERF-01a Key
-  Decision, or leaving Phase 8 and main blocked behind a budget nothing tested can reach.
-  PRs #7 and #8 stay unmerged until the two-consecutive-pass bar is met or the bar is
-  explicitly released by a Key Decision under PERF-01a.
-Last activity: 2026-08-24, quick-260824-r5d: kernel compute measured not reducible
+Phase: 07.1 complete. PERF-03 merge bar RELEASED 2026-08-25 by explicit Key Decision under PERF-01a.
+Status: READY for Phase 8
+  The 1000ms PERF-03 budget is measured unreachable on the D-17 4-core host. Five levers
+  measured and refuted: WASM (1.20x slower, 01-04), worker width 4 (zero, 07.1-06), per-bar
+  output arrays (1-2%, quick-260824-46s), pool and dispatch overhead (0.14ms across the whole
+  grid, quick-260824-52h), and per-cell kernel compute itself (combined ratio median 1.0036,
+  six of eight arms slower than shipped, quick-260824-r5d).
+  Nothing was relaxed to get here. PERF-03.thresholdMs stays 1000, NOMINAL_REFERENCE_MS stays
+  40, BENCH_TOTAL_RUNTIME_CAP_MS stays 30000, the grid stays 200x50, and
+  src/kernel/backtest.ts is byte-identical across all three measurement tasks. PERF-03 remains
+  FAILED and is not claimed met. Only the two-consecutive-pass MERGE BAR was released, so the
+  milestone stops blocking behind a budget no available lever can reach.
+Next: Phase 8 (export and the canonical arguments). Run /gsd-discuss-phase 8 to begin.
+Last activity: 2026-08-25, PERF-03 bar released, PR 8 merged, PR 7 closed
 
 Progress: [████████░░] 75%  (6 of 8 roadmap phases complete)
 
