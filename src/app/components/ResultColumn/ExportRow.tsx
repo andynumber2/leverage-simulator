@@ -19,16 +19,28 @@
  *
  * 08-02-PLAN.md: Export CSV has no confirmed state (D-23: a download has no clipboard-style
  * silent-success ambiguity to confirm -- the browser's own download UI is the confirmation), so
- * its state union is `idle`/`failed` only.
+ * its state union is `idle`/`failed` only. Its handler calls `flushPermalinkUrl()` synchronously,
+ * the same discipline `CopyLinkButton.tsx`'s header documents and for the same reason: an export
+ * issued during or immediately after a drag must not embed a URL from before the drag settled.
  */
 
 import { createSignal, Show } from 'solid-js'
 
 import { fromDaysSinceEpoch } from '../../../../tools/bundle-compiler/src/calendar.ts'
 import { buildCsvBlob, csvFilename } from '../../../export/csv-export.ts'
+import { buildPreambleLines } from '../../../export/csv-preamble.ts'
 import { triggerDownload } from '../../../export/download.ts'
 import { exportRegionAsPng, pngFilename } from '../../../export/png-export.ts'
-import { currentKernelInputs, currentKernelResult, loadedBundle } from '../../state.ts'
+import {
+  activeTier,
+  backtestRequest,
+  currentKernelInputs,
+  currentKernelResult,
+  displayedMetric,
+  flushPermalinkUrl,
+  loadedBundle,
+  scaleMode,
+} from '../../state.ts'
 import { CopyLinkButton } from '../ParameterColumn/CopyLinkButton.tsx'
 
 type ExportPngState = 'idle' | 'confirmed' | 'failed'
@@ -123,9 +135,28 @@ export function ExportRow() {
       dates.push(fromDaysSinceEpoch(bundle.calendar[runWindow.entryIndex + i] ?? 0))
     }
 
+    // D-22/CopyLinkButton.tsx discipline: forces any pending trailing-edge-debounced permalink
+    // write to happen synchronously, right now, before the URL below is read.
+    flushPermalinkUrl()
+    const permalinkUrl = window.location.href
+    const preambleLines = buildPreambleLines(
+      inputs,
+      backtestRequest(),
+      activeTier(),
+      scaleMode(),
+      // 08-CONTEXT.md D-08: CSV export is single-run only, so the preamble's own `mode` value is
+      // always 'single' regardless of what resultMode() reads at click time -- the exported file
+      // describes the single run it actually contains, never a mode the button cannot be clicked
+      // from.
+      'single',
+      displayedMetric(),
+      permalinkUrl,
+      bundle.manifest,
+    )
+
     try {
       const blob = await buildCsvBlob({
-        preambleLines: [],
+        preambleLines,
         dates,
         returns,
         shortRate,

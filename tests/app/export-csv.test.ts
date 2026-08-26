@@ -4,12 +4,26 @@
  * 08-02-PLAN.md Task 1: `buildCsv`'s behaviour, run directly against the pure function in the
  * Node `unit` project (no Worker, no `postMessage` boundary -- `csv.worker.ts`'s own
  * `typeof self` guard is what makes this importable here).
+ *
+ * 08-02-PLAN.md Task 2: `buildPreambleLines`'s behaviour against the real committed bundle, and
+ * roadmap criterion 2 itself -- a recompute driven only by the emitted CSV's columns and the
+ * preamble's leverage/expense-ratio/financing-spread values reaches the kernel's real
+ * `finalValue`. The recompute below deliberately parses with a bare `split('\n')`/`split(',')`,
+ * never a project parsing helper, because the point is that an outsider with only the file can do
+ * this.
  */
 
 import { describe, expect, test } from 'vitest'
 
+import { PERMALINK_KEYS } from '../../src/app/permalink.ts'
+import { buildKernelInputs, type BacktestRequest } from '../../src/data/kernel-inputs.ts'
+import { loadBundleFromDisk } from '../../src/data/load-bundle-node.ts'
 import { CSV_COLUMNS, CSV_HEADER_LINE } from '../../src/export/csv-columns.ts'
+import { buildPreambleLines } from '../../src/export/csv-preamble.ts'
 import { buildCsv, type CsvBuildRequest } from '../../src/export/csv.worker.ts'
+import { runBacktest } from '../../src/kernel/backtest.ts'
+import { EXPENSE_DAY_COUNT_BASIS, FINANCING_DAY_COUNT_BASIS } from '../../src/kernel/backtest.types.ts'
+import { fromDaysSinceEpoch } from '../../tools/bundle-compiler/src/calendar.ts'
 
 function twoBarRequest(overrides: Partial<CsvBuildRequest> = {}): CsvBuildRequest {
   return {
@@ -144,5 +158,209 @@ describe('buildCsv', () => {
     const dataLines = lines.slice(req.preambleLines.length + 1)
 
     expect(dataLines.length).toBe(1)
+  })
+})
+
+// -----------------------------------------------------------------------------------------------
+// 08-02-PLAN.md Task 2: buildPreambleLines, against the real committed bundle.
+// -----------------------------------------------------------------------------------------------
+
+function csvTestRequest(overrides: Partial<BacktestRequest> = {}): BacktestRequest {
+  return {
+    symbol: 'SPX',
+    dividendReinvest: true,
+    leverage: 2,
+    entryDate: '1990-01-02',
+    holdingPeriodBars: 300,
+    initialInvestment: 10_000,
+    contributionAmount: 0,
+    contributionFrequency: 'none',
+    expenseRatioPercent: 0.9,
+    financingSpreadPercent: 0.5,
+    ...overrides,
+  }
+}
+
+const TEST_PERMALINK_URL = 'https://example.test/?symbol=SPX'
+
+describe('buildPreambleLines', () => {
+  test('the named permalink-key set equals PERMALINK_KEYS minus holdingPeriodBars for an end-of-data run', async () => {
+    const bundle = await loadBundleFromDisk()
+    const request = csvTestRequest({ holdingPeriodBars: null })
+    const inputs = buildKernelInputs(bundle, request)
+    const lines = buildPreambleLines(inputs, request, 'strict', 'log', 'single', 'multiple', TEST_PERMALINK_URL, bundle.manifest)
+
+    const namedKeys = lines
+      .filter((line) => PERMALINK_KEYS.some((key) => line.startsWith(`${key}: `)))
+      .map((line) => line.split(':')[0])
+    const expectedKeys = PERMALINK_KEYS.filter((key) => key !== 'holdingPeriodBars')
+
+    expect(namedKeys.length).toBe(16)
+    expect([...namedKeys].sort()).toEqual([...expectedKeys].sort())
+  })
+
+  test('the named permalink-key set equals all seventeen PERMALINK_KEYS for a fixed-period run', async () => {
+    const bundle = await loadBundleFromDisk()
+    const request = csvTestRequest({ holdingPeriodBars: 300 })
+    const inputs = buildKernelInputs(bundle, request)
+    const lines = buildPreambleLines(inputs, request, 'strict', 'log', 'single', 'multiple', TEST_PERMALINK_URL, bundle.manifest)
+
+    const namedKeys = lines
+      .filter((line) => PERMALINK_KEYS.some((key) => line.startsWith(`${key}: `)))
+      .map((line) => line.split(':')[0])
+
+    expect(namedKeys.length).toBe(17)
+    expect([...namedKeys].sort()).toEqual([...PERMALINK_KEYS].sort())
+  })
+
+  test('names the permalink URL, the bundle version, the tier, the effective date range and the source names', async () => {
+    const bundle = await loadBundleFromDisk()
+    const request = csvTestRequest()
+    const inputs = buildKernelInputs(bundle, request)
+    const lines = buildPreambleLines(inputs, request, 'strict', 'log', 'single', 'multiple', TEST_PERMALINK_URL, bundle.manifest)
+
+    expect(lines).toContain(`permalink: ${TEST_PERMALINK_URL}`)
+    expect(lines).toContain(`bundleVersion: ${inputs.meta.bundleVersion}`)
+    expect(lines).toContain('tier: strict')
+    expect(lines.some((line) => line.startsWith('Data: '))).toBe(true)
+    expect(lines.some((line) => line.startsWith('Sources: '))).toBe(true)
+  })
+})
+
+describe('the preamble once passed through buildCsv (D-07)', () => {
+  test('every preamble line begins with a hash character, and one line names both Excel and Google Sheets', async () => {
+    const bundle = await loadBundleFromDisk()
+    const request = csvTestRequest()
+    const inputs = buildKernelInputs(bundle, request)
+    const preambleLines = buildPreambleLines(inputs, request, 'strict', 'log', 'single', 'multiple', TEST_PERMALINK_URL, bundle.manifest)
+
+    const blob = buildCsv({
+      preambleLines,
+      dates: ['2020-01-02'],
+      returns: new Float64Array([0]),
+      shortRate: new Float64Array([0]),
+      calendarDaysElapsed: new Int32Array([0]),
+      contributionFlags: new Uint8Array([0]),
+      contributionAmount: 0,
+      outValue: new Float64Array([10_000]),
+      outLongGap: new Uint8Array([0]),
+    })
+    const text = await blobText(blob)
+    const emittedLines = text.slice(0, -1).split('\n')
+    const emittedPreamble = emittedLines.slice(0, preambleLines.length)
+
+    expect(emittedPreamble.length).toBe(preambleLines.length)
+    for (const line of emittedPreamble) {
+      expect(line.startsWith('#')).toBe(true)
+    }
+    expect(emittedPreamble.some((line) => line.includes('Excel') && line.includes('Google Sheets'))).toBe(true)
+  })
+})
+
+// -----------------------------------------------------------------------------------------------
+// 08-02-PLAN.md Task 2: roadmap criterion 2 -- a recompute driven only by the emitted file reaches
+// the kernel's real finalValue.
+// -----------------------------------------------------------------------------------------------
+
+describe('recompute from the emitted CSV (roadmap criterion 2)', () => {
+  test('a recompute driven only by the CSV columns and the preamble leverage/expense/financing values reaches finalValue to within 1e-9 relative', async () => {
+    const bundle = await loadBundleFromDisk()
+    const request = csvTestRequest()
+    const inputs = buildKernelInputs(bundle, request)
+    const result = runBacktest(inputs.params, inputs.series, inputs.outputs)
+
+    const dates: string[] = []
+    for (let i = 0; i < inputs.window.barCount; i++) {
+      dates.push(fromDaysSinceEpoch(bundle.calendar[inputs.window.entryIndex + i] ?? 0))
+    }
+
+    const preambleLines = buildPreambleLines(inputs, request, 'strict', 'log', 'single', 'multiple', TEST_PERMALINK_URL, bundle.manifest)
+    const blob = buildCsv({
+      preambleLines,
+      dates,
+      returns: inputs.series.returns,
+      shortRate: inputs.series.shortRate,
+      calendarDaysElapsed: inputs.series.calendarDaysElapsed,
+      contributionFlags: inputs.series.contributionFlags,
+      contributionAmount: inputs.params.contributionAmount,
+      outValue: inputs.outputs.outValue,
+      outLongGap: inputs.outputs.outLongGap,
+    })
+    const text = await blobText(blob)
+
+    // Deliberately a bare split, no project parsing helper -- the whole point is that an outsider
+    // with only the file can do this.
+    const allLines = text.slice(0, -1).split('\n')
+    const dataLines = allLines.slice(preambleLines.length + 1)
+    expect(dataLines.length).toBe(inputs.window.barCount)
+
+    let leverage: number | null = null
+    let expenseRatioPercent: number | null = null
+    let financingSpreadPercent: number | null = null
+    for (const line of preambleLines) {
+      if (line.startsWith('leverage: ')) leverage = Number(line.slice('leverage: '.length))
+      if (line.startsWith('expenseRatioPercent: ')) expenseRatioPercent = Number(line.slice('expenseRatioPercent: '.length))
+      if (line.startsWith('financingSpreadPercent: ')) financingSpreadPercent = Number(line.slice('financingSpreadPercent: '.length))
+    }
+    expect(leverage).not.toBeNull()
+    expect(expenseRatioPercent).not.toBeNull()
+    expect(financingSpreadPercent).not.toBeNull()
+
+    const expenseRatio = expenseRatioPercent! / 100
+    const financingSpread = financingSpreadPercent! / 100
+
+    let value = request.initialInvestment
+    for (let i = 1; i < dataLines.length; i++) {
+      const fields = dataLines[i]!.split(',')
+      const indexReturn = Number(fields[1])
+      const shortRate = Number(fields[2])
+      const calendarDaysElapsed = Number(fields[3])
+      const contributionFlag = Number(fields[4])
+      const contributionAmount = Number(fields[5])
+
+      value = value * (1 + leverage! * indexReturn)
+      const financingCost = value * (leverage! - 1) * (shortRate + financingSpread) * (calendarDaysElapsed / FINANCING_DAY_COUNT_BASIS)
+      value -= financingCost
+      const expenseCost = value * expenseRatio * (calendarDaysElapsed / EXPENSE_DAY_COUNT_BASIS)
+      value -= expenseCost
+
+      if (value <= 0) {
+        value = 0
+      } else if (contributionFlag === 1) {
+        value += contributionAmount
+      }
+    }
+
+    expect(Math.abs(value - result.finalValue) / result.finalValue).toBeLessThan(1e-9)
+  })
+
+  test('a single-bar run (holdingPeriodBars: 0) emits exactly one data row whose portfolio value equals the initial investment (D-03)', async () => {
+    const bundle = await loadBundleFromDisk()
+    const request = csvTestRequest({ holdingPeriodBars: 0 })
+    const inputs = buildKernelInputs(bundle, request)
+    const result = runBacktest(inputs.params, inputs.series, inputs.outputs)
+    expect(inputs.window.barCount).toBe(1)
+    expect(result.finalValue).toBe(request.initialInvestment)
+
+    const dates = [fromDaysSinceEpoch(bundle.calendar[inputs.window.entryIndex] ?? 0)]
+    const preambleLines = buildPreambleLines(inputs, request, 'strict', 'log', 'single', 'multiple', TEST_PERMALINK_URL, bundle.manifest)
+    const blob = buildCsv({
+      preambleLines,
+      dates,
+      returns: inputs.series.returns,
+      shortRate: inputs.series.shortRate,
+      calendarDaysElapsed: inputs.series.calendarDaysElapsed,
+      contributionFlags: inputs.series.contributionFlags,
+      contributionAmount: inputs.params.contributionAmount,
+      outValue: inputs.outputs.outValue,
+      outLongGap: inputs.outputs.outLongGap,
+    })
+    const text = await blobText(blob)
+    const allLines = text.slice(0, -1).split('\n')
+    const dataLines = allLines.slice(preambleLines.length + 1)
+
+    expect(dataLines.length).toBe(1)
+    const portfolioValue = Number(dataLines[0]!.split(',')[7])
+    expect(portfolioValue).toBe(request.initialInvestment)
   })
 })
