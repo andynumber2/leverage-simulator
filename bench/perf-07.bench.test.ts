@@ -30,6 +30,7 @@ import { PERF_BUDGETS } from '../perf-budgets.ts'
 import { normalize } from './calibration.ts'
 import { resolveRunCalibration } from './canonical-calibration.ts'
 import { captureEnvironment } from './environment-block.ts'
+import { selectMaxLongTaskDuration } from './long-task-selector.ts'
 import {
   assertWithinBudget,
   checkBudget,
@@ -37,17 +38,8 @@ import {
   type MeasurementRow,
 } from './report.ts'
 
-/**
- * PERF-07a's measuredMs selector, isolated as a pure function so its max-not-sum semantics are
- * directly testable against a known list (below), independent of the aggregate max
- * `commands.measureInteractionTiming` already computes browser-side from the same durations. The
- * requirement's ceiling is "no task exceeds 50ms" -- a maximum is the only statistic that ceiling
- * is stated against; a total-blocking-time sum would silently pass a run containing one 80ms long
- * task alongside several short ones.
- */
-function selectMaxLongTaskDuration(longTaskDurations: readonly number[]): number {
-  return longTaskDurations.length > 0 ? Math.max(...longTaskDurations) : 0
-}
+// PERF-07a's measuredMs selector: see bench/long-task-selector.ts's header comment for why it
+// lives in a plain, non-test module (08-05) rather than being defined inline here.
 
 /**
  * 05-09: the number of extra `runBacktest` calls `computeAttribution`'s Shapley decomposition

@@ -248,30 +248,36 @@ export default defineConfig({
                       }
                       page.once('download', onPngDownload)
                       await pngButton.click()
-                      // The button only visibly leaves 'idle' on the clipboard-confirmed path
-                      // (Copywriting Contract: the download fallback has no confirmed state), so
-                      // this wait is allowed to time out harmlessly when the download branch is
-                      // the one that actually fired.
-                      await page
-                        .waitForFunction(
-                          () => {
-                            const btn = document.querySelector(
-                              '[data-testid="export-png-button"]',
-                            )
-                            return btn?.getAttribute('data-export-state') !== 'idle'
-                          },
-                          undefined,
-                          { timeout: 1000 },
-                        )
-                        .catch(() => {})
-                      if (!pngDownloadFired) {
-                        await page
-                          .waitForEvent('download', { timeout: 4000 })
+                      // Load-bearing: race, not a sequential wait-then-wait. The clipboard-
+                      // confirmed state auto-resets to 'idle' CONFIRMATION_DURATION_MS (2000ms)
+                      // after it is set (ExportRow.tsx's schedulePngReset), so a state check and
+                      // a download check run one after the other can genuinely overshoot that
+                      // reset window and misread a real clipboard success as a miss (found while
+                      // implementing this task: an initial sequential 1000ms-then-4000ms version
+                      // of this wait did exactly that). Racing the two conditions and reading the
+                      // button's state immediately once either settles reads it within
+                      // milliseconds of the transition, never after the reset can fire.
+                      await Promise.race([
+                        page
+                          .waitForFunction(
+                            () => {
+                              const btn = document.querySelector(
+                                '[data-testid="export-png-button"]',
+                              )
+                              const state = btn?.getAttribute('data-export-state')
+                              return state === 'confirmed' || state === 'failed'
+                            },
+                            undefined,
+                            { timeout: 8000 },
+                          )
+                          .catch(() => {}),
+                        page
+                          .waitForEvent('download', { timeout: 8000 })
                           .then(() => {
                             pngDownloadFired = true
                           })
-                          .catch(() => {})
-                      }
+                          .catch(() => {}),
+                      ])
                       page.off('download', onPngDownload)
                       const pngStateAfter = await pngButton.getAttribute('data-export-state')
                       if (pngStateAfter === 'failed') {
