@@ -2,18 +2,18 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_phase: 07.1
-status: ready
+current_phase: 08
+current_phase_name: export-and-the-canonical-arguments
+status: executing
 stopped_at: Phase 8 UI-SPEC approved
-last_updated: "2026-08-26T00:50:46.905Z"
-last_activity: 2026-08-25, PERF-03 bar released, PR 8 merged to main (e23d5d0), PR 7 auto-resolved
+last_updated: "2026-08-26T01:03:07.313Z"
+last_activity: 2026-08-26
+last_activity_desc: Phase 08 execution started
 progress:
   total_phases: 9
   completed_phases: 8
   total_plans: 66
   completed_plans: 61
-current_phase_name: sweep-pool-tuning-inserted
-last_activity_desc: PERF-03 merge bar released under PERF-01a; PR 8 merged to main, PR 7 auto-merged as contained
 ---
 
 # Project State
@@ -23,12 +23,12 @@ last_activity_desc: PERF-03 merge bar released under PERF-01a; PR 8 merged to ma
 See: .planning/PROJECT.md (updated 2026-08-16)
 
 **Core value:** Given a symbol, a leverage level, an entry point, and a contribution schedule, produce a defensible outcome and show which mechanism consumed the money, in a form that can be pasted into an argument.
-**Current focus:** Phase 8 (export and the canonical arguments). PERF-03 is a standing, documented escalation and no longer blocks.
+**Current focus:** Phase 08 — export-and-the-canonical-arguments
 
 ## Current Position
 
-Phase: 07.1 complete. PERF-03 merge bar RELEASED 2026-08-25 by explicit Key Decision under PERF-01a.
-Status: READY for Phase 8
+Phase: 08 (export-and-the-canonical-arguments) — EXECUTING
+Status: Executing Phase 08
   The 1000ms PERF-03 budget is measured unreachable on the D-17 4-core host. Five levers
   measured and refuted: WASM (1.20x slower, 01-04), worker width 4 (zero, 07.1-06), per-bar
   output arrays (1-2%, quick-260824-46s), pool and dispatch overhead (0.14ms across the whole
@@ -47,7 +47,7 @@ Next: Phase 8 (export and the canonical arguments). Run /gsd-discuss-phase 8 to 
   rest rest on named test files, all present, with 819/819 unit and 170/170 app green.
   v1.0 now owes exactly four requirements: SHARE-04, SHARE-05, SHARE-06 (all Phase 8), and
   PERF-03, which stays unmet by decision.
-Last activity: 2026-08-25, PERF-03 bar released, PR 8 merged to main (e23d5d0), PR 7 auto-resolved
+Last activity: 2026-08-26 — Phase 08 execution started
 
 Progress: [████████░░] 75%  (6 of 8 roadmap phases complete)
 
@@ -201,6 +201,25 @@ Items acknowledged and carried forward from previous milestone close:
 Last session: 2026-08-26T00:14:13.034Z
 Stopped at: Phase 8 UI-SPEC approved
 Resume file: .planning/phases/08-export-and-the-canonical-arguments/08-UI-SPEC.md
+
+### Recovery, 2026-08-26
+
+The container died mid-execution of plan 08-01. Executor worktree
+`worktree-agent-a5dcf64d606fd1af7` held Task 1 uncommitted; it was rescued onto this branch at
+`d48b4f7` (typecheck clean, 4 of 5 browser tests green). The one failing test is a real
+contract violation, deliberately committed unfixed so the rescue is a faithful record:
+`src/app/App.tsx` renders `<ExportRow />` inside the
+`loadStatus() === 'ready' && resultMode() === 'single'` guard, so the row disappears during load
+and again in sweep mode, and 08-UI-SPEC.md E1 forbids both (empty: the row is never hidden or
+collapsed; zero-one-many: CSV is disabled-in-place in sweep mode, never removed from the DOM).
+Hoist `ExportRow` to a sibling of that `Show`, unconditional, the way `SweepModeToggle` already
+is under D-18.
+
+Not started: 08-01 Task 2 (move Copy link into the export row) and Task 3 (D-02 theme parity,
+D-03 viewport independence). Plans 08-02 through 08-05 untouched.
+
+Note for whoever runs the browser suite: `npm run test` is the `unit` project and EXCLUDES
+`tests/app/**/*.browser.test.ts`. Browser tests run under `npm run test:app`.
 
 ### Where things stand
 
