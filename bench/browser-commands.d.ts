@@ -55,6 +55,35 @@ export interface InteractionTimingReport {
   hardwareConcurrency: number
 }
 
+/** Task 1 (08-05, PERF-07a): the PNG export, CSV export and DCA-preset-apply main-thread figures
+ * plus reproducibility disclosure, measured against a production `vite preview` build in a
+ * genuinely fresh browser context with clipboard and download permissions granted. */
+export interface ExportTiming {
+  /** The maximum single `longtask` entry duration observed while exporting PNG -- `0` when none
+   * fired, the passing outcome that measurement asks for, not a broken instrument. */
+  pngMaxLongTaskMs: number
+  /** The maximum single `longtask` entry duration observed while exporting CSV. */
+  csvMaxLongTaskMs: number
+  /** The maximum single `longtask` entry duration observed while applying the DCA preset from
+   * the Scenarios overlay (F-04). */
+  dcaApplyMaxLongTaskMs: number
+  /** Which branch the PNG export actually took this run -- the clipboard write succeeded, or it
+   * fell back to a download. An unlabelled figure is exactly the ambiguity T-08-21 exists to
+   * prevent: a run that silently took the download fallback must never be presented as if it
+   * measured the clipboard path. */
+  pngPathTaken: 'clipboard' | 'download'
+  /** The count of `longtask` entries observed per measurement -- reproducibility information,
+   * and the other half of the zero-guard's signal: a genuine 0ms pass carries a count of 0,
+   * distinguishable from a broken instrument because the command's own state checks (button
+   * state change, download event, headline text settling) already proved each interaction
+   * reached its endpoint before returning. */
+  longTaskCounts: {
+    png: number
+    csv: number
+    dcaApply: number
+  }
+}
+
 /** Task 2 (04-03): the three PERF-08 figures plus reproducibility disclosure, measured against a
  * production `vite preview` build in a genuinely fresh browser context. */
 export interface AppLoadTimingReport {
@@ -138,6 +167,10 @@ declare module 'vitest/internal/browser' {
      * custom command receives exposes a real, unrestricted Playwright `BrowserContext`. See
      * `BrowserContextProbeReport`'s field comments for what each probed value means. */
     probeBrowserContext: () => Promise<BrowserContextProbeReport>
+    /** Task 1 (08-05, PERF-07a): measures the PNG export, CSV export and DCA-preset-apply
+     * paths against a production `vite preview` build in a genuinely fresh browser context. See
+     * `ExportTiming`'s field comments for what each figure measures. */
+    measureExportTiming: () => Promise<ExportTiming>
     /** Task 2 (04-03, PERF-08): measures cold and warm load timing against a production
      * `vite preview` build. See `AppLoadTimingReport`'s field comments for what each figure
      * measures. */
