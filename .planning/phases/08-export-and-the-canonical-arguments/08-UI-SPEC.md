@@ -1,7 +1,7 @@
 ---
 phase: 8
 slug: export-and-the-canonical-arguments
-status: draft
+status: approved
 shadcn_initialized: false
 preset: none
 created: 2026-08-26
@@ -167,20 +167,22 @@ chart or the headline metric fails this hierarchy.
 ## UI Considerations
 
 Authored against the shape-rooted UI-consideration taxonomy (empty / loading / error / populated
-/ partial / overflow / zero-one-many / long-text). Empty-state and error-state COPY lives in
-`## Copywriting Contract` above; the rows below reference those strings rather than restating
-them.
+/ partial / overflow / zero-one-many / long-text), then reconciled against the
+`ui-consideration-probe` coverage report run post-verification. Empty-state and error-state COPY
+lives in `## Copywriting Contract` above; the rows below reference those strings rather than
+restating them.
 
-**Coverage: 3 elements, 19 applicable considerations, 15 resolved (12 explicit, 3 backstop), 4 dismissed with reason, 0 unresolved.**
+**Coverage: 3 elements, 24 applicable considerations, 15 resolved (12 explicit, 3 backstop), 9 dismissed with reason, 0 unresolved.**
 
 ### E1: ExportRow (Copy link / Export PNG / Export CSV, D-21/D-22/D-23)
 
-_Kinds: interactive-control (confirmed)_
+_Kinds: interactive-control (confirmed; probe applied all 8 categories, none narrowed away)_
 
 | Category | Status | Resolution / Reason |
 |----------|--------|----------------------|
-| loading | ✅ explicit | All three buttons disabled until a completed result exists, identical to `CopyLinkButton`'s existing disabled condition, unchanged for Copy link and extended to PNG/CSV |
-| error | ✅ explicit | PNG capture failure and CSV worker failure both render `"Export failed — try again."` inline, destructive color, Copywriting Contract above |
+| empty | ✅ explicit | Before any result exists the row still renders all three buttons, disabled, with no note and no placeholder text, identical to `CopyLinkButton`'s existing unlabeled disabled state. The row is never hidden or collapsed, so the landing state and the result state have the same layout height |
+| loading | ✅ explicit | There is no separate in-flight state. The buttons stay disabled while a run computes and enable on the completed result, reusing `CopyLinkButton`'s existing disabled condition unchanged for Copy link and extended to PNG/CSV |
+| error | ✅ explicit | PNG capture failure and CSV worker failure both render `"Export failed — try again."` inline, destructive color, per the Copywriting Contract above |
 | populated | ✅ explicit | Three buttons, fixed labels, `.copy-link-button`'s exact visual treatment shared across all three (accent outline, 44px min-height, transparent background) |
 | partial | ✅ explicit | Export CSV is additionally disabled (with its own disabled-reason note) whenever `resultMode() === 'sweep'`, independent of whether a result exists — D-08's single-run-only constraint, not a loading state |
 | overflow | 🧪 backstop | Verify at the narrowest supported viewport that three buttons plus an occasional disabled-reason note wrap or stack rather than overflowing the result column, following the same narrow-viewport check class `04-UI-SPEC.md` E5 established |
@@ -189,7 +191,7 @@ _Kinds: interactive-control (confirmed)_
 
 ### E2: Featured row + Scenarios overlay (D-13/D-14/D-15/D-20)
 
-_Kinds: list-collection (confirmed)_
+_Kinds: list-collection (confirmed; probe applied all 8 categories, none narrowed away)_
 
 | Category | Status | Resolution / Reason |
 |----------|--------|----------------------|
@@ -210,7 +212,7 @@ render in.
 
 ### E3: DCA preset in-flight compute state (F-04, `08-RESEARCH.md` Open Question 2)
 
-_Kinds: static-content (confirmed)_
+_Kinds: static-content (confirmed; probe applied all 8 categories, none narrowed away)_
 
 | Category | Status | Resolution / Reason |
 |----------|--------|----------------------|
@@ -241,11 +243,11 @@ npm registry).
 
 ## Checker Sign-Off
 
-- [ ] Dimension 1 Copywriting: PASS
-- [ ] Dimension 2 Visuals: PASS
-- [ ] Dimension 3 Color: PASS
-- [ ] Dimension 4 Typography: PASS
-- [ ] Dimension 5 Spacing: PASS
-- [ ] Dimension 6 Registry Safety: PASS
+- [x] Dimension 1 Copywriting: PASS
+- [x] Dimension 2 Visuals: PASS
+- [x] Dimension 3 Color: PASS
+- [x] Dimension 4 Typography: PASS
+- [x] Dimension 5 Spacing: PASS
+- [x] Dimension 6 Registry Safety: PASS
 
-**Approval:** pending
+**Approval:** approved by gsd-ui-checker (6/6 dimensions PASS, no blocking issues)
