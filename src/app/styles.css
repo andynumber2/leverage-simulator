@@ -725,6 +725,14 @@ body {
   margin-top: var(--space-md);
 }
 
+/* D-22: CopyLinkButton composes its own `.copy-link-row` wrapper (own flex row, own
+   `margin-top`) unchanged inside `.export-row`. Zero that margin here so the export row's own
+   `margin-top` above is the only top spacing applied -- otherwise the two stack and the row sits
+   further from the screenshot region than `08-UI-SPEC.md`'s Spacing Scale intends. */
+.export-row .copy-link-row {
+  margin-top: 0;
+}
+
 /* UI-SPEC "Extended accent reservation": Export PNG/CSV share `.copy-link-button`'s exact visual
    treatment verbatim -- three visual siblings, not a hierarchy. */
 .export-button {

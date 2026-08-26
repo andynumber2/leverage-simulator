@@ -12,7 +12,6 @@ import { Show } from 'solid-js'
 
 import { loadStatus } from '../../state.ts'
 import { ContributionControl } from './ContributionControl.tsx'
-import { CopyLinkButton } from './CopyLinkButton.tsx'
 import { CostControls } from './CostControls.tsx'
 import { EntryDateControl } from './EntryDateControl.tsx'
 import { HoldingModeControl } from './HoldingModeControl.tsx'
@@ -39,7 +38,6 @@ export function ParameterColumn() {
       <InitialInvestmentControl disabled={disabled()} />
       <ContributionControl disabled={disabled()} />
       <CostControls disabled={disabled()} />
-      <CopyLinkButton />
     </aside>
   )
 }

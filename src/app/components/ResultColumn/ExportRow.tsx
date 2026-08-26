@@ -3,10 +3,11 @@
  *
  * D-21/D-22/D-23/UI-SPEC E1: the export row -- three peer actions living OUTSIDE
  * `.screenshot-region`, styled identically to `.copy-link-button` (an action strip attached to
- * the result, not a second panel, UI-SPEC Visual Hierarchy rank 2). This task (08-01 Task 1)
- * ships Export PNG (fully wired) and a disabled Export CSV placeholder button, so the row's shape
- * never changes later when plan 08-02 wires the CSV handler (UI-SPEC E1 zero-one-many). Plan
- * 08-01 Task 2 composes the existing `CopyLinkButton` as the row's first button.
+ * the result, not a second panel, UI-SPEC Visual Hierarchy rank 2). Composes the existing
+ * `CopyLinkButton` unchanged as the first button (D-22: relocated from the parameter column,
+ * which drops its own render call site); ships Export PNG (fully wired) and a disabled Export CSV
+ * placeholder button, so the row's shape never changes later when plan 08-02 wires the CSV
+ * handler (UI-SPEC E1 zero-one-many).
  *
  * Export PNG follows `CopyLinkButton.tsx`'s exact state-machine shape (`idle`/`confirmed`/
  * `failed`, a `LABELS` record, a clear-then-rearm 2000ms reset timer) with one load-bearing
@@ -23,6 +24,7 @@ import { createSignal, Show } from 'solid-js'
 import { triggerDownload } from '../../../export/download.ts'
 import { exportRegionAsPng, pngFilename } from '../../../export/png-export.ts'
 import { currentKernelResult } from '../../state.ts'
+import { CopyLinkButton } from '../ParameterColumn/CopyLinkButton.tsx'
 
 type ExportPngState = 'idle' | 'confirmed' | 'failed'
 
@@ -84,6 +86,7 @@ export function ExportRow() {
 
   return (
     <div class="export-row" data-testid="export-row">
+      <CopyLinkButton />
       <button
         type="button"
         class="export-button"
