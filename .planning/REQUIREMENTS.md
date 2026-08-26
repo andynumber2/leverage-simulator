@@ -222,7 +222,7 @@ measured in CI, not an aspiration.
 - [ ] **SHARE-05**: User can export a run's underlying daily series as CSV, so the math can be
       checked independently
 
-- [ ] **SHARE-06**: Named preset scenarios cover the canonical arguments, each one click from the
+- [x] **SHARE-06**: Named preset scenarios cover the canonical arguments, each one click from the
       landing state and each a shareable permalink
 
 ### Application Shell
@@ -290,7 +290,6 @@ measured in CI, not an aspiration.
 >
 > PERF-03 stays `[ ]` and stays Escalated. It is not met, is not claimed met, and its budget is
 > unchanged at 1000ms.
-
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
@@ -361,7 +360,7 @@ measured in CI, not an aspiration.
 | SHARE-03 | Phase 4 | Complete |
 | SHARE-04 | Phase 8 | Pending |
 | SHARE-05 | Phase 8 | Pending |
-| SHARE-06 | Phase 8 | Pending |
+| SHARE-06 | Phase 8 | Complete |
 | APP-01 | Phase 4 | Complete |
 | APP-02 | Phase 5 | Complete |
 | APP-03 | Phase 4 | Complete |
