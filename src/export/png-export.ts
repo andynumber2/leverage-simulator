@@ -231,90 +231,121 @@ function compositeLiveCanvases(region: HTMLElement, context: CanvasRenderingCont
  * it to the capture -- not to clone the region by hand first (`cloneNode` drops live `<canvas>` pixel
  * content, which `.screenshot-region` depends on for the chart/heatmap). The live region is
  * restored to its original inline style in a `finally` block regardless of outcome, so a real
- * user's page is never left resized. */
-export async function exportRegionAsPng(region: HTMLElement): Promise<Blob> {
+ * user's page is never left resized.
+ *
+ * CR-01 fix: the resize and `suppressLibraryCanvasRasterization` call now live INSIDE the same
+ * `try` this function's own `finally` protects (WR-01), so a throw from either one still restores
+ * the region's original style. `exportRegionAsPng` below is the only exported entry point and
+ * serializes calls to this function, so `originalCssText` here is always the region's true
+ * pre-export style, never a previous overlapping call's export layout. */
+async function captureRegionAsPng(region: HTMLElement): Promise<Blob> {
   const backgroundColor = resolveExportBackgroundColor()
   const originalCssText = region.style.cssText
-  region.style.width = `${EXPORT_WIDTH_PX}px`
-  region.style.padding = `${EXPORT_FRAME_PX}px`
-  region.style.boxSizing = 'border-box'
-  // D-02's opaque themed background is filled onto the export image directly (below) rather than
-  // onto the live region or via html-to-image's own `backgroundColor` option. Both of those would
-  // make the DOM layer opaque, and the layered composite needs it transparent wherever nothing
-  // painted so the canvases can sit underneath it. The exported result is identical either way.
-  region.style.backgroundColor = 'transparent'
-  // Forces a synchronous layout pass at the new width before the capture reads it, rather than
-  // leaving the resize queued behind whatever async work the capture does first.
-  void region.offsetHeight
-
-  const restoreCanvasRasterization = suppressLibraryCanvasRasterization(region)
-
   try {
-    // `toCanvas` rather than `toBlob` so the live canvas bitmaps can be composited into the result
-    // before it is encoded. `toBlob` is just `toCanvas` followed by an encode, so this splits an
-    // existing step rather than adding one; see compositeLiveCanvases for why the split is needed.
-    const canvas = await toCanvas(region, {
-      pixelRatio: EXPORT_PIXEL_RATIO,
-      filter: exportNodeFilter,
-    })
+    region.style.width = `${EXPORT_WIDTH_PX}px`
+    region.style.padding = `${EXPORT_FRAME_PX}px`
+    region.style.boxSizing = 'border-box'
+    // D-02's opaque themed background is filled onto the export image directly (below) rather than
+    // onto the live region or via html-to-image's own `backgroundColor` option. Both of those would
+    // make the DOM layer opaque, and the layered composite needs it transparent wherever nothing
+    // painted so the canvases can sit underneath it. The exported result is identical either way.
+    region.style.backgroundColor = 'transparent'
+    // Forces a synchronous layout pass at the new width before the capture reads it, rather than
+    // leaving the resize queued behind whatever async work the capture does first.
+    void region.offsetHeight
 
-    const context = canvas.getContext('2d')
-    if (context === null) {
-      throw new PngExportError('png-export: could not acquire a 2d context on the export canvas')
-    }
+    const restoreCanvasRasterization = suppressLibraryCanvasRasterization(region)
 
-    const regionRect = region.getBoundingClientRect()
-    // Derived from the capture's real dimensions rather than assumed to be EXPORT_PIXEL_RATIO:
-    // html-to-image clamps its own canvas to the browser's maximum dimension for very large
-    // regions (`util.js`, `checkCanvasDimensions`), and this keeps the composite aligned if it
-    // ever does.
-    const scaleX = regionRect.width === 0 ? EXPORT_PIXEL_RATIO : canvas.width / regionRect.width
-    const scaleY = regionRect.height === 0 ? EXPORT_PIXEL_RATIO : canvas.height / regionRect.height
-
-    // Everything below is painted UNDER what html-to-image already rasterized, straight into its
-    // own canvas. The obvious alternative -- allocate a second full-size canvas, fill it, composite
-    // into it, then copy the DOM layer on top -- is what this function did first, and it cost an
-    // extra full-size allocation plus a full-canvas drawImage for an identical image.
-    // `destination-over` needs neither.
-    //
-    // For the record, since the measurement is counter-intuitive: that second buffer was NOT what
-    // breached PERF-07a during this work. Disabling the composite and the background fill entirely
-    // left the PNG path's long task at exactly 52ms, unchanged. The cost was in how the library's
-    // canvas embedding is suppressed; see resolveTransparentPixelDataUrl.
-    const previousOperation = context.globalCompositeOperation
-    context.globalCompositeOperation = 'destination-over'
     try {
-      // Must run while the region is STILL in the export layout, since it measures each canvas's
-      // box in the same coordinate space `toCanvas` rasterized. The `finally` below restores the
-      // region only after this returns.
-      compositeLiveCanvases(region, context, scaleX, scaleY)
-      // Last, so it lands beneath every canvas as well as beneath the DOM layer. This is D-02's
-      // forced-opaque themed background, applied here rather than through html-to-image's own
-      // `backgroundColor` option, which would have filled it in FIRST and left nothing for the
-      // canvases to slide underneath.
-      context.fillStyle = backgroundColor
-      context.fillRect(0, 0, canvas.width, canvas.height)
+      // `toCanvas` rather than `toBlob` so the live canvas bitmaps can be composited into the
+      // result before it is encoded. `toBlob` is just `toCanvas` followed by an encode, so this
+      // splits an existing step rather than adding one; see compositeLiveCanvases for why the
+      // split is needed.
+      const canvas = await toCanvas(region, {
+        pixelRatio: EXPORT_PIXEL_RATIO,
+        filter: exportNodeFilter,
+      })
+
+      const context = canvas.getContext('2d')
+      if (context === null) {
+        throw new PngExportError('png-export: could not acquire a 2d context on the export canvas')
+      }
+
+      const regionRect = region.getBoundingClientRect()
+      // Derived from the capture's real dimensions rather than assumed to be EXPORT_PIXEL_RATIO:
+      // html-to-image clamps its own canvas to the browser's maximum dimension for very large
+      // regions (`util.js`, `checkCanvasDimensions`), and this keeps the composite aligned if it
+      // ever does.
+      const scaleX = regionRect.width === 0 ? EXPORT_PIXEL_RATIO : canvas.width / regionRect.width
+      const scaleY = regionRect.height === 0 ? EXPORT_PIXEL_RATIO : canvas.height / regionRect.height
+
+      // Everything below is painted UNDER what html-to-image already rasterized, straight into
+      // its own canvas. The obvious alternative -- allocate a second full-size canvas, fill it,
+      // composite into it, then copy the DOM layer on top -- is what this function did first, and
+      // it cost an extra full-size allocation plus a full-canvas drawImage for an identical image.
+      // `destination-over` needs neither.
+      //
+      // For the record, since the measurement is counter-intuitive: that second buffer was NOT
+      // what breached PERF-07a during this work. Disabling the composite and the background fill
+      // entirely left the PNG path's long task at exactly 52ms, unchanged. The cost was in how the
+      // library's canvas embedding is suppressed; see resolveTransparentPixelDataUrl.
+      const previousOperation = context.globalCompositeOperation
+      context.globalCompositeOperation = 'destination-over'
+      try {
+        // Must run while the region is STILL in the export layout, since it measures each
+        // canvas's box in the same coordinate space `toCanvas` rasterized. The `finally` below
+        // restores the region only after this returns.
+        compositeLiveCanvases(region, context, scaleX, scaleY)
+        // Last, so it lands beneath every canvas as well as beneath the DOM layer. This is D-02's
+        // forced-opaque themed background, applied here rather than through html-to-image's own
+        // `backgroundColor` option, which would have filled it in FIRST and left nothing for the
+        // canvases to slide underneath.
+        context.fillStyle = backgroundColor
+        context.fillRect(0, 0, canvas.width, canvas.height)
+      } finally {
+        context.globalCompositeOperation = previousOperation
+      }
+
+      const blob = await new Promise<Blob | null>((resolve) => {
+        canvas.toBlob(resolve, 'image/png')
+      })
+      if (blob === null) {
+        throw new PngExportError('png-export: toBlob returned null')
+      }
+      return blob
     } finally {
-      context.globalCompositeOperation = previousOperation
-    }
-
-    const blob = await new Promise<Blob | null>((resolve) => {
-      canvas.toBlob(resolve, 'image/png')
-    })
-    if (blob === null) {
-      throw new PngExportError('png-export: toBlob returned null')
-    }
-    return blob
-  } finally {
-    // Nested so the region's inline style is restored even if un-shadowing `toDataURL` somehow
-    // throws: leaving a real user's page resized is the one failure this function must never
-    // have, and it outranks leaving a shadowed method behind.
-    try {
       restoreCanvasRasterization()
-    } finally {
-      region.style.cssText = originalCssText
     }
+  } finally {
+    // Leaving a real user's page resized is the one failure this function must never have, so
+    // this outermost `finally` covers the resize itself, not just the capture that follows it
+    // (WR-01: `suppressLibraryCanvasRasterization` throwing used to skip this restore entirely).
+    region.style.cssText = originalCssText
   }
+}
+
+/** CR-01 fix: overlapping calls to `captureRegionAsPng` (trivially triggered by a double-clicked
+ * Export PNG button) shared the live region's inline style and each canvas's shadowed
+ * `toDataURL`, with no guard preventing a second call from starting its own resize before the
+ * first call's `finally` restored the region -- see 08-REVIEW.md CR-01 for the full trace. This
+ * is the module's only exported entry point, and it serializes every call through a promise
+ * queue: a call's capture work does not start until every earlier call has finished (success or
+ * failure), so `captureRegionAsPng` never sees the region or a canvas mid-mutation by another
+ * call. Building the queued promise is synchronous, so a caller that must invoke this function
+ * synchronously from a click handler (08-RESEARCH.md Pattern 2 -- Safari's transient-activation
+ * requirement for `navigator.clipboard.write`) still gets a promise back synchronously; only the
+ * capture's own async work is deferred behind the queue. */
+let exportQueue: Promise<void> = Promise.resolve()
+
+export function exportRegionAsPng(region: HTMLElement): Promise<Blob> {
+  const run = exportQueue.then(() => captureRegionAsPng(region))
+  // Swallow rejection here so one failed export doesn't wedge the queue for the next call; the
+  // real rejection still propagates to this call's own caller via `run`.
+  exportQueue = run.then(
+    () => undefined,
+    () => undefined,
+  )
+  return run
 }
 
 /** T-08-01: builds the filename from `backtestRequest()` fields that arrive via `decodeParams`,

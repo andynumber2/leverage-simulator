@@ -220,6 +220,25 @@ test('clicking Export PNG produces a correctly sized, non-blank PNG Blob passed 
   expect(distinctValues.size, 'captured PNG is blank -- a single flat color across every sampled pixel').toBeGreaterThanOrEqual(2)
 })
 
+test("two overlapping exportRegionAsPng calls (CR-01) both resolve to a valid PNG and leave the region's inline style fully restored", async () => {
+  const el = await mountAndWaitForMetrics()
+  const region = el.querySelector<HTMLElement>('[data-testid="screenshot-region"]')!
+  const originalCssText = region.style.cssText
+
+  // Fired without an intervening await, the same interleaving a double-clicked Export PNG
+  // button produces (08-REVIEW.md CR-01): call2 starts while call1 is still mid-capture.
+  const call1 = exportRegionAsPng(region)
+  const call2 = exportRegionAsPng(region)
+  const [blob1, blob2] = await Promise.all([call1, call2])
+
+  expect(blob1.type).toBe('image/png')
+  expect(blob2.type).toBe('image/png')
+  expect(
+    region.style.cssText,
+    'region left in its export layout after two overlapping captures finished -- CR-01 regression',
+  ).toBe(originalCssText)
+})
+
 test('when the clipboard write rejects, Export PNG falls back to a download and never enters the failed state on that path alone', async () => {
   const el = await mountAndWaitForMetrics()
   Object.defineProperty(navigator, 'clipboard', {

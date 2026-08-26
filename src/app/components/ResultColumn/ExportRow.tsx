@@ -74,9 +74,14 @@ const CSV_DISABLED_REASON = 'Switch to Single run to export a daily series.'
 export function ExportRow() {
   const [pngState, setPngState] = createSignal<ExportPngState>('idle')
   const [csvState, setCsvState] = createSignal<ExportCsvState>('idle')
+  // CR-01: UI-level feedback only, not the correctness guard -- `exportRegionAsPng` itself
+  // (`../../../export/png-export.ts`) serializes overlapping calls so the region's style is
+  // never corrupted regardless of this signal. This just keeps a double-click from queuing a
+  // second silent capture behind the first.
+  const [pngExportInFlight, setPngExportInFlight] = createSignal(false)
   let pngResetTimer: ReturnType<typeof setTimeout> | undefined
 
-  const disabled = () => currentKernelResult() === null
+  const disabled = () => currentKernelResult() === null || pngExportInFlight()
 
   /** D-08: disabled whenever there is no result yet OR the result mode is sweep -- two
    * independent conditions, not a loading state. */
@@ -97,30 +102,37 @@ export function ExportRow() {
       return
     }
 
-    // Load-bearing (08-RESEARCH.md Pattern 2): built WITHOUT awaiting, then passed directly as
-    // the ClipboardItem value below -- Safari's activation gate requires the clipboard call
-    // itself to be synchronous from this click handler.
-    const blobPromise = exportRegionAsPng(region)
-
-    if (navigator.clipboard === undefined || typeof ClipboardItem === 'undefined') {
-      try {
-        triggerDownload(await blobPromise, pngFilename())
-      } catch {
-        setPngState('failed')
-      }
-      return
-    }
-
+    // Set synchronously, before the Safari-sensitive call below, so it never delays the
+    // synchronous hand-off `exportRegionAsPng`/`navigator.clipboard.write` depend on.
+    setPngExportInFlight(true)
     try {
-      await navigator.clipboard.write([new ClipboardItem({ 'image/png': blobPromise })])
-      setPngState('confirmed')
-      schedulePngReset()
-    } catch {
-      try {
-        triggerDownload(await blobPromise, pngFilename())
-      } catch {
-        setPngState('failed')
+      // Load-bearing (08-RESEARCH.md Pattern 2): built WITHOUT awaiting, then passed directly as
+      // the ClipboardItem value below -- Safari's activation gate requires the clipboard call
+      // itself to be synchronous from this click handler.
+      const blobPromise = exportRegionAsPng(region)
+
+      if (navigator.clipboard === undefined || typeof ClipboardItem === 'undefined') {
+        try {
+          triggerDownload(await blobPromise, pngFilename())
+        } catch {
+          setPngState('failed')
+        }
+        return
       }
+
+      try {
+        await navigator.clipboard.write([new ClipboardItem({ 'image/png': blobPromise })])
+        setPngState('confirmed')
+        schedulePngReset()
+      } catch {
+        try {
+          triggerDownload(await blobPromise, pngFilename())
+        } catch {
+          setPngState('failed')
+        }
+      }
+    } finally {
+      setPngExportInFlight(false)
     }
   }
 
