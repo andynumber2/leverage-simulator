@@ -22,6 +22,11 @@
  * its state union is `idle`/`failed` only. Its handler calls `flushPermalinkUrl()` synchronously,
  * the same discipline `CopyLinkButton.tsx`'s header documents and for the same reason: an export
  * issued during or immediately after a drag must not embed a URL from before the drag settled.
+ *
+ * D-08: Export CSV carries a second, independent disabled condition beyond "no result yet" --
+ * `resultMode() === 'sweep'`, since a sweep has 10,000 runs and no single daily series to export.
+ * The button is never removed from the DOM in sweep mode (UI-SPEC E1 zero-one-many: the row's
+ * shape never changes); the adjacent disabled-reason note renders only in that case.
  */
 
 import { createSignal, Show } from 'solid-js'
@@ -39,6 +44,7 @@ import {
   displayedMetric,
   flushPermalinkUrl,
   loadedBundle,
+  resultMode,
   scaleMode,
 } from '../../state.ts'
 import { CopyLinkButton } from '../ParameterColumn/CopyLinkButton.tsx'
@@ -62,12 +68,22 @@ const CSV_LABELS: Record<ExportCsvState, string> = {
 /** The one shared failure string both export paths use (UI-SPEC Copywriting Contract). */
 const EXPORT_FAILURE_NOTE = 'Export failed - try again.'
 
+/** D-08's disabled-reason copy, verbatim from 08-UI-SPEC.md's Copywriting Contract. */
+const CSV_DISABLED_REASON = 'Switch to Single run to export a daily series.'
+
 export function ExportRow() {
   const [pngState, setPngState] = createSignal<ExportPngState>('idle')
   const [csvState, setCsvState] = createSignal<ExportCsvState>('idle')
   let pngResetTimer: ReturnType<typeof setTimeout> | undefined
 
   const disabled = () => currentKernelResult() === null
+
+  /** D-08: disabled whenever there is no result yet OR the result mode is sweep -- two
+   * independent conditions, not a loading state. */
+  function csvDisabled(): boolean {
+    if (currentKernelResult() === null) return true
+    return resultMode() === 'sweep'
+  }
 
   function schedulePngReset(): void {
     if (pngResetTimer !== undefined) clearTimeout(pngResetTimer)
@@ -190,11 +206,16 @@ export function ExportRow() {
         class="export-button"
         data-testid="export-csv-button"
         data-export-state={csvState()}
-        disabled={disabled()}
+        disabled={csvDisabled()}
         onClick={() => void handleExportCsvClick()}
       >
         {CSV_LABELS[csvState()]}
       </button>
+      <Show when={resultMode() === 'sweep'}>
+        <span class="export-disabled-reason" data-testid="export-csv-disabled-reason">
+          {CSV_DISABLED_REASON}
+        </span>
+      </Show>
       <Show when={pngState() === 'failed'}>
         <span class="export-failure-note" data-testid="export-png-failure-note">
           {EXPORT_FAILURE_NOTE}
