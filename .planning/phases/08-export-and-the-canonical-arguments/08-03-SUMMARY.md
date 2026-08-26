@@ -188,3 +188,11 @@ None — no external service configuration required. No new runtime dependency w
 ---
 *Phase: 08-export-and-the-canonical-arguments*
 *Completed: 2026-08-26*
+
+## Self-Check: PASSED
+
+All key files confirmed present on disk: `src/app/presets.ts`, `src/app/presets.generated.ts`,
+`scripts/compute-presets.ts`, `tests/app/presets.test.ts`, `tests/app/presets.generated.test.ts`,
+`src/app/state.ts`, `package.json`.
+
+All commit hashes confirmed present in `git log`: `6db3775`, `881c215`, `011dd17`, `a127d18`.
