@@ -5,15 +5,15 @@ milestone_name: milestone
 current_phase: 08
 current_phase_name: export-and-the-canonical-arguments
 status: executing
-stopped_at: Phase 8 UI-SPEC approved
-last_updated: "2026-08-26T03:01:58.896Z"
+stopped_at: Phase 8 wave 2 complete, paused before wave 3
+last_updated: "2026-08-26T04:57:14.223Z"
 last_activity: 2026-08-26
-last_activity_desc: Phase 08 execution started
+last_activity_desc: Phase 08 waves 1 and 2 complete (08-01, 08-02, 08-03 merged)
 progress:
   total_phases: 9
   completed_phases: 8
   total_plans: 66
-  completed_plans: 61
+  completed_plans: 64
 ---
 
 # Project State
@@ -198,11 +198,39 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-08-26T00:14:13.034Z
-Stopped at: Phase 8 UI-SPEC approved
-Resume file: .planning/phases/08-export-and-the-canonical-arguments/08-UI-SPEC.md
+Last session: 2026-08-26T04:57:14.223Z
+Stopped at: Phase 8 wave 2 complete, paused before wave 3 at user request
+Resume file: .planning/phases/08-export-and-the-canonical-arguments/.continue-here.md
 
-### Recovery, 2026-08-26
+### Phase 8, waves 1 and 2, 2026-08-26
+
+Three of five plans are done and merged on `gsd/phase-08-export-and-the-canonical-arguments`:
+
+- 08-01 (wave 1, merged `8172379`): PNG export path and the shared export row. Resumed in place
+  from the rescue commit `d48b4f7` below rather than reverting it. The E1 violation that commit
+  recorded is FIXED: `<ExportRow />` is now an unconditional sibling of the result-mode `Show`.
+  Copy link relocated out of ParameterColumn (D-22), hover readout excluded from capture (F-02),
+  D-02 theme parity and D-03 viewport independence closed empirically.
+- 08-03 (wave 2, merged `050dddd`): preset library plus `scripts/compute-presets.ts`, which runs
+  the real kernel at build time and emits `presets.generated.ts` byte-identically across runs, so
+  the headline figures are derived rather than hand-entered. No deviations.
+- 08-02 (wave 2, merged `b266ee1`): CSV export path with a dedicated `csv.worker.ts`,
+  provenance preamble, and the recompute-to-finalValue proof.
+
+Post-merge gate on the merged tree, all green: typecheck clean, build clean, 844/844 unit,
+180/180 app across all 27 browser files in one continuous run.
+
+Remaining: 08-04 (wave 3) then 08-05 (wave 4, `autonomous: false`, carries a human checkpoint).
+None of the phase tail gates have run. SHARE-04 and SHARE-05 stay Pending because 08-05 claims
+all three SHARE requirements and is the closure plan; 08-03 marked SHARE-06 Complete.
+
+Two process notes worth carrying. First, 08-02's executor self-reported its own HEAD as the
+worktree `expected_base` instead of its fork point; recording that verbatim would have tripped
+`cleanup-wave`'s fail-closed base check, so verify with `git merge-base` before recording.
+Second, `npm run test` is the `unit` project and excludes browser tests, so a unit-only run
+proves nothing about the export paths.
+
+### Recovery, 2026-08-26 (RESOLVED by 08-01 above)
 
 The container died mid-execution of plan 08-01. Executor worktree
 `worktree-agent-a5dcf64d606fd1af7` held Task 1 uncommitted; it was rescued onto this branch at
