@@ -183,6 +183,168 @@ export default defineConfig({
                   }
                 }
               },
+              // Task 1 (08-05, PERF-07a/F-05/RESEARCH Pitfall 2/F-04): three real interactions
+              // against the export and preset-apply paths in a genuinely fresh browser context
+              // with clipboard and download permissions granted, so both the PNG clipboard path
+              // and the CSV download path exercise their real branches rather than silently
+              // falling through to a fallback. Mirrors measureInteractionTiming's fresh-context
+              // plus buffered-longtask-observer mechanism exactly; the structural difference is
+              // three independent measurements in sequence, clearing longTaskDurations
+              // immediately before each, rather than one drag.
+              measureExportTiming: async (context) =>
+                withPreviewServer(async (origin) => {
+                  const browser = context.context.browser()
+                  if (browser === null) {
+                    throw new Error(
+                      'measureExportTiming: no Browser handle reachable from ' +
+                        'context.context.browser() -- Task 1s probeBrowserContext must report ' +
+                        'hasBrowserHandle=true for this command to run',
+                    )
+                  }
+                  // Pinned locale, same reason as measureAppLoadTiming's fresh context above.
+                  // Clipboard permissions and acceptDownloads let the PNG clipboard-write path
+                  // and the CSV download path both exercise their real branches (T-08-21): if a
+                  // future Playwright version stopped honoring `permissions` here, the runtime
+                  // detection below (pngPathTaken) still labels whichever branch actually fired,
+                  // rather than assuming the grant worked.
+                  const freshContext = await browser.newContext({
+                    locale: 'en-US',
+                    permissions: ['clipboard-read', 'clipboard-write'],
+                    acceptDownloads: true,
+                  })
+                  try {
+                    const longTaskDurations: number[] = []
+                    await freshContext.exposeFunction(
+                      '__recordExportLongTask',
+                      (duration: number) => {
+                        longTaskDurations.push(duration)
+                      },
+                    )
+                    // Installed before any navigation, per measureAppLoadTiming/
+                    // measureInteractionTiming's own comment: observes the longtask entry type
+                    // from the very first byte of the page this context loads.
+                    await freshContext.addInitScript(() => {
+                      new PerformanceObserver((list) => {
+                        for (const entry of list.getEntries()) {
+                          // @ts-expect-error -- injected by exposeFunction, not declared on window
+                          window.__recordExportLongTask(entry.duration)
+                        }
+                      }).observe({ type: 'longtask', buffered: true })
+                    })
+
+                    const page = await freshContext.newPage()
+                    try {
+                      await page.goto(origin, { waitUntil: 'load' })
+                      await page.waitForFunction(
+                        () => performance.getEntriesByName('app-interactive').length > 0,
+                      )
+
+                      // --- 1. Export PNG: clipboard write, with a download fallback --------
+                      longTaskDurations.length = 0
+                      const pngButton = page.locator('[data-testid="export-png-button"]')
+                      let pngDownloadFired = false
+                      const onPngDownload = () => {
+                        pngDownloadFired = true
+                      }
+                      page.once('download', onPngDownload)
+                      await pngButton.click()
+                      // The button only visibly leaves 'idle' on the clipboard-confirmed path
+                      // (Copywriting Contract: the download fallback has no confirmed state), so
+                      // this wait is allowed to time out harmlessly when the download branch is
+                      // the one that actually fired.
+                      await page
+                        .waitForFunction(
+                          () => {
+                            const btn = document.querySelector(
+                              '[data-testid="export-png-button"]',
+                            )
+                            return btn?.getAttribute('data-export-state') !== 'idle'
+                          },
+                          undefined,
+                          { timeout: 1000 },
+                        )
+                        .catch(() => {})
+                      if (!pngDownloadFired) {
+                        await page
+                          .waitForEvent('download', { timeout: 4000 })
+                          .then(() => {
+                            pngDownloadFired = true
+                          })
+                          .catch(() => {})
+                      }
+                      page.off('download', onPngDownload)
+                      const pngStateAfter = await pngButton.getAttribute('data-export-state')
+                      if (pngStateAfter === 'failed') {
+                        throw new Error(
+                          'measureExportTiming: PNG export entered its failed state -- the ' +
+                            'clipboard write was rejected and the download fallback itself threw',
+                        )
+                      }
+                      const pngPathTaken: 'clipboard' | 'download' =
+                        pngStateAfter === 'confirmed' ? 'clipboard' : 'download'
+                      if (pngPathTaken === 'download' && !pngDownloadFired) {
+                        throw new Error(
+                          'measureExportTiming: Export PNG never left its idle state and no ' +
+                            'download fired -- the click likely missed rather than the work ' +
+                            'being free',
+                        )
+                      }
+                      const pngMaxLongTaskMs =
+                        longTaskDurations.length > 0 ? Math.max(...longTaskDurations) : 0
+                      const pngLongTaskCount = longTaskDurations.length
+
+                      // --- 2. Export CSV: always a download (D-23) --------------------------
+                      longTaskDurations.length = 0
+                      const csvDownloadPromise = page.waitForEvent('download', { timeout: 10000 })
+                      await page.locator('[data-testid="export-csv-button"]').click()
+                      await csvDownloadPromise
+                      const csvMaxLongTaskMs =
+                        longTaskDurations.length > 0 ? Math.max(...longTaskDurations) : 0
+                      const csvLongTaskCount = longTaskDurations.length
+
+                      // --- 3. Apply the DCA preset from the Scenarios overlay (F-04) --------
+                      longTaskDurations.length = 0
+                      const headlineValue = page.locator('[data-testid="metric-headline-value"]')
+                      const beforeHeadline = (await headlineValue.textContent()) ?? ''
+                      await page.locator('[data-testid="scenarios-trigger"]').click()
+                      await page.locator('[data-preset-id="spx-3x-dca-2000"]').click()
+                      await page.waitForFunction(
+                        (before) => {
+                          const el = document.querySelector(
+                            '[data-testid="metric-headline-value"]',
+                          )
+                          const text = el?.textContent?.trim() ?? ''
+                          return (
+                            text.length > 0 &&
+                            text !== before &&
+                            !text.toLowerCase().includes('computing')
+                          )
+                        },
+                        beforeHeadline,
+                        { timeout: 15000 },
+                      )
+                      const dcaApplyMaxLongTaskMs =
+                        longTaskDurations.length > 0 ? Math.max(...longTaskDurations) : 0
+                      const dcaApplyLongTaskCount = longTaskDurations.length
+
+                      return {
+                        pngMaxLongTaskMs,
+                        csvMaxLongTaskMs,
+                        dcaApplyMaxLongTaskMs,
+                        pngPathTaken,
+                        longTaskCounts: {
+                          png: pngLongTaskCount,
+                          csv: csvLongTaskCount,
+                          dcaApply: dcaApplyLongTaskCount,
+                        },
+                      }
+                    } finally {
+                      await page.close()
+                    }
+                  } finally {
+                    await freshContext.close()
+                  }
+                }),
               // Task 2 (04-03): PERF-08a/08b/08c's measurement. Runs Node-side, wrapped in
               // withPreviewServer so the measured origin is always the real production build,
               // never the dev server (RESEARCH.md Pitfall 2). Task 1's probe already proved
