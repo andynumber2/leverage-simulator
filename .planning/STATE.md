@@ -4,12 +4,12 @@ milestone: v1.0
 milestone_name: milestone
 current_phase: 07.1
 status: ready
-stopped_at: Phase 8 context gathered
-last_updated: "2026-08-25T19:29:50.907Z"
+stopped_at: Phase 8 UI-SPEC approved
+last_updated: "2026-08-26T00:14:13.077Z"
 last_activity: 2026-08-25, PERF-03 bar released, PR 8 merged to main (e23d5d0), PR 7 auto-resolved
 progress:
-  total_phases: 8
-  completed_phases: 6
+  total_phases: 9
+  completed_phases: 8
   total_plans: 61
   completed_plans: 61
 current_phase_name: sweep-pool-tuning-inserted
@@ -198,9 +198,9 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-08-25T19:29:50.869Z
-Stopped at: Phase 8 context gathered
-Resume file: .planning/phases/08-export-and-the-canonical-arguments/08-CONTEXT.md
+Last session: 2026-08-26T00:14:13.034Z
+Stopped at: Phase 8 UI-SPEC approved
+Resume file: .planning/phases/08-export-and-the-canonical-arguments/08-UI-SPEC.md
 
 ### Where things stand
 
