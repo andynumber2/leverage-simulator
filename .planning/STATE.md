@@ -4,16 +4,16 @@ milestone: v1.0
 milestone_name: milestone
 current_phase: 08
 current_phase_name: export-and-the-canonical-arguments
-status: executing
-stopped_at: Phase 8 wave 2 complete, paused before wave 3
-last_updated: "2026-08-26T04:57:14.223Z"
+status: complete
+stopped_at: Phase 08 complete and verified 4/4. All 8 roadmap phases done; v1.0 milestone content complete.
+last_updated: "2026-08-26T20:57:47.730Z"
 last_activity: 2026-08-26
-last_activity_desc: Phase 08 waves 1 and 2 complete (08-01, 08-02, 08-03 merged)
+last_activity_desc: Phase 08 complete, verified 4/4, code review fixed; final phase of v1.0
 progress:
   total_phases: 9
-  completed_phases: 8
+  completed_phases: 9
   total_plans: 66
-  completed_plans: 64
+  completed_plans: 66
 ---
 
 # Project State
@@ -27,8 +27,8 @@ See: .planning/PROJECT.md (updated 2026-08-16)
 
 ## Current Position
 
-Phase: 08 (export-and-the-canonical-arguments) — EXECUTING
-Status: Executing Phase 08
+Phase: 08 (export-and-the-canonical-arguments) — COMPLETE, verified 4/4
+Status: All 8 roadmap phases complete. v1.0 milestone content is done.
   The 1000ms PERF-03 budget is measured unreachable on the D-17 4-core host. Five levers
   measured and refuted: WASM (1.20x slower, 01-04), worker width 4 (zero, 07.1-06), per-bar
   output arrays (1-2%, quick-260824-46s), pool and dispatch overhead (0.14ms across the whole
@@ -39,7 +39,7 @@ Status: Executing Phase 08
   src/kernel/backtest.ts is byte-identical across all three measurement tasks. PERF-03 remains
   FAILED and is not claimed met. Only the two-consecutive-pass MERGE BAR was released, so the
   milestone stops blocking behind a budget no available lever can reach.
-Next: Phase 8 (export and the canonical arguments). Run /gsd-discuss-phase 8 to begin.
+Next: v1.0 milestone close. Outstanding: /gsd-secure-phase 8 (security enforcement active, no 08-SECURITY.md), and the branch is unpushed.
   Requirements reconciled 2026-08-25: the eleven Phase 7 requirements that had read Pending only
   because PERF-03 held the phase open (PERF-04/05/06/09, METR-06, VIZ-01/02/03/04/06/09) are now
   marked complete against real evidence. PERF-04, 05, 06 and 09 measured verdict=pass,
@@ -47,9 +47,9 @@ Next: Phase 8 (export and the canonical arguments). Run /gsd-discuss-phase 8 to 
   rest rest on named test files, all present, with 819/819 unit and 170/170 app green.
   v1.0 now owes exactly four requirements: SHARE-04, SHARE-05, SHARE-06 (all Phase 8), and
   PERF-03, which stays unmet by decision.
-Last activity: 2026-08-26 — Phase 08 execution resumed (wave continue)
+Last activity: 2026-08-26 — Phase 08 complete and verified; final phase of v1.0
 
-Progress: [████████░░] 75%  (6 of 8 roadmap phases complete)
+Progress: [██████████] 100%  (8 of 8 roadmap phases complete, plus inserted phase 7.1)
 
 > `total_phases` read 4 here until 2026-08-20 and the bar read 75%. The field had been
 > overwritten with the current phase number on every phase transition since `c5eefa2`
@@ -64,7 +64,7 @@ Progress: [████████░░] 75%  (6 of 8 roadmap phases complete)
 
 **Velocity:**
 
-- Total plans completed: 23
+- Total plans completed: 28
 - Average duration: —
 - Total execution time: —
 
@@ -75,6 +75,7 @@ Progress: [████████░░] 75%  (6 of 8 roadmap phases complete)
 | 1 | 6 | - | - |
 | 02 | 8 | - | - |
 | 05 | 9 | - | - |
+| 08 | 5 | - | - |
 
 **Recent Trend:**
 
@@ -211,9 +212,11 @@ Three of five plans are done and merged on `gsd/phase-08-export-and-the-canonica
   recorded is FIXED: `<ExportRow />` is now an unconditional sibling of the result-mode `Show`.
   Copy link relocated out of ParameterColumn (D-22), hover readout excluded from capture (F-02),
   D-02 theme parity and D-03 viewport independence closed empirically.
+
 - 08-03 (wave 2, merged `050dddd`): preset library plus `scripts/compute-presets.ts`, which runs
   the real kernel at build time and emits `presets.generated.ts` byte-identically across runs, so
   the headline figures are derived rather than hand-entered. No deviations.
+
 - 08-02 (wave 2, merged `b266ee1`): CSV export path with a dedicated `csv.worker.ts`,
   provenance preamble, and the recompute-to-finalValue proof.
 

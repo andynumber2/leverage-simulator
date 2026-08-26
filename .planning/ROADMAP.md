@@ -36,10 +36,10 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 3: Simulation Kernel and the UPRO/TQQQ Gate** - The cost model, proven against real leveraged-ETF history before any UI is built on it (completed 2026-08-18)
 - [x] **Phase 4: First Defensible Backtest in the Browser** - A real single run, in the browser, that can be pasted as a link (completed 2026-08-20)
 - [x] **Phase 5: Attribution and the Credibility Surface** - Name which mechanism consumed the money, and let a skeptic check every assumption (completed 2026-08-21)
-- [ ] **Phase 6: Heatmap Design Pass** - Argue the entry-date x leverage treatment from throwaway mockups, since there is no prior art to copy
-- [ ] **Phase 7: Sweep Engine and the Heatmap** - 10,000 backtests fanned across workers and painted progressively without stalling the UI
+- [x] **Phase 6: Heatmap Design Pass** - Argue the entry-date x leverage treatment from throwaway mockups, since there is no prior art to copy (completed 2026-08-21)
+- [x] **Phase 7: Sweep Engine and the Heatmap** - 10,000 backtests fanned across workers and painted progressively without stalling the UI (completed 2026-08-25; PERF-03 escalated, not met)
 - [x] **Phase 7.1: Sweep Pool Tuning** (INSERTED) - Executed 2026-08-24. 3 of 6 criteria met; PERF-03 remains FAILED at 1116-1411ms normalized across five 4-core runs, escalated with two unspent levers named
-- [ ] **Phase 8: Export and the Canonical Arguments** - Get the result out of the app as a picture, a CSV, or a curated permalink
+- [x] **Phase 8: Export and the Canonical Arguments** - Get the result out of the app as a picture, a CSV, or a curated permalink (completed 2026-08-26)
 
 ## Phase Details
 
@@ -443,7 +443,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 7.1 �
 | 6. Heatmap Design Pass | 6/6 | Complete    | 2026-08-21 |
 | 7. Sweep Engine and the Heatmap | 12/12 | Complete (PERF-03 escalated, not met) | 2026-08-25 |
 | 7.1. Sweep Pool Tuning (INSERTED) | 6/6 | Complete (3/6 criteria met, 3 escalated; PERF-03 merge bar released 2026-08-25) | 2026-08-24 |
-| 8. Export and the Canonical Arguments | 5/5 | In Progress|  |
+| 8. Export and the Canonical Arguments | 5/5 | Complete    | 2026-08-26 |
 
 ## Coverage
 
