@@ -232,3 +232,14 @@ None — no external service configuration required. `html-to-image@1.11.13` is 
 ---
 *Phase: 08-export-and-the-canonical-arguments*
 *Completed: 2026-08-26*
+
+## Self-Check: PASSED
+
+All key files confirmed present on disk: `src/export/download.ts`, `src/export/png-export.ts`,
+`src/app/components/ResultColumn/ExportRow.tsx`, `src/app/App.tsx`,
+`src/app/components/ParameterColumn/ParameterColumn.tsx`,
+`src/app/components/ResultColumn/HoverReadout.tsx`, `src/app/styles.css`,
+`tests/app/static-build.test.ts`, `tests/app/export-png.browser.test.ts`,
+`tests/app/narrow-viewport.browser.test.ts`.
+
+All commit hashes confirmed present in `git log`: `4a6d934`, `8a5d2f1`, `024f7a4`, `fb4873b`.
