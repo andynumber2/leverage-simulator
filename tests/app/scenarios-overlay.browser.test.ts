@@ -20,7 +20,7 @@ import { afterEach, beforeEach, expect, test } from 'vitest'
 import { mountApp } from '../../src/app/main.tsx'
 import { BUNDLE_VERSION } from '../../src/data-bundle.generated.ts'
 import { decodeParams } from '../../src/app/permalink.ts'
-import { PRESET_DEFINITIONS, type PresetDefinition } from '../../src/app/presets.ts'
+import { PRESET_DEFINITIONS, presetById as lookupPresetById, type PresetDefinition } from '../../src/app/presets.ts'
 import {
   activeTier,
   backtestRequest,
@@ -80,8 +80,14 @@ async function mountAndWaitForResult(): Promise<HTMLDivElement> {
   return container
 }
 
+/** WR-03: wraps the real `src/app/presets.ts` export (aliased `lookupPresetById` above) rather
+ * than re-implementing the same linear scan locally. Its return type intentionally differs from
+ * the real function's (`PresetDefinition`, not `PresetDefinition | undefined`) -- every call site
+ * in this file is asserting a fixture id it expects to exist, so the assertion below turns a
+ * missing id into an immediate, readable test failure instead of a `TypeError` deeper in the
+ * test body. */
 function presetById(id: string): PresetDefinition {
-  const preset = PRESET_DEFINITIONS.find((p) => p.id === id)
+  const preset = lookupPresetById(id)
   expect(preset, `expected a preset definition for "${id}"`).toBeDefined()
   return preset!
 }
