@@ -195,13 +195,17 @@ export function App() {
               </Show>
             </Show>
           </Show>
-          {/* Phase 8/D-21: rendered as a sibling of the screenshot region (never a child of it,
-              structurally -- not a rasterizer filter) and of ValidationExplanation/its guard, so
-              it is present -- disabled -- from the moment single-run mode is ready, before the
-              first kernel run resolves, and never disappears on a validation eviction (UI-SPEC E1
-              empty: the landing state and the result state share one layout height). */}
-          <ExportRow />
         </Show>
+        {/* Phase 8/D-21/UI-SPEC E1: rendered unconditionally, the same way SweepModeToggle above
+            is (D-18) -- never nested inside either result-mode Show, so the row is present and
+            disabled from the moment the app mounts, stays present through load, through a
+            validation eviction, and through both result modes (zero-one-many: the row's shape
+            never changes; empty: the landing state and the result state share one layout
+            height). It is a following sibling of the screenshot region in both modes: the
+            single-run `.screenshot-region` div above, and HeatmapPanel's own root element, which
+            IS the sweep `.screenshot-region` (never a descendant of either, structurally --
+            not a rasterizer filter). */}
+        <ExportRow />
       </main>
     </div>
     {/* D-09: its own always-reachable section, own canonical parameters, rendered below the

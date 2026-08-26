@@ -53,6 +53,21 @@ const ALLOWED_EXTERNAL_URLS: ReadonlyArray<{ readonly prefix: string; readonly r
       'default expense ratio and financing spread numbers came from (D-18\'s "every default carries its source ' +
       'inline" requirement) -- plain string data compiled into the bundle, never fetched at runtime',
   },
+  {
+    prefix: 'http://www.w3.org/1999/xhtml',
+    reason:
+      "the XHTML namespace URI, used by html-to-image's own DOM-cloning codegen (createElementNS) when it clones an " +
+      'SVG root during capture -- the same class of identifier as the SVG/MathML namespace URIs above, not a network request',
+  },
+  {
+    prefix: 'https://`',
+    reason:
+      "a string-prefix comparison literal inside html-to-image's bundled resource-embedding code (checking whether a " +
+      'discovered CSS `url(...)` reference is already absolute before resolving it against the document base URL) -- ' +
+      'the trailing backtick is the JS template-literal delimiter the URL_PATTERN regex swept up, not part of a URL. ' +
+      'This app never declares an external `url(...)` in its own CSS (offline-first constraint), so the code path is ' +
+      'unreached at runtime; the string is present only because it is a literal inside the minified library bundle',
+  },
 ]
 
 const URL_PATTERN = /https?:\/\/[^\s"'<>)]+/g
@@ -122,12 +137,17 @@ describe('static-build gate (APP-03, T-04-05)', () => {
     // canvas.toBlob(...) call site sits under src/export/. Phase 4-7 built .screenshot-region for
     // exactly this capture and deliberately deferred the capture code to this phase (F-01) -- the
     // inverted guard now asserts that code EXISTS and stays scoped, rather than that it is absent.
+    // The third pattern (a bare `toBlob(` call) matches this plan's real call site: html-to-image
+    // exports its own top-level `toBlob(node, options)` function (imported by name below, not a
+    // `canvas.toBlob()` method call), so the shape-based `canvas.toBlob(` pattern alone would never
+    // find it.
     const srcFiles = collectFiles(resolve(REPO_ROOT, 'src'), ['.ts', '.tsx'])
     const misplacedCaptureCallSites: string[] = []
     let captureCallSiteFound = false
     for (const file of srcFiles) {
       const content = readFileSync(file, 'utf8')
-      const hasCapture = content.includes('.toDataURL(') || /canvas\s*\.\s*toBlob\s*\(/.test(content)
+      const hasCapture =
+        content.includes('.toDataURL(') || /canvas\s*\.\s*toBlob\s*\(/.test(content) || /(?<!\.)\btoBlob\s*\(/.test(content)
       if (!hasCapture) continue
       captureCallSiteFound = true
       if (!file.includes(`${sep}src${sep}export${sep}`)) {
