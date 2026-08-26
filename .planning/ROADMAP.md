@@ -405,7 +405,7 @@ Plans:
   3. Named preset scenarios cover the canonical arguments, each one click from the landing state and each a shareable permalink. The set includes the windows where leverage looks bad (3x S&P from 1929, TQQQ from 2000, a high-rate financing regime) alongside the flattering one (the 2010s in isolation), so the preset list cannot itself be read as a cherry-pick.
   4. Exporting a PNG or a 25,000-row CSV does not drop a frame: the export path stays inside the 50ms main-thread task budget, measured.
 
-**Plans**: 1/5 plans executed
+**Plans**: 3/5 plans executed
 
 Plans:
 **Wave 1**
@@ -414,8 +414,8 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 08-02-PLAN.md — CSV export: D-06's eight columns, D-07's commented preamble, built in a Worker, recompute-to-finalValue proof (SHARE-05)
-- [ ] 08-03-PLAN.md — Preset library as data plus build-time outcome generation and its pinning test (SHARE-06)
+- [x] 08-02-PLAN.md — CSV export: D-06's eight columns, D-07's commented preamble, built in a Worker, recompute-to-finalValue proof (SHARE-05)
+- [x] 08-03-PLAN.md — Preset library as data plus build-time outcome generation and its pinning test (SHARE-06)
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
@@ -443,7 +443,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 7.1 �
 | 6. Heatmap Design Pass | 6/6 | Complete    | 2026-08-21 |
 | 7. Sweep Engine and the Heatmap | 12/12 | Complete (PERF-03 escalated, not met) | 2026-08-25 |
 | 7.1. Sweep Pool Tuning (INSERTED) | 6/6 | Complete (3/6 criteria met, 3 escalated; PERF-03 merge bar released 2026-08-25) | 2026-08-24 |
-| 8. Export and the Canonical Arguments | 1/5 | In Progress|  |
+| 8. Export and the Canonical Arguments | 3/5 | In Progress|  |
 
 ## Coverage
 
