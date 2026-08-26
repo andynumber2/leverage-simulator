@@ -778,6 +778,100 @@ body {
   line-height: 1.4;
 }
 
+/* Phase 8/D-14/D-15/UI-SPEC Typography: matches .attribution-heading's existing 14px/600
+   treatment -- the featured row's own inline heading, sitting above the four cards. */
+.featured-preset-heading {
+  margin: var(--space-md) 0 0;
+  font-size: var(--font-size-body);
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+/* D-14/UI-SPEC E2 overflow/zero-one-many: invariant at exactly four cards (D-15), collapsing from
+   four columns to two to one as width narrows -- mobile-first, reusing the app's existing 480px/
+   900px breakpoints rather than inventing new ones (900px matches .app-layout's own stacking
+   breakpoint). */
+.featured-preset-row {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-md);
+  margin-top: var(--space-sm);
+}
+
+@media (min-width: 480px) {
+  .featured-preset-row {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (min-width: 900px) {
+  .featured-preset-row {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+/* UI-SPEC "View all scenarios": follows .provenance-methodology-link's exact muted-link
+   precedent -- a navigation affordance, never accent-colored. */
+.scenarios-trigger {
+  display: inline-block;
+  margin-top: var(--space-sm);
+  border: none;
+  background: transparent;
+  padding: 0;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-label);
+  font-family: var(--font-ui);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.scenarios-trigger:hover,
+.scenarios-trigger:focus {
+  text-decoration: underline;
+}
+
+/* D-14/UI-SPEC Color: a preset card is a navigation affordance to a parameter set, never the
+   app's one explicit action -- same surface/border pair .result-column/.tier-option use, no
+   accent color anywhere in this rule set. min-width: 0 lets a card's content wrap inside a
+   narrow grid cell rather than forcing the cell wider (UI-SPEC E2 long-text backstop). */
+.preset-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 0;
+  padding: var(--space-md);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  text-align: left;
+  color: var(--color-text);
+  font-family: var(--font-ui);
+  cursor: pointer;
+}
+
+.preset-card-title {
+  font-size: var(--font-size-body);
+  color: var(--color-text);
+}
+
+.preset-card-outcome {
+  margin-top: var(--space-xs);
+  font-size: var(--font-size-label);
+  color: var(--color-text-muted);
+}
+
+.preset-card-tag {
+  display: block;
+  margin-top: var(--space-sm);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-label);
+  line-height: 1.4;
+}
+
+.preset-card-tag + .preset-card-tag {
+  margin-top: var(--space-xs);
+}
+
 /* D-09/F6: the standalone validation section, full width, below the two-column run layout and
    OUTSIDE the D-20 screenshot region -- --space-2xl (48px) separates it from the run layout
    above, per the UI-SPEC's Spacing Scale table ("between the two-column run layout and the
@@ -1032,4 +1126,82 @@ body {
   font-size: var(--font-size-body);
   font-family: var(--font-ui);
   color: var(--color-text);
+}
+
+/* Phase 8/D-14: the Scenarios overlay -- mirrors .methodology-overlay's exact full-viewport
+   treatment (position: fixed, its own overflow-y: auto scroll, positioned above everything else
+   in the app) verbatim, so a ten-card grid scrolls within THIS element rather than clipping. */
+.scenarios-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  background: var(--color-bg);
+  color: var(--color-text);
+}
+
+.scenarios-overlay-header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-lg);
+  background: var(--color-bg);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.scenarios-overlay-title {
+  margin: 0;
+  font-size: var(--font-size-headline-metric);
+  font-weight: 600;
+  font-family: var(--font-ui);
+  color: var(--color-text);
+}
+
+/* 44x44px minimum hit area, matching .methodology-overlay-close exactly. */
+.scenarios-overlay-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+  border: none;
+  background: transparent;
+  color: var(--color-text);
+  cursor: pointer;
+}
+
+.scenarios-overlay-close svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* D-14/UI-SPEC E2 zero-one-many: the layout assumes only "at least 8" cards, never a fixed
+   count -- the grid wraps to however many rows the library needs at the current column count,
+   scrolling within .scenarios-overlay's own overflow-y: auto (above) rather than clipping.
+   Mobile-first, reusing the same 480px/900px breakpoints .featured-preset-row uses. */
+.scenarios-overlay-content {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-md);
+  padding: var(--space-lg);
+  max-width: 900px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+@media (min-width: 480px) {
+  .scenarios-overlay-content {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (min-width: 900px) {
+  .scenarios-overlay-content {
+    grid-template-columns: repeat(3, 1fr);
+  }
 }

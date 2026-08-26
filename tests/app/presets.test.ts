@@ -78,6 +78,52 @@ function buildPermalinkParamsForPreset(
   }
 }
 
+describe('08-04-PLAN.md Task 1: the parameter mapping applyPreset produces', () => {
+  test('for every preset, the PermalinkParams applyPreset would produce matches the definition field for field, with bundleVersion sourced from the manifest rather than the definition', async () => {
+    // 08-04-PLAN.md Task 1: `applyPreset` itself is exercised end-to-end (click, DOM, URL decode)
+    // only in `tests/app/scenarios-overlay.browser.test.ts`, the one place `window.location` is
+    // real. This is the Node-side proof of the parameter MAPPING alone -- the exact
+    // `PermalinkParams` object `applyPreset`'s write path (`setActiveTier`/`setScaleMode`/
+    // `setDisplayedMetric`/`setResultMode`/`updateBacktestRequest`, then `writePermalinkUrl`)
+    // would eventually produce for every preset in the library, reusing
+    // `buildPermalinkParamsForPreset` above (the same construction the round-trip/uniqueness
+    // tests already trust) rather than a second, parallel one.
+    const bundle = await loadBundleFromDisk()
+    for (const preset of PRESET_DEFINITIONS) {
+      const inputs = buildKernelInputs(bundle, preset.request as BacktestRequest)
+      const params = buildPermalinkParamsForPreset(preset, inputs.window.lastDate, bundle.manifest.bundleVersion)
+
+      expect(params.symbol, `preset "${preset.id}" symbol`).toBe(preset.request.symbol)
+      expect(params.dividendReinvest, `preset "${preset.id}" dividendReinvest`).toBe(preset.request.dividendReinvest)
+      expect(params.leverage, `preset "${preset.id}" leverage`).toBe(preset.request.leverage)
+      expect(params.entryDate, `preset "${preset.id}" entryDate`).toBe(preset.request.entryDate)
+      expect(params.holdingPeriodBars, `preset "${preset.id}" holdingPeriodBars`).toBe(preset.request.holdingPeriodBars)
+      expect(params.initialInvestment, `preset "${preset.id}" initialInvestment`).toBe(preset.request.initialInvestment)
+      expect(params.contributionAmount, `preset "${preset.id}" contributionAmount`).toBe(preset.request.contributionAmount)
+      expect(params.contributionFrequency, `preset "${preset.id}" contributionFrequency`).toBe(
+        preset.request.contributionFrequency,
+      )
+      expect(params.expenseRatioPercent, `preset "${preset.id}" expenseRatioPercent`).toBe(preset.request.expenseRatioPercent)
+      expect(params.financingSpreadPercent, `preset "${preset.id}" financingSpreadPercent`).toBe(
+        preset.request.financingSpreadPercent,
+      )
+      expect(params.tier, `preset "${preset.id}" tier`).toBe(preset.tier)
+      expect(params.scale, `preset "${preset.id}" scale`).toBe(preset.scale)
+      expect(params.mode, `preset "${preset.id}" mode`).toBe(preset.mode)
+      expect(params.metric, `preset "${preset.id}" metric`).toBe(preset.metric)
+      expect(params.holdMode, `preset "${preset.id}" holdMode`).toBe(
+        preset.request.holdingPeriodBars === null ? 'end-of-data' : 'fixed',
+      )
+
+      // D-19: `PresetDefinition` carries no `bundleVersion` field at all -- it is filled in from
+      // the LIVE manifest at apply time, never stored on (or read from) the definition itself, so
+      // this is the one field with no definition-side counterpart to compare against.
+      expect(params.bundleVersion, `preset "${preset.id}" bundleVersion`).toBe(bundle.manifest.bundleVersion)
+      expect('bundleVersion' in preset, `preset "${preset.id}" must not carry its own bundleVersion field (D-19)`).toBe(false)
+    }
+  })
+})
+
 describe('SHARE-06: the preset library structural assertions', () => {
   test('D-16: every real-fund preset sets leverage exactly 1.0 and expenseRatioPercent exactly 0', () => {
     const realFundPresets = PRESET_DEFINITIONS.filter((preset) => REAL_LEVERAGED_FUND_SYMBOLS.includes(preset.request.symbol))
