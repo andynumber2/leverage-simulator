@@ -22,6 +22,7 @@ import { bundleVersionMismatchVariant } from './components/ResultColumn/BundleVe
 import { EquityCurveChart } from './components/ResultColumn/EquityCurveChart.tsx'
 import { ExportRow } from './components/ResultColumn/ExportRow.tsx'
 import { ExtendedTierWarning } from './components/ResultColumn/ExtendedTierWarning.tsx'
+import { FeaturedPresetRow } from './components/ResultColumn/FeaturedPresetRow.tsx'
 import { HeatmapPanel } from './components/ResultColumn/HeatmapPanel.tsx'
 import { LogScaleToggle } from './components/ResultColumn/LogScaleToggle.tsx'
 import { MetricsPanel } from './components/ResultColumn/MetricsPanel.tsx'
@@ -31,6 +32,7 @@ import { RuinBanner } from './components/ResultColumn/RuinBanner.tsx'
 import { SweepModeToggle } from './components/ResultColumn/SweepModeToggle.tsx'
 import { ValidationExplanation, type ExplanationVariant } from './components/ResultColumn/ValidationExplanation.tsx'
 import { MethodologyOverlay } from './components/MethodologyOverlay.tsx'
+import { ScenariosOverlay } from './components/ScenariosOverlay.tsx'
 import { ThemeToggle } from './components/ThemeToggle.tsx'
 import { ValidationSection } from './components/ValidationSection/ValidationSection.tsx'
 import { BUNDLE_VERSION } from '../data-bundle.generated.ts'
@@ -206,6 +208,10 @@ export function App() {
             IS the sweep `.screenshot-region` (never a descendant of either, structurally --
             not a rasterizer filter). */}
         <ExportRow />
+        {/* Phase 8/D-14/D-15: mounted unconditionally, the same as ExportRow above -- present
+            from the landing state and every result state alike (UI-SPEC E2 loading: presets are
+            static data, no loading state of their own). */}
+        <FeaturedPresetRow />
       </main>
     </div>
     {/* D-09: its own always-reachable section, own canonical parameters, rendered below the
@@ -216,6 +222,10 @@ export function App() {
         and the validation section, so a full-screen overlay renders over everything else. Mounted
         unconditionally; it renders no DOM node of its own until the methodology flag opens it. */}
     <MethodologyOverlay />
+    {/* Phase 8/D-14: the last child of the top-level layout, immediately after
+        MethodologyOverlay -- mounted unconditionally, renders no DOM node of its own until
+        openScenariosOverlay() opens it. */}
+    <ScenariosOverlay />
     </>
   )
 }
