@@ -408,10 +408,21 @@ Plans:
 **Plans**: 5 plans
 
 Plans:
+**Wave 1**
+
 - [ ] 08-01-PLAN.md — Export row and the PNG path: html-to-image, fixed 1160px 2x capture of `.screenshot-region`, Copy link relocated (SHARE-04)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
 - [ ] 08-02-PLAN.md — CSV export: D-06's eight columns, D-07's commented preamble, built in a Worker, recompute-to-finalValue proof (SHARE-05)
 - [ ] 08-03-PLAN.md — Preset library as data plus build-time outcome generation and its pinning test (SHARE-06)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
 - [ ] 08-04-PLAN.md — Scenarios: featured row of four, full-library overlay, applyPreset write path (SHARE-06)
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
 - [ ] 08-05-PLAN.md — PERF-07a measurement for the PNG path, the CSV path and the DCA preset apply, plus real-Safari verification (SHARE-04, SHARE-05, SHARE-06)
 
 **Waves**: 1: 08-01 · 2: 08-02, 08-03 · 3: 08-04 · 4: 08-05
