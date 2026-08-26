@@ -769,6 +769,15 @@ body {
   color: var(--color-destructive);
 }
 
+/* D-08/UI-SPEC E1 partial: Export CSV's sweep-mode disabled-reason note, duplicating
+   `.tier-option-disabled-reason`'s declarations rather than inventing a second treatment. */
+.export-disabled-reason {
+  display: block;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-label);
+  line-height: 1.4;
+}
+
 /* D-09/F6: the standalone validation section, full width, below the two-column run layout and
    OUTSIDE the D-20 screenshot region -- --space-2xl (48px) separates it from the run layout
    above, per the UI-SPEC's Spacing Scale table ("between the two-column run layout and the

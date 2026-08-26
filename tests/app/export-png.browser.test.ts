@@ -174,13 +174,16 @@ test('the Export PNG button is disabled before a result and enabled once a resul
   expect(button!.disabled).toBe(false)
 })
 
-test('the export row always renders exactly three buttons worth of shape: Export PNG plus the disabled Export CSV placeholder', async () => {
+test('the export row always renders exactly three buttons worth of shape: Copy link, Export PNG and Export CSV', async () => {
   const el = await mountAndWaitForMetrics()
-  const pngButton = el.querySelector('[data-testid="export-png-button"]')
+  const pngButton = el.querySelector<HTMLButtonElement>('[data-testid="export-png-button"]')
   const csvButton = el.querySelector<HTMLButtonElement>('[data-testid="export-csv-button"]')
   expect(pngButton).not.toBeNull()
   expect(csvButton).not.toBeNull()
-  expect(csvButton!.disabled, 'Export CSV ships disabled from this task; 08-02 wires its handler').toBe(true)
+  // 08-02 wires Export CSV's real handler: enabled here (a completed single-run result exists),
+  // matching Export PNG's own disabled condition -- see tests/app/export-csv.browser.test.ts for
+  // D-08's separate sweep-mode disabled condition.
+  expect(csvButton!.disabled, 'Export CSV should be enabled once a single-run result exists (08-02)').toBe(false)
 })
 
 test('clicking Export PNG produces a correctly sized, non-blank PNG Blob passed to the clipboard as a promise', async () => {

@@ -5,9 +5,8 @@
  * `.screenshot-region`, styled identically to `.copy-link-button` (an action strip attached to
  * the result, not a second panel, UI-SPEC Visual Hierarchy rank 2). Composes the existing
  * `CopyLinkButton` unchanged as the first button (D-22: relocated from the parameter column,
- * which drops its own render call site); ships Export PNG (fully wired) and a disabled Export CSV
- * placeholder button, so the row's shape never changes later when plan 08-02 wires the CSV
- * handler (UI-SPEC E1 zero-one-many).
+ * which drops its own render call site); ships Export PNG and Export CSV, both fully wired
+ * (UI-SPEC E1 zero-one-many: the row's shape never changes).
  *
  * Export PNG follows `CopyLinkButton.tsx`'s exact state-machine shape (`idle`/`confirmed`/
  * `failed`, a `LABELS` record, a clear-then-rearm 2000ms reset timer) with one load-bearing
@@ -17,16 +16,41 @@
  * D-23: on an absent Clipboard API/`ClipboardItem` constructor, or a rejected write, this falls
  * back to `triggerDownload`; only when that fallback itself throws does the button enter its
  * failed state.
+ *
+ * 08-02-PLAN.md: Export CSV has no confirmed state (D-23: a download has no clipboard-style
+ * silent-success ambiguity to confirm -- the browser's own download UI is the confirmation), so
+ * its state union is `idle`/`failed` only. Its handler calls `flushPermalinkUrl()` synchronously,
+ * the same discipline `CopyLinkButton.tsx`'s header documents and for the same reason: an export
+ * issued during or immediately after a drag must not embed a URL from before the drag settled.
+ *
+ * D-08: Export CSV carries a second, independent disabled condition beyond "no result yet" --
+ * `resultMode() === 'sweep'`, since a sweep has 10,000 runs and no single daily series to export.
+ * The button is never removed from the DOM in sweep mode (UI-SPEC E1 zero-one-many: the row's
+ * shape never changes); the adjacent disabled-reason note renders only in that case.
  */
 
 import { createSignal, Show } from 'solid-js'
 
+import { fromDaysSinceEpoch } from '../../../../tools/bundle-compiler/src/calendar.ts'
+import { buildCsvBlob, csvFilename } from '../../../export/csv-export.ts'
+import { buildPreambleLines } from '../../../export/csv-preamble.ts'
 import { triggerDownload } from '../../../export/download.ts'
 import { exportRegionAsPng, pngFilename } from '../../../export/png-export.ts'
-import { currentKernelResult } from '../../state.ts'
+import {
+  activeTier,
+  backtestRequest,
+  currentKernelInputs,
+  currentKernelResult,
+  displayedMetric,
+  flushPermalinkUrl,
+  loadedBundle,
+  resultMode,
+  scaleMode,
+} from '../../state.ts'
 import { CopyLinkButton } from '../ParameterColumn/CopyLinkButton.tsx'
 
 type ExportPngState = 'idle' | 'confirmed' | 'failed'
+type ExportCsvState = 'idle' | 'failed'
 
 const CONFIRMATION_DURATION_MS = 2000
 
@@ -36,14 +60,30 @@ const PNG_LABELS: Record<ExportPngState, string> = {
   failed: 'Export failed',
 }
 
+const CSV_LABELS: Record<ExportCsvState, string> = {
+  idle: 'Export CSV',
+  failed: 'Export failed',
+}
+
 /** The one shared failure string both export paths use (UI-SPEC Copywriting Contract). */
 const EXPORT_FAILURE_NOTE = 'Export failed - try again.'
 
+/** D-08's disabled-reason copy, verbatim from 08-UI-SPEC.md's Copywriting Contract. */
+const CSV_DISABLED_REASON = 'Switch to Single run to export a daily series.'
+
 export function ExportRow() {
   const [pngState, setPngState] = createSignal<ExportPngState>('idle')
+  const [csvState, setCsvState] = createSignal<ExportCsvState>('idle')
   let pngResetTimer: ReturnType<typeof setTimeout> | undefined
 
   const disabled = () => currentKernelResult() === null
+
+  /** D-08: disabled whenever there is no result yet OR the result mode is sweep -- two
+   * independent conditions, not a loading state. */
+  function csvDisabled(): boolean {
+    if (currentKernelResult() === null) return true
+    return resultMode() === 'sweep'
+  }
 
   function schedulePngReset(): void {
     if (pngResetTimer !== undefined) clearTimeout(pngResetTimer)
@@ -84,6 +124,70 @@ export function ExportRow() {
     }
   }
 
+  /** D-09/T-08-09: builds the CSV entirely in a Worker, off the main thread. Every one of
+   * `KernelSeries`' four per-bar input arrays and the two `KernelOutputs` arrays D-06's column
+   * set needs are defensive `.slice()` copies -- the live buffers this handler reads from are
+   * never handed to the worker, since the chart on screen is still reading them. The date column
+   * is resolved here, on the main thread, by indexing the compiled calendar directly
+   * (`calendar[window.entryIndex + i]`) rather than sent as raw day numbers, so the worker never
+   * needs the calendar decoder at all. */
+  async function handleExportCsvClick(): Promise<void> {
+    const inputs = currentKernelInputs()
+    const bundle = loadedBundle()
+    if (inputs === null || bundle === null) {
+      setCsvState('failed')
+      return
+    }
+
+    const { window: runWindow, series, outputs, params } = inputs
+    const returns = series.returns.slice()
+    const shortRate = series.shortRate.slice()
+    const calendarDaysElapsed = series.calendarDaysElapsed.slice()
+    const contributionFlags = series.contributionFlags.slice()
+    const outValue = outputs.outValue.slice()
+    const outLongGap = outputs.outLongGap.slice()
+    const dates: string[] = []
+    for (let i = 0; i < runWindow.barCount; i++) {
+      dates.push(fromDaysSinceEpoch(bundle.calendar[runWindow.entryIndex + i] ?? 0))
+    }
+
+    // D-22/CopyLinkButton.tsx discipline: forces any pending trailing-edge-debounced permalink
+    // write to happen synchronously, right now, before the URL below is read.
+    flushPermalinkUrl()
+    const permalinkUrl = window.location.href
+    const preambleLines = buildPreambleLines(
+      inputs,
+      backtestRequest(),
+      activeTier(),
+      scaleMode(),
+      // 08-CONTEXT.md D-08: CSV export is single-run only, so the preamble's own `mode` value is
+      // always 'single' regardless of what resultMode() reads at click time -- the exported file
+      // describes the single run it actually contains, never a mode the button cannot be clicked
+      // from.
+      'single',
+      displayedMetric(),
+      permalinkUrl,
+      bundle.manifest,
+    )
+
+    try {
+      const blob = await buildCsvBlob({
+        preambleLines,
+        dates,
+        returns,
+        shortRate,
+        calendarDaysElapsed,
+        contributionFlags,
+        contributionAmount: params.contributionAmount,
+        outValue,
+        outLongGap,
+      })
+      triggerDownload(blob, csvFilename())
+    } catch {
+      setCsvState('failed')
+    }
+  }
+
   return (
     <div class="export-row" data-testid="export-row">
       <CopyLinkButton />
@@ -97,14 +201,28 @@ export function ExportRow() {
       >
         {PNG_LABELS[pngState()]}
       </button>
-      {/* 08-02 wires the CSV handler behind this button; it ships disabled from this commit so
-          the row's shape (exactly three buttons once 08-01 Task 2 composes Copy link) never
-          changes. */}
-      <button type="button" class="export-button" data-testid="export-csv-button" data-export-state="idle" disabled>
-        Export CSV
+      <button
+        type="button"
+        class="export-button"
+        data-testid="export-csv-button"
+        data-export-state={csvState()}
+        disabled={csvDisabled()}
+        onClick={() => void handleExportCsvClick()}
+      >
+        {CSV_LABELS[csvState()]}
       </button>
+      <Show when={resultMode() === 'sweep'}>
+        <span class="export-disabled-reason" data-testid="export-csv-disabled-reason">
+          {CSV_DISABLED_REASON}
+        </span>
+      </Show>
       <Show when={pngState() === 'failed'}>
         <span class="export-failure-note" data-testid="export-png-failure-note">
+          {EXPORT_FAILURE_NOTE}
+        </span>
+      </Show>
+      <Show when={csvState() === 'failed'}>
+        <span class="export-failure-note" data-testid="export-csv-failure-note">
           {EXPORT_FAILURE_NOTE}
         </span>
       </Show>
