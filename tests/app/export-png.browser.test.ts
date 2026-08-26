@@ -16,8 +16,15 @@
  * (proven empirically by pixel scan, since that exercises html-to-image's actual canvas-rasterization
  * path, which the exclusion mechanism above does not touch), and the Copy-link
  * flush-before-read discipline surviving relocation into the export row.
+ *
+ * 08-01 Task 3 (D-02/D-03) adds: theme parity (a captured frame pixel matches the theme's real
+ * `--color-bg`, opaque, in both themes, driven through the real `setThemeOverride` write path
+ * `ThemeToggle.tsx` itself calls) and viewport independence (the identical run captured at two
+ * different browser viewport widths is dimension- and pixel-identical), closing
+ * `08-RESEARCH.md`'s Assumption A1 by measurement rather than by assumption.
  */
 
+import { page } from 'vitest/browser'
 import { afterEach, beforeEach, expect, test, vi } from 'vitest'
 
 import { mountApp } from '../../src/app/main.tsx'
@@ -31,10 +38,14 @@ import {
   sweepGrid,
   updateBacktestRequest,
 } from '../../src/app/state.ts'
+import { resetThemeState, setThemeOverride } from '../../src/app/theme.ts'
 import { EXPORT_PIXEL_RATIO, EXPORT_WIDTH_PX, exportRegionAsPng } from '../../src/export/png-export.ts'
 
 const HEATMAP_WIDTH_PX = 800
 const HEATMAP_HEIGHT_PX = 240
+/** Matches `tests/app/narrow-viewport.browser.test.ts`'s own `DEFAULT_VIEWPORT` -- restored after
+ * every test in this file so a viewport change in one test can never leak into the next. */
+const DEFAULT_VIEWPORT = { width: 1280, height: 720 } as const
 
 async function waitFor(predicate: () => boolean, timeoutMs = 5000): Promise<void> {
   const start = performance.now()
@@ -49,13 +60,19 @@ async function waitFor(predicate: () => boolean, timeoutMs = 5000): Promise<void
 let container: HTMLDivElement | undefined
 let disposeApp: (() => void) | undefined
 let clipboardDescriptor: PropertyDescriptor | undefined
+/** Set `true` only by the one test that actually calls `page.viewport(...)` -- `afterEach` skips
+ * the restore's own CDP round trip entirely for every other test in this file, since resizing an
+ * already-default-sized viewport is pure overhead in a file that already runs a real 10,000-cell
+ * sweep and several `html-to-image` captures; this repo's test container is memory-constrained
+ * enough that the saved round trips are worth it. */
+let viewportChanged = false
 
 beforeEach(() => {
   window.history.replaceState(null, '', window.location.pathname)
   clipboardDescriptor = Object.getOwnPropertyDescriptor(navigator, 'clipboard')
 })
 
-afterEach(() => {
+afterEach(async () => {
   disposeApp?.()
   disposeApp = undefined
   container?.remove()
@@ -74,7 +91,16 @@ afterEach(() => {
   // to blow their own timeouts. `restoreAllMocks` is the general fix: every `vi.spyOn` this file
   // creates reverts to its original implementation after the test that created it.
   vi.restoreAllMocks()
-})
+  // 08-01 Task 3: the theme-parity/viewport-independence test below drives a real
+  // `setThemeOverride('dark')` and resizes the real browser viewport -- both restored here so
+  // neither leaks into whichever test runs next, the same discipline this file's earlier
+  // `updateBacktestRequest(DEFAULT_REQUEST)` fix applies to the crosshair-commit test above.
+  resetThemeState()
+  if (viewportChanged) {
+    viewportChanged = false
+    await page.viewport(DEFAULT_VIEWPORT.width, DEFAULT_VIEWPORT.height)
+  }
+}, 60_000)
 
 async function mountAndWaitForMetrics(timeoutMs = 5000): Promise<HTMLDivElement> {
   container = document.createElement('div')
@@ -428,4 +454,147 @@ test(
     expect(copiedUrl.searchParams.get('leverage')).toBe(newLeverage)
   },
   30_000,
+)
+
+// -------------------------------------------------------------------------------------------
+// 08-01 Task 3 (D-02/D-03): theme parity and viewport independence, closing 08-RESEARCH.md's
+// Assumption A1 by measurement.
+// -------------------------------------------------------------------------------------------
+
+async function nextFrame(): Promise<void> {
+  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+}
+
+interface DecodedImage {
+  width: number
+  height: number
+  data: Uint8ClampedArray
+}
+
+/** The one decode helper both Task 3 blocks share (per the plan's own instruction to put it in
+ * the test file, not `src/`) -- returns dimensions and the full pixel buffer together, so a test
+ * needs only one `createImageBitmap` round trip per capture. */
+async function decodeImage(blob: Blob): Promise<DecodedImage> {
+  const bitmap = await createImageBitmap(blob)
+  const canvas = document.createElement('canvas')
+  canvas.width = bitmap.width
+  canvas.height = bitmap.height
+  const ctx = canvas.getContext('2d')
+  if (ctx === null) throw new Error('export-png.browser.test: canvas has no 2d context')
+  ctx.drawImage(bitmap, 0, 0)
+  bitmap.close()
+  const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data
+  return { width: canvas.width, height: canvas.height, data }
+}
+
+function pixelAt(image: DecodedImage, x: number, y: number): { r: number; g: number; b: number; a: number } {
+  const idx = (y * image.width + x) * 4
+  return { r: image.data[idx]!, g: image.data[idx + 1]!, b: image.data[idx + 2]!, a: image.data[idx + 3]! }
+}
+
+function cssColorToRgbTask3(hex: string): { r: number; g: number; b: number } {
+  const normalized = hex.replace('#', '')
+  return {
+    r: Number.parseInt(normalized.slice(0, 2), 16),
+    g: Number.parseInt(normalized.slice(2, 4), 16),
+    b: Number.parseInt(normalized.slice(4, 6), 16),
+  }
+}
+
+/** `src/app/styles.css`'s own `--color-bg` values (matching `tests/app/theme.browser.test.ts`'s
+ * identical constants), read here rather than off `getComputedStyle` so the test has an
+ * independent expectation to check the capture against. */
+const LIGHT_BG_RGB = cssColorToRgbTask3('#f5f6f7')
+const DARK_BG_RGB = cssColorToRgbTask3('#14161a')
+
+/** FNV-1a, 32-bit -- a plain deterministic content hash over the decoded pixel buffer. Not
+ * cryptographic; only needs to distinguish "identical" from "different" across two captures of
+ * up to a few million bytes. */
+function fnv1aHash(data: Uint8ClampedArray): number {
+  let hash = 0x811c9dc5
+  for (let i = 0; i < data.length; i++) {
+    hash ^= data[i]!
+    hash = Math.imul(hash, 0x01000193)
+  }
+  return hash >>> 0
+}
+
+// Theme parity and viewport independence share ONE `mountAndWaitForMetrics()` mount rather than
+// one each -- the same resource-accumulation reasoning as the sweep-mode test above: this is the
+// 8th and 9th real app mount in this file, and this repo's memory-constrained test container
+// measurably could not sustain two more independent mounts back to back with the rest of the
+// file's mounts ahead of them, deterministically, not flakily.
+test(
+  'theme parity and viewport independence: a captured frame pixel matches the live theme, opaque; the same run at two viewport widths is dimension- and pixel-identical',
+  async () => {
+    const el = await mountAndWaitForMetrics()
+    const region = el.querySelector<HTMLElement>('[data-testid="screenshot-region"]')!
+
+    // (1) D-02 theme parity: a captured frame pixel matches --color-bg, opaque, in both themes.
+    setThemeOverride('light')
+    await nextFrame()
+    const lightBlob = await exportRegionAsPng(region)
+    const light = await decodeImage(lightBlob)
+    // (2, 2) sits inside EXPORT_FRAME_PX's (24px, scaled by EXPORT_PIXEL_RATIO) margin
+    // regardless of the ratio, since 2 < 24 * EXPORT_PIXEL_RATIO -- the plan's own coordinate.
+    const lightPixel = pixelAt(light, 2, 2)
+    expect(lightPixel.a, 'light-theme frame pixel is not fully opaque').toBe(255)
+    expect({ r: lightPixel.r, g: lightPixel.g, b: lightPixel.b }).toEqual(LIGHT_BG_RGB)
+
+    setThemeOverride('dark')
+    await nextFrame()
+    const darkBlob = await exportRegionAsPng(region)
+    const dark = await decodeImage(darkBlob)
+    const darkPixel = pixelAt(dark, 2, 2)
+    expect(darkPixel.a, 'dark-theme frame pixel is not fully opaque').toBe(255)
+    expect({ r: darkPixel.r, g: darkPixel.g, b: darkPixel.b }).toEqual(DARK_BG_RGB)
+
+    setThemeOverride('light')
+    await nextFrame()
+
+    // (2) D-03 viewport independence: the same run captured at two different browser viewport
+    // widths is dimension- and pixel-identical -- closes 08-RESEARCH.md's Assumption A1 by
+    // measurement.
+    viewportChanged = true
+    await page.viewport(1440, 900)
+    await nextFrame()
+    const wideBlob = await exportRegionAsPng(region)
+    const wide = await decodeImage(wideBlob)
+
+    await page.viewport(800, 900)
+    await nextFrame()
+
+    // UI-SPEC E1 overflow backstop, verified by measurement rather than by eye: the export row's
+    // three buttons wrap via `.export-row`'s own `flex-wrap` rather than overflowing the result
+    // column at this width (below the app's 900px stacking breakpoint, D-17). Measured here,
+    // reusing the 800px viewport this block already set, rather than a separate mount.
+    const exportRow = el.querySelector<HTMLElement>('[data-testid="export-row"]')!
+    expect(
+      exportRow.scrollWidth,
+      `export row clips rather than wraps at 800px (scrollWidth ${exportRow.scrollWidth} > clientWidth ${exportRow.clientWidth})`,
+    ).toBeLessThanOrEqual(exportRow.clientWidth)
+
+    const narrowBlob = await exportRegionAsPng(region)
+    const narrow = await decodeImage(narrowBlob)
+
+    expect(narrow.width, 'export width must not depend on the live viewport').toBe(wide.width)
+    expect(narrow.height, 'export height must not depend on the live viewport').toBe(wide.height)
+    expect(narrow.width).toBe(EXPORT_WIDTH_PX * EXPORT_PIXEL_RATIO)
+
+    // The real proof the fixed export width REFLOWED the region rather than merely scaling a
+    // viewport-sized layout up: an identical content hash, not just identical dimensions.
+    expect(
+      fnv1aHash(narrow.data),
+      '800px- and 1440px-viewport captures of the same run have different pixel content -- ' +
+        '08-RESEARCH.md Assumption A1 is NOT closed: the fixed export width did not reflow every ' +
+        'child (see this file\'s own comment on EquityCurveChart.tsx\'s clientWidth-at-build-time sizing)',
+    ).toBe(fnv1aHash(wide.data))
+  },
+  // This is the last, heaviest test in the file: 4 separate `exportRegionAsPng` captures running
+  // after 7 prior real app mounts (one a full 10,000-cell sweep). Measured needing well over
+  // 40s under this repo's real, memory-constrained test-container load even after trimming this
+  // file's own avoidable overhead (a shared mount, a skippable per-test viewport-restore round
+  // trip) -- 120s is a property of the shared sandbox, not of this test's own correctness, which
+  // isolated runs (this test alone) confirm completes in under 2s.
+  120_000,
 )

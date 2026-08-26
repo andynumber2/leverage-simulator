@@ -54,28 +54,43 @@ function resolveExportBackgroundColor(): string {
 
 /** SHARE-04/D-01/D-02/D-03: captures `region` (always `.screenshot-region`, T-08-02) at the fixed
  * export width and pixel ratio, with the frame applied as padding so the visible margin is part
- * of the exported image rather than cropped by it. The `style` override's `width` is what makes
- * the region lay out AT the export width before rasterization, not merely scale a viewport-sized
- * layout up afterward (D-03's viewport-independence guarantee; verified empirically in plan 08-01
- * Task 3 against 08-RESEARCH.md's Assumption A1). */
+ * of the exported image rather than cropped by it.
+ *
+ * D-03/Assumption A1 (08-01 Task 3, closed empirically, not assumed): `html-to-image`'s own
+ * `width`/`style` options apply the requested width to its internal CLONE's inline style, but
+ * that alone does not reliably force every descendant to re-lay-out at that width -- measured
+ * directly against this app's real single-run region: a captured region's total HEIGHT genuinely
+ * differed between an 800px-wide and a 1440px-wide live browser viewport, with the style override
+ * already in place (08-RESEARCH.md's own flagged risk, `bubkoo/html-to-image#320`). The fix is to
+ * put the LIVE region itself into the export layout, force a real layout pass, and only then hand
+ * it to `toBlob` -- not to clone the region by hand first (`cloneNode` drops live `<canvas>` pixel
+ * content, which `.screenshot-region` depends on for the chart/heatmap). The live region is
+ * restored to its original inline style in a `finally` block regardless of outcome, so a real
+ * user's page is never left resized. */
 export async function exportRegionAsPng(region: HTMLElement): Promise<Blob> {
   const backgroundColor = resolveExportBackgroundColor()
-  const blob = await toBlob(region, {
-    width: EXPORT_WIDTH_PX,
-    pixelRatio: EXPORT_PIXEL_RATIO,
-    backgroundColor,
-    style: {
-      width: `${EXPORT_WIDTH_PX}px`,
-      padding: `${EXPORT_FRAME_PX}px`,
-      boxSizing: 'border-box',
+  const originalCssText = region.style.cssText
+  region.style.width = `${EXPORT_WIDTH_PX}px`
+  region.style.padding = `${EXPORT_FRAME_PX}px`
+  region.style.boxSizing = 'border-box'
+  region.style.backgroundColor = backgroundColor
+  // Forces a synchronous layout pass at the new width before toBlob reads it, rather than
+  // leaving the resize queued behind whatever async work toBlob does first.
+  void region.offsetHeight
+
+  try {
+    const blob = await toBlob(region, {
+      pixelRatio: EXPORT_PIXEL_RATIO,
       backgroundColor,
-    },
-    filter: exportNodeFilter,
-  })
-  if (blob === null) {
-    throw new PngExportError('png-export: toBlob returned null')
+      filter: exportNodeFilter,
+    })
+    if (blob === null) {
+      throw new PngExportError('png-export: toBlob returned null')
+    }
+    return blob
+  } finally {
+    region.style.cssText = originalCssText
   }
-  return blob
 }
 
 /** T-08-01: builds the filename from `backtestRequest()` fields that arrive via `decodeParams`,
