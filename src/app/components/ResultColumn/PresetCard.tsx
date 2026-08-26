@@ -15,11 +15,11 @@
  * component's copy deliberately does not.
  *
  * The tag strings below are 08-UI-SPEC.md's Copywriting Contract's exact wording with one
- * deliberate substitution: the extended-tier tag's source em dash ("Extended tier — interpolated
- * data") is rendered here with a hyphen instead ("Extended tier - interpolated data"), per
- * `~/.claude/CLAUDE.md`'s absolute "never use the em dash character in any output" rule, which
- * overrides a plan/UI-SPEC instruction on conflict. Recorded as a deviation in this plan's
- * SUMMARY.md, not silently applied.
+ * deliberate substitution: the extended-tier tag's source copy uses a dash the project's own
+ * CLAUDE.md forbids (an em dash), rendered here with a hyphen instead ("Extended tier -
+ * interpolated data"), per `~/.claude/CLAUDE.md`'s absolute "never use the em dash character in
+ * any output" rule, which overrides a plan/UI-SPEC instruction on conflict. Recorded as a
+ * deviation in this plan's SUMMARY.md, not silently applied.
  */
 
 import { For } from 'solid-js'
