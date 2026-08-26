@@ -97,7 +97,7 @@ const DEFAULT_FINANCING_SPREAD_PERCENT = 0.5
  * are the flattering ones. This ordering IS the argument: a reader sees the tool leading with its
  * own worst results before being asked to (see this module's header).
  */
-export const PRESET_DEFINITIONS: readonly PresetDefinition[] = [
+export const PRESET_DEFINITIONS: readonly PresetDefinition[] = Object.freeze([
   {
     id: 'spx-3x-1929',
     title: '3x S&P 500 from the 1929 peak',
@@ -337,7 +337,7 @@ export const PRESET_DEFINITIONS: readonly PresetDefinition[] = [
     mode: 'single',
     ...COMMON_FIELDS,
   },
-] as const
+])
 
 /** Looks up a preset definition by id, or `undefined` when no preset carries that id. */
 export function presetById(id: string): PresetDefinition | undefined {
