@@ -453,7 +453,7 @@ test('5. every cost-control citation wraps under its control without clipping or
   expect(lines, `longest cost-control citation ("${longest.textContent!.slice(0, 60)}...") rendered 0 lines`).toBeGreaterThan(0)
 
   const copyLinkButton = el.querySelector('[data-testid="copy-link-button"]')
-  expect(copyLinkButton, 'copy link button not found in the parameter column').not.toBeNull()
+  expect(copyLinkButton, 'copy link button not found in the export row (D-22: relocated from the parameter column)').not.toBeNull()
 
   assertNoPageOverflow('scenario 5')
 })

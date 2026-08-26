@@ -7,13 +7,34 @@
  * read real clipboard contents, so the stub captures the `ClipboardItem` the handler constructs
  * and reads the Blob back off it via `getType('image/png')`, per 08-01-PLAN.md's own guidance to
  * intercept the blob rather than assert on real clipboard state.
+ *
+ * 08-01 Task 2 (D-22/F-02) adds: sweep-mode sibling placement, the F-02 exclusion mechanism
+ * (`data-export-exclude`) proven directly against the live `HoverReadout` node via an instance
+ * spy on its own `getAttribute` -- more precise than a pixel scan, since `--color-surface`
+ * white already appears throughout the rest of the captured chrome and would make a pure
+ * color-presence/absence check ambiguous -- the committed crosshair surviving a real capture
+ * (proven empirically by pixel scan, since that exercises html-to-image's actual canvas-rasterization
+ * path, which the exclusion mechanism above does not touch), and the Copy-link
+ * flush-before-read discipline surviving relocation into the export row.
  */
 
 import { afterEach, beforeEach, expect, test, vi } from 'vitest'
 
 import { mountApp } from '../../src/app/main.tsx'
-import { currentKernelResult, resetAppState } from '../../src/app/state.ts'
-import { EXPORT_PIXEL_RATIO, EXPORT_WIDTH_PX } from '../../src/export/png-export.ts'
+import { gridColToDisplayX, gridRowToDisplayY } from '../../src/heatmap/paint-contour.ts'
+import {
+  backtestRequest,
+  currentKernelResult,
+  DEFAULT_REQUEST,
+  resetAppState,
+  resultMode,
+  sweepGrid,
+  updateBacktestRequest,
+} from '../../src/app/state.ts'
+import { EXPORT_PIXEL_RATIO, EXPORT_WIDTH_PX, exportRegionAsPng } from '../../src/export/png-export.ts'
+
+const HEATMAP_WIDTH_PX = 800
+const HEATMAP_HEIGHT_PX = 240
 
 async function waitFor(predicate: () => boolean, timeoutMs = 5000): Promise<void> {
   const start = performance.now()
@@ -44,13 +65,22 @@ afterEach(() => {
   }
   resetAppState()
   vi.unstubAllGlobals()
+  // Bug found during 08-01 Task 2: the clipboard-rejection test below spies on
+  // `document.createElement` via `vi.spyOn(...).mockImplementation(...)`, which
+  // `vi.unstubAllGlobals()` does NOT undo (that call only reverts `vi.stubGlobal`). Left
+  // unrestored, every DOM node the rest of this file creates -- including every node
+  // `html-to-image` clones during a capture -- passed through the mocked wrapper for the
+  // remainder of the file, which measurably slowed later heavy tests (a full sweep mount) enough
+  // to blow their own timeouts. `restoreAllMocks` is the general fix: every `vi.spyOn` this file
+  // creates reverts to its original implementation after the test that created it.
+  vi.restoreAllMocks()
 })
 
-async function mountAndWaitForMetrics(): Promise<HTMLDivElement> {
+async function mountAndWaitForMetrics(timeoutMs = 5000): Promise<HTMLDivElement> {
   container = document.createElement('div')
   document.body.appendChild(container)
   disposeApp = mountApp(container)
-  await waitFor(() => container!.querySelector('[data-testid="metrics-panel"]') !== null)
+  await waitFor(() => container!.querySelector('[data-testid="metrics-panel"]') !== null, timeoutMs)
   return container
 }
 
@@ -192,3 +222,210 @@ test('when the clipboard write rejects, Export PNG falls back to a download and 
   expect(downloadedFilename).toMatch(/^leverage-sim-.*\.png$/)
   expect(button.getAttribute('data-export-state')).not.toBe('failed')
 })
+
+// -------------------------------------------------------------------------------------------
+// 08-01 Task 2 (D-22/F-02): sweep-mode sibling placement, the hover-readout exclusion, the
+// committed crosshair surviving a real capture, and the Copy-link flush discipline surviving
+// relocation into the export row.
+// -------------------------------------------------------------------------------------------
+
+function dispatchPointer(el: HTMLElement, type: 'pointermove' | 'pointerleave', xPx: number, yPx: number): void {
+  const rect = el.getBoundingClientRect()
+  el.dispatchEvent(
+    new PointerEvent(type, {
+      bubbles: true,
+      clientX: rect.left + xPx,
+      clientY: rect.top + yPx,
+      pointerId: 1,
+    }),
+  )
+}
+
+function dispatchClick(el: HTMLElement, xPx: number, yPx: number): void {
+  const rect = el.getBoundingClientRect()
+  el.dispatchEvent(
+    new MouseEvent('click', {
+      bubbles: true,
+      clientX: rect.left + xPx,
+      clientY: rect.top + yPx,
+    }),
+  )
+}
+
+function cellDisplayXY(col: number, row: number, cols: number, rows: number): { x: number; y: number } {
+  return {
+    x: gridColToDisplayX(col, HEATMAP_WIDTH_PX, cols),
+    y: gridRowToDisplayY(row, HEATMAP_HEIGHT_PX, rows),
+  }
+}
+
+function cssColorToRgb(hex: string): { r: number; g: number; b: number } {
+  const normalized = hex.replace('#', '')
+  return {
+    r: Number.parseInt(normalized.slice(0, 2), 16),
+    g: Number.parseInt(normalized.slice(2, 4), 16),
+    b: Number.parseInt(normalized.slice(4, 6), 16),
+  }
+}
+
+/** Light theme's own fixed accent hex (`src/app/styles.css`), matching `tests/app/crosshair.browser.test.ts`'s
+ * identical constant -- the app is not switched to dark theme by this file. */
+const ACCENT_RGB = cssColorToRgb('#2e6bd6')
+
+function containsColorClose(pixels: Uint8ClampedArray, target: { r: number; g: number; b: number }, tolerance = 20): boolean {
+  for (let i = 0; i < pixels.length; i += 4) {
+    const r = pixels[i]!
+    const g = pixels[i + 1]!
+    const b = pixels[i + 2]!
+    const a = pixels[i + 3]!
+    if (a < 200) continue
+    if (Math.abs(r - target.r) <= tolerance && Math.abs(g - target.g) <= tolerance && Math.abs(b - target.b) <= tolerance) {
+      return true
+    }
+  }
+  return false
+}
+
+/** Draws `blob` to an offscreen canvas and reads back its pixel buffer -- the same decode
+ * `decodePngPixels` above performs, duplicated locally rather than reused across the boundary
+ * because `exportRegionAsPng` is called directly in some tests below (bypassing the button's
+ * clipboard/download path entirely) and needs the identical decode shape. */
+async function decodeBlobPixels(blob: Blob): Promise<Uint8ClampedArray> {
+  const bitmap = await createImageBitmap(blob)
+  const canvas = document.createElement('canvas')
+  canvas.width = bitmap.width
+  canvas.height = bitmap.height
+  const ctx = canvas.getContext('2d')
+  if (ctx === null) throw new Error('export-png.browser.test: canvas has no 2d context')
+  ctx.drawImage(bitmap, 0, 0)
+  bitmap.close()
+  return ctx.getImageData(0, 0, canvas.width, canvas.height).data
+}
+
+async function mountRealAppInSweepMode(): Promise<HTMLDivElement> {
+  window.history.replaceState(null, '', window.location.pathname)
+  container = document.createElement('div')
+  document.body.appendChild(container)
+  disposeApp = mountApp(container)
+  await waitFor(() => currentKernelResult() !== null, 15_000)
+  const staleGrid = sweepGrid()
+  container.querySelector<HTMLInputElement>('[data-testid="sweep-mode-sweep"]')!.click()
+  expect(resultMode()).toBe('sweep')
+  await waitFor(() => {
+    const g = sweepGrid()
+    return g !== null && g !== staleGrid && g.cols === 200 && g.rows === 50
+  }, 35_000)
+  return container
+}
+
+// The three sweep-mode assertions below share ONE `mountRealAppInSweepMode()` call rather than
+// one mount each. This repo's test container is memory-constrained (the same reason
+// `tests/app/log-axis-splits.browser.test.ts` bounds its own series length, per that file's own
+// header) and a full sweep-mode mount runs a real 200x50/10,000-cell sweep; three independent
+// mounts in one file measurably starved later tests of the resources to complete their own
+// initial single-run compute within any reasonable timeout, deterministically, not flakily.
+test(
+  'sweep mode: export-row sibling placement, hover-readout exclusion, and a committed crosshair surviving capture',
+  async () => {
+    const el = await mountRealAppInSweepMode()
+    const grid = sweepGrid()!
+    const overlay = el.querySelector<HTMLCanvasElement>('[data-testid="heatmap-crosshair-overlay"]')!
+    const region = el.querySelector<HTMLElement>('[data-testid="screenshot-region"]')!
+
+    // (1) The export row is a following sibling of the sweep screenshot region, never a
+    // descendant of it -- HeatmapPanel's own root IS the sweep `.screenshot-region`.
+    const exportRow = el.querySelector('[data-testid="export-row"]')!
+    expect(region.contains(exportRow), 'export row must not be a descendant of the sweep screenshot region').toBe(false)
+    const position = region.compareDocumentPosition(exportRow)
+    expect(
+      (position & Node.DOCUMENT_POSITION_FOLLOWING) !== 0,
+      'export row must appear after the sweep screenshot region in document order',
+    ).toBe(true)
+
+    // (2) A capture taken while the hover readout is visible excludes it via the
+    // data-export-exclude filter. Spied on the exact live readout node's own `getAttribute`, not
+    // the prototype -- precise proof that `png-export.ts`'s node filter evaluated THIS element
+    // and read the F-02 attribute off it, rather than a pixel-color inference that
+    // `--color-surface` white (already present throughout the rest of the captured chrome) would
+    // make ambiguous.
+    const hoverPoint = cellDisplayXY(50, 10, grid.cols, grid.rows)
+    dispatchPointer(overlay, 'pointermove', hoverPoint.x, hoverPoint.y)
+    await waitFor(() => el.querySelector('[data-testid="hover-readout"]') !== null)
+
+    const readout = el.querySelector<HTMLElement>('[data-testid="hover-readout"]')!
+    const getAttributeSpy = vi.spyOn(readout, 'getAttribute')
+    await exportRegionAsPng(region)
+    const exclusionChecks = getAttributeSpy.mock.calls
+      .map((args, i) => ({ args, result: getAttributeSpy.mock.results[i]!.value as string | null }))
+      .filter(({ args }) => args[0] === 'data-export-exclude')
+    expect(exclusionChecks.length, 'png-export.ts never queried the hover-readout node for data-export-exclude').toBeGreaterThan(0)
+    expect(exclusionChecks.every(({ result }) => result === 'true')).toBe(true)
+    getAttributeSpy.mockRestore()
+
+    // (3) A capture taken after a crosshair cell has been committed still contains the
+    // accent-colored crosshair overlay -- proven empirically by pixel scan, since that exercises
+    // html-to-image's actual canvas-rasterization path, which the attribute-filter proof above
+    // does not touch.
+    const clickPoint = cellDisplayXY(150, 40, grid.cols, grid.rows)
+    dispatchClick(overlay, clickPoint.x, clickPoint.y)
+    await waitFor(() => el.querySelector('[data-testid="heatmap-canvas"]') !== null)
+
+    const blob = await exportRegionAsPng(region)
+    const pixels = await decodeBlobPixels(blob)
+    expect(
+      containsColorClose(pixels, ACCENT_RGB),
+      'captured PNG contains no accent-colored pixel -- the committed crosshair overlay did not survive the capture',
+    ).toBe(true)
+
+    // Bug found while writing this test: the crosshair commit above writes real leverage/
+    // entryDate values into `state.ts`'s module-level `backtestRequest` STORE (drill-down,
+    // Phase 7 D-22), and `resetAppState()` deliberately does not reset that store (only
+    // `loadStatus`/kernel-result/UI-mode signals -- see its own comment). In a real page load a
+    // fresh module instance restores `DEFAULT_REQUEST` for free; within one Vitest browser-mode
+    // test FILE the module instance is shared across every test, so without this the next test's
+    // fresh mount inherited this sweep's row-40 leverage, which happened to land on a parameter
+    // combination producing zero plottable bars -- silently starving every later test that waits
+    // on `[data-testid="metrics-panel"]`, deterministically, not flakily. Restoring explicitly
+    // here keeps this test's own mutation from leaking into whichever test runs next.
+    updateBacktestRequest(DEFAULT_REQUEST)
+  },
+  60_000,
+)
+
+test(
+  'a Copy link issued immediately after a leverage change yields the settled URL, not a stale one',
+  async () => {
+    // This test runs immediately after the sweep test above. `state.ts`'s module-singleton sweep
+    // Worker pool is left alive by design (`sweepPool` outlives any single sweep and is never
+    // torn down by `resetAppState`), so a fresh mount's own initial single-run compute can take
+    // longer here than the file's other, lighter mounts -- a modestly generous timeout, not a
+    // sign of anything wrong.
+    const el = await mountAndWaitForMetrics(20_000)
+
+    const writtenValues: string[] = []
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText: (text: string) => { writtenValues.push(text); return Promise.resolve() } },
+    })
+
+    const slider = el.querySelector<HTMLInputElement>('[data-testid="leverage-slider"]')!
+    const newLeverage = (backtestRequest().leverage === 3 ? 2 : 3).toFixed(2)
+    slider.value = newLeverage
+    slider.dispatchEvent(new Event('input', { bubbles: true }))
+    await waitFor(() => backtestRequest().leverage === Number(newLeverage))
+
+    // No explicit flush call here -- this is the load-bearing case: a Copy link issued
+    // IMMEDIATELY after the scrub, before any other code path has flushed the pending
+    // trailing-edge-debounced permalink write. CopyLinkButton.tsx's own handleClick must call
+    // flushPermalinkUrl() synchronously before reading window.location.href, or this click
+    // would copy the URL from before the scrub.
+    const copyButton = el.querySelector<HTMLButtonElement>('[data-testid="copy-link-button"]')!
+    expect(copyButton.closest('[data-testid="export-row"]'), 'Copy link must be composed inside the export row (D-22)').not.toBeNull()
+    copyButton.click()
+
+    await waitFor(() => writtenValues.length > 0)
+    const copiedUrl = new URL(writtenValues[0]!)
+    expect(copiedUrl.searchParams.get('leverage')).toBe(newLeverage)
+  },
+  30_000,
+)

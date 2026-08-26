@@ -33,6 +33,12 @@
  * grid's own ISO string directly, matching `EntryDateControl.tsx`'s identical convention.
  *
  * No em dash characters. Minimized ternaries, never nested.
+ *
+ * F-02 (08-CONTEXT.md Open Question, resolved in 08-01 Task 2): the root element below carries the
+ * F-02 export-exclusion attribute (see `png-export.ts`'s node filter), the one place in the app it
+ * is used. It names transient pointer state, not the argument being made, so the filter drops it
+ * from a PNG capture. The committed crosshair overlay canvas (`HeatmapPanel.tsx`) carries no such
+ * attribute and stays in the image -- a click-committed cell names the cell being argued about.
  */
 
 import { Show } from 'solid-js'
@@ -138,6 +144,7 @@ export function HoverReadout(props: HoverReadoutProps) {
     <div
       class="hover-readout"
       data-testid="hover-readout"
+      data-export-exclude="true"
       style={{
         position: 'absolute',
         left: `${left()}px`,
