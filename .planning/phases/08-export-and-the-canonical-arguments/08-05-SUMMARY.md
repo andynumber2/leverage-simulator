@@ -299,3 +299,10 @@ baselines), not something this plan attempted or silently declined.
 ---
 *Phase: 08-export-and-the-canonical-arguments*
 *Completed: 2026-08-26*
+
+## Self-Check: PASSED
+
+All created/modified files present on disk (`08-05-SUMMARY.md`, `src/export/png-export.ts`,
+`tests/app/export-png-canvas-fidelity.browser.test.ts`, `bench/perf-08-export.bench.test.ts`).
+All referenced commits (`cb940ae`, `77b0782`, `53fa1e4`, `0646feb`, `48bf7d4`, `d9ccdb9`,
+`e3a792b`, `a74cc0d`) found in this worktree's git history.
