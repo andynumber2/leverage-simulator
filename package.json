@@ -18,7 +18,8 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test:app": "vitest run --project app"
+    "test:app": "vitest run --project app",
+    "test:app:webkit": "vitest run --project app-webkit"
   },
   "license": "UNLICENSED",
   "devDependencies": {

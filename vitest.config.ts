@@ -786,6 +786,38 @@ export default defineConfig({
         },
       },
       {
+        plugins: [solid()],
+        test: {
+          // The WebKit gate, added by the `png-export-blank-canvas-safari` debug session
+          // (`.planning/debug/resolved/`). That defect was WebKit-only, shipped past a fully green
+          // 189/189 Chromium `app` suite, and reached a human in manual Safari verification. A
+          // Chromium-only browser gate structurally cannot catch an engine-specific rasterization
+          // bug, so this project exists to run the canvas-fidelity invariants under WebKit too.
+          //
+          // Deliberately scoped to ONE file rather than reusing the `app` include glob. Running the
+          // whole `app` suite under WebKit was measured during that session: 52 of 189 fail, and
+          // essentially none of them are app defects. The two dominant causes are WebKit's
+          // `history.replaceState` rate limit ("more than 100 times per 10 seconds", which Chromium
+          // does not enforce and which several files trip through their per-test permalink reset)
+          // and `tests/app/__screenshots__` baselines generated under Chromium. Adopting WebKit
+          // suite-wide is a real migration with its own budget; it is not a prerequisite for
+          // closing the coverage gap this bug exposed, and pretending otherwise would either
+          // deadlock the fix or produce a permanently red project.
+          name: 'app-webkit',
+          include: ['tests/app/export-png-canvas-fidelity.browser.test.ts'],
+          fileParallelism: false,
+          browser: {
+            enabled: true,
+            // Same locale pin and for the same reason as the `app` project above: this host's
+            // POSIX locale reaches Intl as the invalid tag "en-US@posix" and uPlot's module-level
+            // `new Intl.NumberFormat(navigator.language, ...)` throws on import without it.
+            provider: playwright({ contextOptions: { locale: 'en-US' } }),
+            headless: true,
+            instances: [{ browser: 'webkit' }],
+          },
+        },
+      },
+      {
         test: {
           // D-09: the gate-liveness self-test's harness command. Reuses bench/global-setup.ts
           // unchanged, so the deliberately over-budget fixture in bench/selftest/ goes through
