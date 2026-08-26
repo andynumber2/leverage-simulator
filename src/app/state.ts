@@ -590,7 +590,13 @@ function resolveRuinDate(currentBundle: LoadedBundle, inputs: KernelInputs, resu
   return fromDaysSinceEpoch(days)
 }
 
-function computeDerivedMetrics(currentBundle: LoadedBundle, inputs: KernelInputs, result: KernelResult): DerivedMetrics {
+/** Exported (08-03-PLAN.md Task 1, F-07) so `scripts/compute-presets.ts` calls this exact
+ * function rather than reimplementing IRR/CAGR selection -- a preset card's figure and the app's
+ * own figure cannot then disagree about which metric is being shown. Callable from a Node
+ * context: `buildCashFlows`, `solveIrr`, `solveCagr` and `resolveRuinDate` touch no `window`,
+ * `document`, `performance` or Solid signal on this call path (verified by reading each callee
+ * plus the smoke test in `tests/app/presets.test.ts`, closing RESEARCH Assumption A3). */
+export function computeDerivedMetrics(currentBundle: LoadedBundle, inputs: KernelInputs, result: KernelResult): DerivedMetrics {
   const cashFlows = buildCashFlows(inputs.params, inputs.series, inputs.outputs, result)
   const irr = solveIrr(cashFlows)
   const calendarDays = toDaysSinceEpoch(inputs.window.lastDate) - toDaysSinceEpoch(inputs.window.firstDate)
