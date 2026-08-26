@@ -712,6 +712,55 @@ body {
   white-space: nowrap;
 }
 
+/* Phase 8/D-21/UI-SPEC Visual Hierarchy rank 2: the export row sits directly below the
+   screenshot region, outside it -- no card, no background, no border around the row itself, so
+   it reads as an action strip attached to the result rather than a second panel. `flex-wrap` is
+   what keeps three buttons plus an occasional disabled-reason note from overflowing the result
+   column at the narrowest supported viewport (UI-SPEC E1 overflow backstop). */
+.export-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+  margin-top: var(--space-md);
+}
+
+/* UI-SPEC "Extended accent reservation": Export PNG/CSV share `.copy-link-button`'s exact visual
+   treatment verbatim -- three visual siblings, not a hierarchy. */
+.export-button {
+  min-width: 140px;
+  min-height: 44px;
+  padding: var(--space-xs) var(--space-md);
+  font-family: var(--font-ui);
+  font-size: var(--font-size-body);
+  font-weight: 600;
+  color: var(--color-accent);
+  background: transparent;
+  border: 1px solid var(--color-accent);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.export-button:disabled {
+  color: var(--color-text-muted);
+  border-color: var(--color-border);
+  cursor: not-allowed;
+}
+
+.export-button[data-export-state='failed'] {
+  color: var(--color-destructive);
+  border-color: var(--color-destructive);
+}
+
+/* UI-SPEC Copywriting Contract: the one shared failure string both export paths use, Label size,
+   destructive color -- same recessive-but-destructive treatment as `.copy-link-button`'s failed
+   state. */
+.export-failure-note {
+  font-family: var(--font-ui);
+  font-size: var(--font-size-label);
+  color: var(--color-destructive);
+}
+
 /* D-09/F6: the standalone validation section, full width, below the two-column run layout and
    OUTSIDE the D-20 screenshot region -- --space-2xl (48px) separates it from the run layout
    above, per the UI-SPEC's Spacing Scale table ("between the two-column run layout and the

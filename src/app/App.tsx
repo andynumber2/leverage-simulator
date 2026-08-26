@@ -20,6 +20,7 @@ import { ParameterColumn } from './components/ParameterColumn/ParameterColumn.ts
 import { AttributionPanel } from './components/ResultColumn/AttributionPanel.tsx'
 import { bundleVersionMismatchVariant } from './components/ResultColumn/BundleVersionBanner.tsx'
 import { EquityCurveChart } from './components/ResultColumn/EquityCurveChart.tsx'
+import { ExportRow } from './components/ResultColumn/ExportRow.tsx'
 import { ExtendedTierWarning } from './components/ResultColumn/ExtendedTierWarning.tsx'
 import { HeatmapPanel } from './components/ResultColumn/HeatmapPanel.tsx'
 import { LogScaleToggle } from './components/ResultColumn/LogScaleToggle.tsx'
@@ -194,6 +195,12 @@ export function App() {
               </Show>
             </Show>
           </Show>
+          {/* Phase 8/D-21: rendered as a sibling of the screenshot region (never a child of it,
+              structurally -- not a rasterizer filter) and of ValidationExplanation/its guard, so
+              it is present -- disabled -- from the moment single-run mode is ready, before the
+              first kernel run resolves, and never disappears on a validation eviction (UI-SPEC E1
+              empty: the landing state and the result state share one layout height). */}
+          <ExportRow />
         </Show>
       </main>
     </div>
