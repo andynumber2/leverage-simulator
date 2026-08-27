@@ -25,19 +25,23 @@
  * is exactly the figure the row names.
  *
  * A second, cross-file collision exists too, verified empirically: bench/perf-07.bench.test.ts
- * already claims the `PERF-07a`/`production` slot for its own leverage-slider-drag measurement,
- * and `.bench/.raw/` is reset once per `npm run bench` invocation, not once per file -- so a full,
+ * also claims the `PERF-07a`/`production` slot for its own leverage-slider-drag measurement, and
+ * `.bench/.raw/` is reset once per `npm run bench` invocation, not once per file -- so a full,
  * unfiltered suite run (every bench file in one invocation, e.g. CI) hits the identical `EEXIST`
  * collision across files, regardless of how this file's own three paths are consolidated
- * internally. The fix is the same remedy the guard's own error message names, applied
- * defensively: `commands.recordMeasurement` is attempted, and a rejection (from either collision)
- * is caught and downgraded to an info line rather than crashing the run. The pass/fail decision
- * itself never depends on whether the row was actually persisted: `assertWithinBudget` is a pure
- * function of the row's own fields, called unconditionally below, so a real breach still fails
- * this test whether or not the row's bytes made it into `.bench/.raw/`. The three individual
- * per-path figures, their own verdicts, and the DCA-specific figure Task 3's checkpoint needs are
- * all recorded in full, as info lines, regardless of which branch the row attempt takes -- no
- * information is lost either way.
+ * internally. Which file wins the slot depends on Vitest's file execution order, which is not
+ * guaranteed -- CI run 33026990805 recorded this file running first, the opposite of what an
+ * earlier version of this comment assumed, and that wrong assumption is what left
+ * bench/perf-07.bench.test.ts's own record attempt unguarded and crashing the run. The fix is
+ * now shared, not local to this file: `tryRecordMeasurement` (bench/report.ts) is what every
+ * recorder contesting a slot calls, here and in bench/perf-07.bench.test.ts, so the same
+ * degrade-and-continue behavior applies regardless of which file loses the race. The pass/fail
+ * decision itself never depends on whether the row was actually persisted: `assertWithinBudget`
+ * is a pure function of the row's own fields, called unconditionally below, so a real breach
+ * still fails this test whether or not the row's bytes made it into `.bench/.raw/`. The three
+ * individual per-path figures, their own verdicts, and the DCA-specific figure Task 3's
+ * checkpoint needs are all recorded in full, as info lines, regardless of which branch the row
+ * attempt takes -- no information is lost either way.
  *
  * `selectMaxLongTaskDuration` is imported from bench/long-task-selector.ts, not from
  * bench/perf-07.bench.test.ts directly: see that module's header comment for the correctness bug
@@ -57,6 +61,7 @@ import {
   assertWithinBudget,
   checkBudget,
   escalationTriggered,
+  tryRecordMeasurement,
   type MeasurementRow,
 } from './report.ts'
 
@@ -139,23 +144,16 @@ test('PERF-07a: max long task across the PNG export, the CSV export and the DCA 
     source: 'production',
     verdict: checkBudget({ normalizedMs, budgetMs: budget.thresholdMs }),
   }
-  // Defensive: see this file's header comment for the two collision surfaces (within-file and
-  // cross-file with bench/perf-07.bench.test.ts) a bare `await commands.recordMeasurement(row)`
-  // would be exposed to. A rejection downgrades to an info line rather than crashing the run;
+  // See this file's header comment for the two collision surfaces (within-file and cross-file
+  // with bench/perf-07.bench.test.ts) a bare `await commands.recordMeasurement(row)` would be
+  // exposed to. The shared helper (bench/report.ts) resolves rather than throws on a rejection;
   // the pass/fail decision below does not depend on which branch this takes.
-  let rowPersisted = true
-  try {
-    await commands.recordMeasurement(row)
-  } catch (error) {
-    rowPersisted = false
-    await commands.recordInfoLine(
-      'PERF-07a-export-row-collision',
-      'PERF-07a export: commands.recordMeasurement(row) was rejected (a PERF-07a/production row ' +
-        'already exists this run, most likely bench/perf-07.bench.test.ts\'s own leverage-drag ' +
-        `measurement in a combined suite run): ${error instanceof Error ? error.message : String(error)}. ` +
-        'Downgraded to an info line per this file\'s header comment; the figure below is recorded ' +
-        'in full regardless.',
-    )
+  const recordAttempt = await tryRecordMeasurement(
+    (measurement) => commands.recordMeasurement(measurement),
+    row,
+  )
+  if (!recordAttempt.persisted) {
+    await commands.recordInfoLine('PERF-07a-export-row-collision', recordAttempt.message ?? '')
   }
 
   // Per-path detail, since only the maximum becomes the one recorded MeasurementRow (this file's
@@ -180,7 +178,7 @@ test('PERF-07a: max long task across the PNG export, the CSV export and the DCA 
 
   await commands.recordInfoLine(
     'PERF-07a-export-info',
-    `PERF-07a export (${rowPersisted ? 'recorded row' : 'row collided, info-line only'}, the ` +
+    `PERF-07a export (${recordAttempt.persisted ? 'recorded row' : 'row collided, info-line only'}, the ` +
       `maximum of the three paths): worstPath=${worstPath.label} ` +
       `rawMs=${overallMaxLongTaskMs.toFixed(4)} normalizedMs=${normalizedMs.toFixed(4)} ` +
       `calibrationScore=${score} verdict=${row.verdict}`,
