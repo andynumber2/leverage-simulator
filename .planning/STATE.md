@@ -192,11 +192,40 @@ Recent decisions affecting current work:
 
 ## Deferred Items
 
-Items acknowledged and carried forward from previous milestone close:
+Items acknowledged and deferred at the v1.0 milestone close on 2026-08-27:
 
 | Category | Item | Status | Deferred At |
 |----------|------|--------|-------------|
-| *(none)* | | | |
+| verification | Phase 07: 07-VERIFICATION.md, criterion 3 (PERF-03) | gaps_found | 2026-08-27 |
+| verification | Phase 07.1: 07.1-VERIFICATION.md, criterion 2 (PERF-03) and criterion 5 (bench suite total runtime) | gaps_found | 2026-08-27 |
+
+Two distinct facts underlie all three criterion failures above.
+
+**PERF-03, sweep speed.** A full 10,000-cell sweep does not complete under 1000ms on the declared
+4-core D-17 baseline. Measured 1257 to 1411ms across every production run ever taken; it has never
+passed. Five levers measured and refuted: WASM (1.20x slower), worker width 4 (zero, reverted),
+kernel per-bar output arrays (1-2%), pool and dispatch overhead (0.14ms across the whole grid),
+per-cell kernel compute (combined ratio median 1.0036, six of eight arms slower than shipped).
+Only D-03's coarser default grid remains, and it changes what PERF-03 measures rather than making
+the measured thing faster. The budget was never moved: PERF-03.thresholdMs stays 1000. User-facing
+effect is a heatmap that takes about 1.3s rather than under 1s.
+
+**Bench suite total runtime.** 56,141ms against a 30,000ms BENCH_TOTAL_RUNTIME_CAP_MS, about 87%
+over. The visibility half of the criterion was delivered (assertRunInvariants now reports a cap
+breach independently of whether a verdict-fail fires first, so it can no longer be masked); the
+runtime itself was never brought inside the cap. No user-facing effect; this is CI hygiene.
+
+**Owner position on the CI benchmark, recorded 2026-08-27 for v1.1 planning.** The project owner
+stated they consider the CI benchmark approach not useful, on the grounds that it carries too much
+run-to-run variability. The project's own data supports that concern rather than contradicting it:
+WINDOWS.md entry 2 records that normalize()'s residual is 6.36% relative over 13 D-17 baseline
+runs, so a single run supports a headroom claim only to roughly plus or minus 13%, and PERF-03's
+own observed spread (1115.92 to 1411.05ms) is wider than several of the improvements the benchmark
+was asked to detect. A separate instrument problem was found on 2026-08-27: PERF-07a is observed
+with PerformanceObserver longtask entries, which only exist above 50ms, against a budget that is
+also 50ms, so that gate can never evidence headroom and did in fact pass a path that was 2.4x over
+budget on real hardware. Whether to keep, rebuild or retire the CI benchmark is an open v1.1
+design question, not a settled decision.
 
 ## Session Continuity
 
