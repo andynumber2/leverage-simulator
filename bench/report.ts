@@ -169,6 +169,67 @@ export function resetAccumulator(): void {
   accumulatedRows.length = 0
 }
 
+// --- Recording attempts (degrade-and-continue) ------------------------------------------------
+// bench/accumulator-store.ts's persistMeasurement enforces a write-once guard per (budgetId,
+// source) pair (`flag: 'wx'`, throws EEXIST on a second write) because two recorders for the
+// same slot have no principled winner. That guard is correct and stays untouched here; its own
+// thrown message already names the remedy -- one of the two recorders must downgrade to an info
+// line.
+//
+// CI run 33026990805 crashed instead of degrading because only one of the two bench files
+// contesting the PERF-07a/production slot guarded its own record attempt with a try/catch, and
+// the other assumed it always claimed the slot first -- an assumption Vitest's file execution
+// order does not guarantee. In that run the guarded file ran first, so the unguarded file's
+// record attempt threw. Worse, the unguarded file recorded its two rows in a loop, so that one
+// throw aborted the loop before its second, uncontested row was ever attempted.
+//
+// This is the one place degrade-and-continue behavior lives: a third recorder inherits it by
+// calling tryRecordMeasurement/tryRecordMeasurements, not by writing a new try/catch. The record
+// function is taken as a parameter, never imported from vitest/browser or a Node builtin, so
+// this stays callable from the Node unit project (proof against the real guard lives in
+// tests/accumulator-store.test.ts) and safe to import from a browser-context *.bench.test.ts
+// file. Emitting the info line documenting a degraded attempt is the caller's job, not this
+// helper's: only the caller knows its own info-line id and how to phrase its own figure.
+
+export interface RecordAttempt {
+  persisted: boolean
+  message: string | null
+}
+
+/** Attempts a single measurement record, resolving with the outcome rather than rethrowing. */
+export async function tryRecordMeasurement(
+  record: (row: MeasurementRow) => Promise<unknown>,
+  row: MeasurementRow,
+): Promise<RecordAttempt> {
+  try {
+    await record(row)
+    return { persisted: true, message: null }
+  } catch (error) {
+    const errorText = error instanceof Error ? error.message : String(error)
+    return {
+      persisted: false,
+      message:
+        `tryRecordMeasurement: budget "${row.budgetId}" (source "${row.source}") was not ` +
+        `persisted: ${errorText}. Disclosed as an info line instead; the pass/fail decision is ` +
+        'unaffected.',
+    }
+  }
+}
+
+/** Attempts one record per row, index aligned with `rows`, never short-circuiting on an earlier
+ * rejection: a rejected attempt on one row must not prevent a later row from being attempted. */
+export async function tryRecordMeasurements(
+  record: (row: MeasurementRow) => Promise<unknown>,
+  rows: readonly MeasurementRow[],
+): Promise<RecordAttempt[]> {
+  const results: RecordAttempt[] = []
+  for (const row of rows) {
+    // eslint-disable-next-line no-await-in-loop
+    results.push(await tryRecordMeasurement(record, row))
+  }
+  return results
+}
+
 // --- Full row set ------------------------------------------------------------------------------
 
 /**

@@ -712,6 +712,166 @@ body {
   white-space: nowrap;
 }
 
+/* Phase 8/D-21/UI-SPEC Visual Hierarchy rank 2: the export row sits directly below the
+   screenshot region, outside it -- no card, no background, no border around the row itself, so
+   it reads as an action strip attached to the result rather than a second panel. `flex-wrap` is
+   what keeps three buttons plus an occasional disabled-reason note from overflowing the result
+   column at the narrowest supported viewport (UI-SPEC E1 overflow backstop). */
+.export-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+  margin-top: var(--space-md);
+}
+
+/* D-22: CopyLinkButton composes its own `.copy-link-row` wrapper (own flex row, own
+   `margin-top`) unchanged inside `.export-row`. Zero that margin here so the export row's own
+   `margin-top` above is the only top spacing applied -- otherwise the two stack and the row sits
+   further from the screenshot region than `08-UI-SPEC.md`'s Spacing Scale intends. */
+.export-row .copy-link-row {
+  margin-top: 0;
+}
+
+/* UI-SPEC "Extended accent reservation": Export PNG/CSV share `.copy-link-button`'s exact visual
+   treatment verbatim -- three visual siblings, not a hierarchy. */
+.export-button {
+  min-width: 140px;
+  min-height: 44px;
+  padding: var(--space-xs) var(--space-md);
+  font-family: var(--font-ui);
+  font-size: var(--font-size-body);
+  font-weight: 600;
+  color: var(--color-accent);
+  background: transparent;
+  border: 1px solid var(--color-accent);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.export-button:disabled {
+  color: var(--color-text-muted);
+  border-color: var(--color-border);
+  cursor: not-allowed;
+}
+
+.export-button[data-export-state='failed'] {
+  color: var(--color-destructive);
+  border-color: var(--color-destructive);
+}
+
+/* UI-SPEC Copywriting Contract: the one shared failure string both export paths use, Label size,
+   destructive color -- same recessive-but-destructive treatment as `.copy-link-button`'s failed
+   state. */
+.export-failure-note {
+  font-family: var(--font-ui);
+  font-size: var(--font-size-label);
+  color: var(--color-destructive);
+}
+
+/* D-08/UI-SPEC E1 partial: Export CSV's sweep-mode disabled-reason note, duplicating
+   `.tier-option-disabled-reason`'s declarations rather than inventing a second treatment. */
+.export-disabled-reason {
+  display: block;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-label);
+  line-height: 1.4;
+}
+
+/* Phase 8/D-14/D-15/UI-SPEC Typography: matches .attribution-heading's existing 14px/600
+   treatment -- the featured row's own inline heading, sitting above the four cards. */
+.featured-preset-heading {
+  margin: var(--space-md) 0 0;
+  font-size: var(--font-size-body);
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+/* D-14/UI-SPEC E2 overflow/zero-one-many: invariant at exactly four cards (D-15), collapsing from
+   four columns to two to one as width narrows -- mobile-first, reusing the app's existing 480px/
+   900px breakpoints rather than inventing new ones (900px matches .app-layout's own stacking
+   breakpoint). */
+.featured-preset-row {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-md);
+  margin-top: var(--space-sm);
+}
+
+@media (min-width: 480px) {
+  .featured-preset-row {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (min-width: 900px) {
+  .featured-preset-row {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+/* UI-SPEC "View all scenarios": follows .provenance-methodology-link's exact muted-link
+   precedent -- a navigation affordance, never accent-colored. */
+.scenarios-trigger {
+  display: inline-block;
+  margin-top: var(--space-sm);
+  border: none;
+  background: transparent;
+  padding: 0;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-label);
+  font-family: var(--font-ui);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.scenarios-trigger:hover,
+.scenarios-trigger:focus {
+  text-decoration: underline;
+}
+
+/* D-14/UI-SPEC Color: a preset card is a navigation affordance to a parameter set, never the
+   app's one explicit action -- same surface/border pair .result-column/.tier-option use, no
+   accent color anywhere in this rule set. min-width: 0 lets a card's content wrap inside a
+   narrow grid cell rather than forcing the cell wider (UI-SPEC E2 long-text backstop). */
+.preset-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 0;
+  padding: var(--space-md);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  text-align: left;
+  color: var(--color-text);
+  font-family: var(--font-ui);
+  cursor: pointer;
+}
+
+.preset-card-title {
+  font-size: var(--font-size-body);
+  color: var(--color-text);
+}
+
+.preset-card-outcome {
+  margin-top: var(--space-xs);
+  font-size: var(--font-size-label);
+  color: var(--color-text-muted);
+}
+
+.preset-card-tag {
+  display: block;
+  margin-top: var(--space-sm);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-label);
+  line-height: 1.4;
+}
+
+.preset-card-tag + .preset-card-tag {
+  margin-top: var(--space-xs);
+}
+
 /* D-09/F6: the standalone validation section, full width, below the two-column run layout and
    OUTSIDE the D-20 screenshot region -- --space-2xl (48px) separates it from the run layout
    above, per the UI-SPEC's Spacing Scale table ("between the two-column run layout and the
@@ -966,4 +1126,82 @@ body {
   font-size: var(--font-size-body);
   font-family: var(--font-ui);
   color: var(--color-text);
+}
+
+/* Phase 8/D-14: the Scenarios overlay -- mirrors .methodology-overlay's exact full-viewport
+   treatment (position: fixed, its own overflow-y: auto scroll, positioned above everything else
+   in the app) verbatim, so a ten-card grid scrolls within THIS element rather than clipping. */
+.scenarios-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  background: var(--color-bg);
+  color: var(--color-text);
+}
+
+.scenarios-overlay-header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-lg);
+  background: var(--color-bg);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.scenarios-overlay-title {
+  margin: 0;
+  font-size: var(--font-size-headline-metric);
+  font-weight: 600;
+  font-family: var(--font-ui);
+  color: var(--color-text);
+}
+
+/* 44x44px minimum hit area, matching .methodology-overlay-close exactly. */
+.scenarios-overlay-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+  border: none;
+  background: transparent;
+  color: var(--color-text);
+  cursor: pointer;
+}
+
+.scenarios-overlay-close svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* D-14/UI-SPEC E2 zero-one-many: the layout assumes only "at least 8" cards, never a fixed
+   count -- the grid wraps to however many rows the library needs at the current column count,
+   scrolling within .scenarios-overlay's own overflow-y: auto (above) rather than clipping.
+   Mobile-first, reusing the same 480px/900px breakpoints .featured-preset-row uses. */
+.scenarios-overlay-content {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-md);
+  padding: var(--space-lg);
+  max-width: 900px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+@media (min-width: 480px) {
+  .scenarios-overlay-content {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (min-width: 900px) {
+  .scenarios-overlay-content {
+    grid-template-columns: repeat(3, 1fr);
+  }
 }

@@ -12,12 +12,14 @@
     "compile-data": "node --experimental-strip-types tools/bundle-compiler/src/cli.ts",
     "fetch-data": "node --experimental-strip-types tools/fetch-data/src/fetch.ts",
     "measure-extended-tier-bias": "node --experimental-strip-types scripts/measure-extended-tier-bias.ts",
+    "compute-presets": "node --experimental-strip-types scripts/compute-presets.ts",
     "run-backtest": "node --experimental-strip-types scripts/run-backtest.ts",
     "build-sweep-fixture": "node --experimental-strip-types scripts/build-sweep-fixture.ts",
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test:app": "vitest run --project app"
+    "test:app": "vitest run --project app",
+    "test:app:webkit": "vitest run --project app-webkit"
   },
   "license": "UNLICENSED",
   "devDependencies": {
@@ -33,6 +35,7 @@
   },
   "dependencies": {
     "comlink": "4.4.2",
+    "html-to-image": "1.11.13",
     "solid-js": "1.9.15",
     "uplot": "1.6.32"
   }

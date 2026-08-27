@@ -218,11 +218,11 @@ measured in CI, not an aspiration.
       bundle either reproduces faithfully or states clearly that the data has changed
 
 - [x] **SHARE-03**: Permalink reproducibility is enforced by a determinism test
-- [ ] **SHARE-04**: User can export the current chart as a PNG
-- [ ] **SHARE-05**: User can export a run's underlying daily series as CSV, so the math can be
+- [x] **SHARE-04**: User can export the current chart as a PNG
+- [x] **SHARE-05**: User can export a run's underlying daily series as CSV, so the math can be
       checked independently
 
-- [ ] **SHARE-06**: Named preset scenarios cover the canonical arguments, each one click from the
+- [x] **SHARE-06**: Named preset scenarios cover the canonical arguments, each one click from the
       landing state and each a shareable permalink
 
 ### Application Shell
@@ -291,7 +291,6 @@ measured in CI, not an aspiration.
 > PERF-03 stays `[ ]` and stays Escalated. It is not met, is not claimed met, and its budget is
 > unchanged at 1000ms.
 
-
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | PERF-01 | Phase 1 | Complete |
@@ -359,9 +358,9 @@ measured in CI, not an aspiration.
 | SHARE-01 | Phase 4 | Complete |
 | SHARE-02 | Phase 4 | Complete |
 | SHARE-03 | Phase 4 | Complete |
-| SHARE-04 | Phase 8 | Pending |
-| SHARE-05 | Phase 8 | Pending |
-| SHARE-06 | Phase 8 | Pending |
+| SHARE-04 | Phase 8 | Complete |
+| SHARE-05 | Phase 8 | Complete |
+| SHARE-06 | Phase 8 | Complete |
 | APP-01 | Phase 4 | Complete |
 | APP-02 | Phase 5 | Complete |
 | APP-03 | Phase 4 | Complete |

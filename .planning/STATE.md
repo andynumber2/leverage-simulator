@@ -2,18 +2,18 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_phase: "07.1"
-current_phase_name: sweep-pool-tuning-inserted
-status: ready
-stopped_at: "PERF-03 merge bar released by Key Decision; Phase 7/7.1 shipped; Phase 8 unblocked"
-last_updated: "2026-08-24T03:20:48.204Z"
-last_activity: 2026-08-24
-last_activity_desc: PERF-03 merge bar released under PERF-01a; PR 8 merged to main, PR 7 auto-merged as contained
+current_phase: 08
+current_phase_name: export-and-the-canonical-arguments
+status: complete
+stopped_at: "Completed quick task 260827-0yo: fix bench recorder collision degrade-and-continue"
+last_updated: "2026-08-27T00:59:16.850Z"
+last_activity: 2026-08-26
+last_activity_desc: Phase 08 complete, verified 4/4, code review fixed; final phase of v1.0
 progress:
-  total_phases: 8
-  completed_phases: 6
-  total_plans: 61
-  completed_plans: 61
+  total_phases: 9
+  completed_phases: 9
+  total_plans: 66
+  completed_plans: 66
 ---
 
 # Project State
@@ -23,12 +23,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-08-16)
 
 **Core value:** Given a symbol, a leverage level, an entry point, and a contribution schedule, produce a defensible outcome and show which mechanism consumed the money, in a form that can be pasted into an argument.
-**Current focus:** Phase 8 (export and the canonical arguments). PERF-03 is a standing, documented escalation and no longer blocks.
+**Current focus:** Phase 08 — export-and-the-canonical-arguments
 
 ## Current Position
 
-Phase: 07.1 complete. PERF-03 merge bar RELEASED 2026-08-25 by explicit Key Decision under PERF-01a.
-Status: READY for Phase 8
+Phase: 08 (export-and-the-canonical-arguments) — COMPLETE, verified 4/4
+Status: All 8 roadmap phases complete. v1.0 milestone content is done.
   The 1000ms PERF-03 budget is measured unreachable on the D-17 4-core host. Five levers
   measured and refuted: WASM (1.20x slower, 01-04), worker width 4 (zero, 07.1-06), per-bar
   output arrays (1-2%, quick-260824-46s), pool and dispatch overhead (0.14ms across the whole
@@ -39,7 +39,7 @@ Status: READY for Phase 8
   src/kernel/backtest.ts is byte-identical across all three measurement tasks. PERF-03 remains
   FAILED and is not claimed met. Only the two-consecutive-pass MERGE BAR was released, so the
   milestone stops blocking behind a budget no available lever can reach.
-Next: Phase 8 (export and the canonical arguments). Run /gsd-discuss-phase 8 to begin.
+Next: v1.0 milestone close. Outstanding: /gsd-secure-phase 8 (security enforcement active, no 08-SECURITY.md), and the branch is unpushed.
   Requirements reconciled 2026-08-25: the eleven Phase 7 requirements that had read Pending only
   because PERF-03 held the phase open (PERF-04/05/06/09, METR-06, VIZ-01/02/03/04/06/09) are now
   marked complete against real evidence. PERF-04, 05, 06 and 09 measured verdict=pass,
@@ -47,9 +47,9 @@ Next: Phase 8 (export and the canonical arguments). Run /gsd-discuss-phase 8 to 
   rest rest on named test files, all present, with 819/819 unit and 170/170 app green.
   v1.0 now owes exactly four requirements: SHARE-04, SHARE-05, SHARE-06 (all Phase 8), and
   PERF-03, which stays unmet by decision.
-Last activity: 2026-08-25, PERF-03 bar released, PR 8 merged to main (e23d5d0), PR 7 auto-resolved
+Last activity: 2026-08-26 — Phase 08 complete and verified; final phase of v1.0
 
-Progress: [████████░░] 75%  (6 of 8 roadmap phases complete)
+Progress: [██████████] 100%  (8 of 8 roadmap phases complete, plus inserted phase 7.1)
 
 > `total_phases` read 4 here until 2026-08-20 and the bar read 75%. The field had been
 > overwritten with the current phase number on every phase transition since `c5eefa2`
@@ -64,7 +64,7 @@ Progress: [████████░░] 75%  (6 of 8 roadmap phases complete)
 
 **Velocity:**
 
-- Total plans completed: 23
+- Total plans completed: 28
 - Average duration: —
 - Total execution time: —
 
@@ -75,6 +75,7 @@ Progress: [████████░░] 75%  (6 of 8 roadmap phases complete)
 | 1 | 6 | - | - |
 | 02 | 8 | - | - |
 | 05 | 9 | - | - |
+| 08 | 5 | - | - |
 
 **Recent Trend:**
 
@@ -198,9 +199,58 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-08-24T03:20:48.179Z
-Stopped at: Completed quick-260824-46s: measured PERF-03 lever 1, refuted
+Last session: 2026-08-27T00:59:16.809Z
+Stopped at: Completed quick task 260827-0yo: fix bench recorder collision degrade-and-continue
 Resume file: None
+
+### Phase 8, waves 1 and 2, 2026-08-26
+
+Three of five plans are done and merged on `gsd/phase-08-export-and-the-canonical-arguments`:
+
+- 08-01 (wave 1, merged `8172379`): PNG export path and the shared export row. Resumed in place
+  from the rescue commit `d48b4f7` below rather than reverting it. The E1 violation that commit
+  recorded is FIXED: `<ExportRow />` is now an unconditional sibling of the result-mode `Show`.
+  Copy link relocated out of ParameterColumn (D-22), hover readout excluded from capture (F-02),
+  D-02 theme parity and D-03 viewport independence closed empirically.
+
+- 08-03 (wave 2, merged `050dddd`): preset library plus `scripts/compute-presets.ts`, which runs
+  the real kernel at build time and emits `presets.generated.ts` byte-identically across runs, so
+  the headline figures are derived rather than hand-entered. No deviations.
+
+- 08-02 (wave 2, merged `b266ee1`): CSV export path with a dedicated `csv.worker.ts`,
+  provenance preamble, and the recompute-to-finalValue proof.
+
+Post-merge gate on the merged tree, all green: typecheck clean, build clean, 844/844 unit,
+180/180 app across all 27 browser files in one continuous run.
+
+Remaining: 08-04 (wave 3) then 08-05 (wave 4, `autonomous: false`, carries a human checkpoint).
+None of the phase tail gates have run. SHARE-04 and SHARE-05 stay Pending because 08-05 claims
+all three SHARE requirements and is the closure plan; 08-03 marked SHARE-06 Complete.
+
+Two process notes worth carrying. First, 08-02's executor self-reported its own HEAD as the
+worktree `expected_base` instead of its fork point; recording that verbatim would have tripped
+`cleanup-wave`'s fail-closed base check, so verify with `git merge-base` before recording.
+Second, `npm run test` is the `unit` project and excludes browser tests, so a unit-only run
+proves nothing about the export paths.
+
+### Recovery, 2026-08-26 (RESOLVED by 08-01 above)
+
+The container died mid-execution of plan 08-01. Executor worktree
+`worktree-agent-a5dcf64d606fd1af7` held Task 1 uncommitted; it was rescued onto this branch at
+`d48b4f7` (typecheck clean, 4 of 5 browser tests green). The one failing test is a real
+contract violation, deliberately committed unfixed so the rescue is a faithful record:
+`src/app/App.tsx` renders `<ExportRow />` inside the
+`loadStatus() === 'ready' && resultMode() === 'single'` guard, so the row disappears during load
+and again in sweep mode, and 08-UI-SPEC.md E1 forbids both (empty: the row is never hidden or
+collapsed; zero-one-many: CSV is disabled-in-place in sweep mode, never removed from the DOM).
+Hoist `ExportRow` to a sibling of that `Show`, unconditional, the way `SweepModeToggle` already
+is under D-18.
+
+Not started: 08-01 Task 2 (move Copy link into the export row) and Task 3 (D-02 theme parity,
+D-03 viewport independence). Plans 08-02 through 08-05 untouched.
+
+Note for whoever runs the browser suite: `npm run test` is the `unit` project and EXCLUDES
+`tests/app/**/*.browser.test.ts`. Browser tests run under `npm run test:app`.
 
 ### Where things stand
 
@@ -237,17 +287,21 @@ Unspent levers for PERF-03, after two measurement tasks on 2026-08-24:
 1. The kernel's write-only per-bar output arrays. MEASURED and REFUTED (quick-260824-46s):
    five-sample A/B ratio min=0.9810 median=0.9841 max=0.9904, roughly 1-2% of kernel compute.
    Not spent; `backtest.ts` stays byte-identical.
+
 2. Pool and dispatch overhead. MEASURED and EXHAUSTED (quick-260824-52h): allocation, merge and
    wire total 0.14ms across the whole 10,000-cell grid, drain imbalance 7.50ms,
    concurrencyFactor 1.05. There is no meaningful pool-overhead lever left to spend.
+
 3. D-03's coarser default grid. Still unspent and still held in reserve. It does not close the
    number, it redefines what the number measures, and `.claude/CLAUDE.md` states the sweep as
    "~10,000 backtests" in the project's own constraints.
+
 4. Newton-with-bisection-fallback for `solveIrr`, scoped to the sweep call site. Reopens D-08,
    so it needs its own Key Decision. Cannot affect the gated headline: the zero-contribution
    branch has no cash flows and never calls `solveIrr`. Worth doing on its own merits, since
    `npvEvaluationsPerSolve` measured 105.01 against a Newton expectation near 10, and that
    branch makes contribution-schedule users wait roughly 4 seconds.
+
 5. Real per-cell kernel compute at the 17-column chunk shape. MEASURED and REFUTED
    (quick-260824-r5d): nine arms, combined bit-preserving ratio min=0.9740 median=1.0036
    max=1.1012, clearing neither the 21.3% nor the 10.8% threshold at any measured point. Six of

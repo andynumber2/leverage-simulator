@@ -16,7 +16,7 @@
  */
 
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
-import { extname, join, resolve } from 'node:path'
+import { extname, join, resolve, sep } from 'node:path'
 
 import { beforeAll, describe, expect, test } from 'vitest'
 
@@ -52,6 +52,21 @@ const ALLOWED_EXTERNAL_URLS: ReadonlyArray<{ readonly prefix: string; readonly r
       'SEC EDGAR prospectus citation strings in src/validation/cost-parameters.ts, documenting where the sourced ' +
       'default expense ratio and financing spread numbers came from (D-18\'s "every default carries its source ' +
       'inline" requirement) -- plain string data compiled into the bundle, never fetched at runtime',
+  },
+  {
+    prefix: 'http://www.w3.org/1999/xhtml',
+    reason:
+      "the XHTML namespace URI, used by html-to-image's own DOM-cloning codegen (createElementNS) when it clones an " +
+      'SVG root during capture -- the same class of identifier as the SVG/MathML namespace URIs above, not a network request',
+  },
+  {
+    prefix: 'https://`',
+    reason:
+      "a string-prefix comparison literal inside html-to-image's bundled resource-embedding code (checking whether a " +
+      'discovered CSS `url(...)` reference is already absolute before resolving it against the document base URL) -- ' +
+      'the trailing backtick is the JS template-literal delimiter the URL_PATTERN regex swept up, not part of a URL. ' +
+      'This app never declares an external `url(...)` in its own CSS (offline-first constraint), so the code path is ' +
+      'unreached at runtime; the string is present only because it is a literal inside the minified library bundle',
   },
 ]
 
@@ -117,15 +132,56 @@ describe('static-build gate (APP-03, T-04-05)', () => {
     )
   })
 
-  test('no canvas-capture or image-export code ships this phase (SHARE-04 is Phase 8, D-20)', () => {
-    const jsFiles = collectFiles(DIST_DIR, ['.js'])
-    const captureCallSites: string[] = []
-    for (const file of jsFiles) {
+  test('canvas-capture/image-export code exists (SHARE-04, Phase 8, D-04) and is confined to src/export/ plus the declared html-to-image dependency (F-01)', () => {
+    // (a) Over every source .ts/.tsx file, any file containing a toDataURL(...) or
+    // canvas.toBlob(...) call site sits under src/export/. Phase 4-7 built .screenshot-region for
+    // exactly this capture and deliberately deferred the capture code to this phase (F-01) -- the
+    // inverted guard now asserts that code EXISTS and stays scoped, rather than that it is absent.
+    // The third pattern (a bare `toBlob(` call) matches this plan's real call site: html-to-image
+    // exports its own top-level `toBlob(node, options)` function (imported by name below, not a
+    // `canvas.toBlob()` method call), so the shape-based `canvas.toBlob(` pattern alone would never
+    // find it.
+    const srcFiles = collectFiles(resolve(REPO_ROOT, 'src'), ['.ts', '.tsx'])
+    const misplacedCaptureCallSites: string[] = []
+    let captureCallSiteFound = false
+    for (const file of srcFiles) {
       const content = readFileSync(file, 'utf8')
-      if (content.includes('.toDataURL(')) captureCallSites.push(`${file}: canvas.toDataURL(...)`)
-      if (/canvas\s*\.\s*toBlob\s*\(/.test(content)) captureCallSites.push(`${file}: canvas.toBlob(...)`)
+      const hasCapture =
+        content.includes('.toDataURL(') || /canvas\s*\.\s*toBlob\s*\(/.test(content) || /(?<!\.)\btoBlob\s*\(/.test(content)
+      if (!hasCapture) continue
+      captureCallSiteFound = true
+      if (!file.includes(`${sep}src${sep}export${sep}`)) {
+        misplacedCaptureCallSites.push(file)
+      }
     }
-    expect(captureCallSites, `unexpected canvas-capture call site(s):\n${captureCallSites.join('\n')}`).toEqual([])
+    expect(
+      misplacedCaptureCallSites,
+      `capture call site(s) found outside src/export/:\n${misplacedCaptureCallSites.join('\n')}`,
+    ).toEqual([])
+
+    // (b) Over the same tree, any file importing the rasterization package sits under src/export/.
+    const misplacedRasterizationImports: string[] = []
+    let rasterizationImportFound = false
+    for (const file of srcFiles) {
+      const content = readFileSync(file, 'utf8')
+      if (!content.includes('html-to-image')) continue
+      rasterizationImportFound = true
+      if (!file.includes(`${sep}src${sep}export${sep}`)) {
+        misplacedRasterizationImports.push(file)
+      }
+    }
+    expect(
+      misplacedRasterizationImports,
+      `html-to-image imported outside src/export/:\n${misplacedRasterizationImports.join('\n')}`,
+    ).toEqual([])
+
+    expect(captureCallSiteFound, 'expected a canvas-capture call site under src/export/ -- F-01 inversion found none').toBe(
+      true,
+    )
+    expect(
+      rasterizationImportFound,
+      'expected an html-to-image import under src/export/ -- F-01 inversion found none',
+    ).toBe(true)
 
     const packageJson = JSON.parse(readFileSync(resolve(REPO_ROOT, 'package.json'), 'utf8')) as {
       dependencies?: Record<string, string>
@@ -135,8 +191,16 @@ describe('static-build gate (APP-03, T-04-05)', () => {
       ...Object.keys(packageJson.dependencies ?? {}),
       ...Object.keys(packageJson.devDependencies ?? {}),
     ])
-    const bannedImageExportPackages = ['html-to-image', 'dom-to-image', 'dom-to-image-more', 'html2canvas']
-    const declaredBanned = bannedImageExportPackages.filter((pkg) => declaredPackages.has(pkg))
-    expect(declaredBanned, `package.json declares an image-export dependency: ${declaredBanned.join(', ')}`).toEqual([])
+
+    // (c) package.json dependencies declares exactly html-to-image.
+    expect(declaredPackages.has('html-to-image'), 'package.json does not declare html-to-image as a dependency').toBe(true)
+
+    // (d) package.json declares none of the three sibling rasterization packages the original ban
+    // listed by name -- the allow-list is now exactly one name, not zero.
+    const stillBannedImageExportPackages = ['dom-to-image', 'dom-to-image-more', 'html2canvas']
+    const declaredBanned = stillBannedImageExportPackages.filter((pkg) => declaredPackages.has(pkg))
+    expect(declaredBanned, `package.json declares a banned image-export dependency: ${declaredBanned.join(', ')}`).toEqual(
+      [],
+    )
   })
 })

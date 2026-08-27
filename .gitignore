@@ -20,3 +20,6 @@ dist/
 .DS_Store
 
 .claude/settings.local.json
+
+# GSD executor worktrees (transient, created by execute-phase isolation)
+.claude/worktrees/

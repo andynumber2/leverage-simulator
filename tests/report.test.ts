@@ -17,6 +17,8 @@ import {
   formatMeasured,
   hostMatchesPerf03Baseline,
   renderTable,
+  tryRecordMeasurement,
+  tryRecordMeasurements,
 } from '../bench/report.ts'
 import { resolveBenchResultsDir } from '../bench/accumulator-store.ts'
 import type { EnvironmentBlock } from '../bench/environment-block.ts'
@@ -442,6 +444,92 @@ describe('hostMatchesPerf03Baseline', () => {
       hostMatchesPerf03Baseline({ ...environment, hardwareConcurrency: PERF_03_BASELINE_HARDWARE_CONCURRENCY + 1 }),
     ).toBe(false)
     expect(hostMatchesPerf03Baseline({ ...environment, hardwareConcurrency: 2 })).toBe(false)
+  })
+})
+
+describe('tryRecordMeasurement', () => {
+  test('resolves persisted true with a null message when the record function resolves', async () => {
+    const record = async () => undefined
+    await expect(tryRecordMeasurement(record, row())).resolves.toEqual({
+      persisted: true,
+      message: null,
+    })
+  })
+
+  test('resolves persisted false with a non-empty message when the record function rejects, and never rethrows', async () => {
+    const record = async () => {
+      throw new Error('boom')
+    }
+    const result = await tryRecordMeasurement(record, row())
+    expect(result.persisted).toBe(false)
+    expect(result.message).not.toBeNull()
+    expect(result.message!.length).toBeGreaterThan(0)
+  })
+
+  test('the failure message names the budget id, the source, the underlying error text, and states the figure is disclosed as an info line with the pass/fail decision unaffected', async () => {
+    const failingRow = row({ budgetId: 'PERF-05', source: 'production' })
+    const record = async () => {
+      throw new Error('already recorded this run')
+    }
+    const result = await tryRecordMeasurement(record, failingRow)
+    expect(result.message).toMatch(/PERF-05/)
+    expect(result.message).toMatch(/production/)
+    expect(result.message).toMatch(/already recorded this run/)
+    expect(result.message).toMatch(/info line/)
+    expect(result.message).toMatch(/pass\/fail/)
+  })
+
+  test('a rejection with a non-Error value still yields a non-empty message, not "[object Object]" or empty', async () => {
+    const record = async () => {
+      // eslint-disable-next-line @typescript-eslint/only-throw-error
+      throw 'a plain string rejection'
+    }
+    const result = await tryRecordMeasurement(record, row())
+    expect(result.message).not.toBeNull()
+    expect(result.message!.length).toBeGreaterThan(0)
+    expect(result.message).not.toBe('[object Object]')
+    expect(result.message).toContain('a plain string rejection')
+  })
+})
+
+describe('tryRecordMeasurements', () => {
+  test('returns one result per input row, index aligned, calling the record function once per row in input order', async () => {
+    const calledOrder: string[] = []
+    const record = async (r: MeasurementRow) => {
+      calledOrder.push(r.budgetId)
+    }
+    const rowA = row({ budgetId: 'PERF-02' })
+    const rowB = row({ budgetId: 'PERF-05' })
+    const results = await tryRecordMeasurements(record, [rowA, rowB])
+    expect(results).toHaveLength(2)
+    expect(results[0]!.persisted).toBe(true)
+    expect(results[1]!.persisted).toBe(true)
+    expect(calledOrder).toEqual(['PERF-02', 'PERF-05'])
+  })
+
+  test('a rejection on an earlier row does not short-circuit: the recorder is still called for a later row, which still reports persisted true', async () => {
+    const rejectedIds = new Set(['PERF-02'])
+    const record = async (r: MeasurementRow) => {
+      if (rejectedIds.has(r.budgetId)) {
+        throw new Error(`budget "${r.budgetId}" already recorded this run`)
+      }
+    }
+    const rowA = row({ budgetId: 'PERF-02' })
+    const rowB = row({ budgetId: 'PERF-05' })
+    const results = await tryRecordMeasurements(record, [rowA, rowB])
+    expect(results[0]!.persisted).toBe(false)
+    expect(results[1]!.persisted).toBe(true)
+    expect(results[1]!.message).toBeNull()
+  })
+
+  test('an empty input array returns an empty result array and never calls the recorder', async () => {
+    let callCount = 0
+    const record = async () => {
+      callCount += 1
+    }
+    const results = await tryRecordMeasurements(record, [])
+    expect(results).toEqual([])
+    expect(callCount).toBe(0)
   })
 })
 

@@ -30,24 +30,17 @@ import { PERF_BUDGETS } from '../perf-budgets.ts'
 import { normalize } from './calibration.ts'
 import { resolveRunCalibration } from './canonical-calibration.ts'
 import { captureEnvironment } from './environment-block.ts'
+import { selectMaxLongTaskDuration } from './long-task-selector.ts'
 import {
   assertWithinBudget,
   checkBudget,
   escalationTriggered,
+  tryRecordMeasurements,
   type MeasurementRow,
 } from './report.ts'
 
-/**
- * PERF-07a's measuredMs selector, isolated as a pure function so its max-not-sum semantics are
- * directly testable against a known list (below), independent of the aggregate max
- * `commands.measureInteractionTiming` already computes browser-side from the same durations. The
- * requirement's ceiling is "no task exceeds 50ms" -- a maximum is the only statistic that ceiling
- * is stated against; a total-blocking-time sum would silently pass a run containing one 80ms long
- * task alongside several short ones.
- */
-function selectMaxLongTaskDuration(longTaskDurations: readonly number[]): number {
-  return longTaskDurations.length > 0 ? Math.max(...longTaskDurations) : 0
-}
+// PERF-07a's measuredMs selector: see bench/long-task-selector.ts's header comment for why it
+// lives in a plain, non-test module (08-05) rather than being defined inline here.
 
 /**
  * 05-09: the number of extra `runBacktest` calls `computeAttribution`'s Shapley decomposition
@@ -126,10 +119,23 @@ test('PERF-07a/07b: max long task and max coalesced recompute during a real leve
     verdict: checkBudget({ normalizedMs: normalized07b, budgetMs: budget07b.thresholdMs }),
   }
 
+  // Recorded through the shared degrade-and-continue helper (bench/report.ts), not a bare
+  // `await commands.recordMeasurement(row)` in a loop: PERF-07a shares its (budgetId, source)
+  // slot with bench/perf-08-export.bench.test.ts, and Vitest's file execution order is not
+  // guaranteed (CI run 33026990805 ran that file first). A rejected attempt on one row must not
+  // prevent the other row in this same file from being attempted, which is exactly what the
+  // helper's per-row isolation proves.
   const rows: MeasurementRow[] = [row07a, row07b]
-  for (const row of rows) {
+  const recordAttempts = await tryRecordMeasurements(
+    (row) => commands.recordMeasurement(row),
+    rows,
+  )
+  const collisions = rows
+    .map((row, index) => ({ row, attempt: recordAttempts[index]! }))
+    .filter(({ attempt }) => !attempt.persisted)
+  for (const { row, attempt } of collisions) {
     // eslint-disable-next-line no-await-in-loop
-    await commands.recordMeasurement(row)
+    await commands.recordInfoLine(`${row.budgetId}-row-collision`, attempt.message ?? '')
   }
 
   // Per-row reproducibility disclosure, plus the drag's step count and the observed
@@ -146,7 +152,8 @@ test('PERF-07a/07b: max long task and max coalesced recompute during a real leve
       `normalizedMs=${normalized07a.toFixed(4)} calibrationScore=${score} ` +
       `longTaskCount=${timing.longTaskCount} stepCount=${timing.stepCount} ` +
       `recomputeCount=${timing.recomputeCount} ` +
-      `hardwareConcurrency=${timing.hardwareConcurrency}${perf07aZeroNote}`,
+      `hardwareConcurrency=${timing.hardwareConcurrency} ` +
+      `persisted=${recordAttempts[0]!.persisted}${perf07aZeroNote}`,
   )
   await commands.recordInfoLine(
     'PERF-07b-info',
@@ -154,6 +161,7 @@ test('PERF-07a/07b: max long task and max coalesced recompute during a real leve
       `normalizedMs=${normalized07b.toFixed(4)} calibrationScore=${score} ` +
       `stepCount=${timing.stepCount} recomputeCount=${timing.recomputeCount} ` +
       `hardwareConcurrency=${timing.hardwareConcurrency} ` +
+      `persisted=${recordAttempts[1]!.persisted} ` +
       `attributionLive=true attributionCounterfactualArmCount=${ATTRIBUTION_COUNTERFACTUAL_ARM_COUNT} ` +
       '(each recompute measured here includes computeAttribution\'s ' +
       `${ATTRIBUTION_COUNTERFACTUAL_ARM_COUNT} extra runBacktest calls, run inside the same ` +

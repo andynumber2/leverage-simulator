@@ -1,0 +1,34 @@
+{
+  "version": "1.0",
+  "timestamp": "2026-08-26T04:57:14.223Z",
+  "phase": "08",
+  "phase_name": "export-and-the-canonical-arguments",
+  "phase_dir": ".planning/phases/08-export-and-the-canonical-arguments",
+  "plan": 4,
+  "task": 1,
+  "total_tasks": 5,
+  "status": "paused",
+  "completed_tasks": [
+    {"id": 1, "name": "08-01 PNG export path and the shared export row (wave 1)", "status": "done", "commit": "8172379"},
+    {"id": 2, "name": "08-03 canonical-argument preset library with build-time computed outcomes (wave 2)", "status": "done", "commit": "050dddd"},
+    {"id": 3, "name": "08-02 CSV export path and the recompute-to-finalValue proof (wave 2)", "status": "done", "commit": "b266ee1"}
+  ],
+  "remaining_tasks": [
+    {"id": 4, "name": "08-04 put the canonical arguments one click from the landing state (wave 3)", "status": "not_started"},
+    {"id": 5, "name": "08-05 measure main-thread cost of both export paths and the DCA preset (wave 4, autonomous:false, has a human checkpoint)", "status": "not_started"}
+  ],
+  "blockers": [],
+  "async_jobs": [],
+  "human_actions_pending": [
+    {"action": "08-05 is autonomous:false and will present a checkpoint mid-execution", "context": "Wave 4 cannot run unattended end to end", "blocking": false},
+    {"action": "Branch gsd/phase-08-export-and-the-canonical-arguments is unpushed", "context": "8 commits ahead of its base; a push is needed before any PR", "blocking": false}
+  ],
+  "decisions": [
+    {"decision": "Resumed 08-01 in place rather than reverting the rescued commit d48b4f7", "rationale": "Task 1's ~545 lines were correct apart from one precisely diagnosed UI-SPEC E1 violation; reverting would have cost a full re-run for no gain", "phase": "08"},
+    {"decision": "Recorded 08-02's worktree expected_base as the verified fork base f4c30dd, not the value the executor self-reported", "rationale": "The executor returned its own HEAD (1754000) as expected_base; git merge-base confirmed the true fork point was f4c30dd. Recording the self-reported value would have tripped cleanup-wave's fail-closed base check and blocked the merge", "phase": "08"},
+    {"decision": "SHARE-04 and SHARE-05 left Pending in REQUIREMENTS.md", "rationale": "08-05 claims all three SHARE requirements and is the phase closure plan; marking them before it runs would overstate completion", "phase": "08"}
+  ],
+  "uncommitted_files": [],
+  "next_action": "Run /gsd-execute-phase 8. The safe-resume gate will find 3 of 5 plans summarized and no blocked plans, and will resume at wave 3 with 08-04.",
+  "context_notes": "Waves 1 and 2 are merged and the post-merge gate is green on the merged tree: typecheck clean, build clean, 844/844 unit, 180/180 app across all 27 browser files in one continuous run. No executor worktrees remain. Working tree clean. Two waves remain: 08-04 (wave 3) then 08-05 (wave 4). The phase tail gates (aggregate_results, code_review_gate, regression_gate, verify_phase_goal, update_roadmap) have NOT run."
+}

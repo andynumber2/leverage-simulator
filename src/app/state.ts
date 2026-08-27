@@ -91,6 +91,7 @@ import { CELL_FLAG_INCOMPLETE, CELL_FLAG_RUINED } from '../data/sweep-fixture-fo
 import { BUNDLE_VERSION } from '../data-bundle.generated.ts'
 import { resolveEntryDateBounds, type Tier } from './bounds.ts'
 import { decodeParams, encodeParams, type PermalinkParams } from './permalink.ts'
+import type { PresetDefinition } from './presets.ts'
 import { createSweepGrid, leverageForRow, SWEEP_COLS, SWEEP_ROWS, type SweepGrid, type SweepGridMeta } from '../sweep/sweep-grid.ts'
 import { createSweepPool, type SweepPool, type SweepRunRequest } from '../sweep/sweep-pool.ts'
 import type { Metric } from '../heatmap/field-sampler.ts'
@@ -129,6 +130,17 @@ const [tier, setTierSignal] = createSignal<Tier>('strict')
  * gate one key on the URL (`methodology`), read/written outside the strict permalink codec (see
  * this module's header comment). */
 const [methodologyOverlayOpenSignal, setMethodologyOverlayOpenSignal] = createSignal<boolean>(false)
+/** 08-04-PLAN.md Task 1, D-14: whether the full-screen Scenarios overlay (the preset library) is
+ * currently open. Never enters `BacktestRequest`/`PermalinkParams` -- it is UI chrome, not a run
+ * parameter -- same discipline as `methodologyOverlayOpenSignal` above. Deliberately carries NO
+ * URL flag, unlike the methodology overlay: CRED-04 requires the methodology overlay to be
+ * independently shareable (a reader can send "here is the receipts page for this exact run"), but
+ * the Scenarios overlay is a picker whose entire output IS the permalink of whichever preset gets
+ * applied through it -- there is nothing to link TO the picker itself that the applied preset's
+ * own permalink does not already carry once `applyPreset` runs. Do not add a URL flag here by
+ * symmetry with `methodologyOverlayOpenSignal`; the asymmetry is deliberate (see this module's
+ * `openScenariosOverlay`/`closeScenariosOverlay` below, which write only this in-memory signal). */
+const [scenariosOverlayOpenSignal, setScenariosOverlayOpenSignal] = createSignal<boolean>(false)
 const [status, setStatus] = createSignal<LoadStatus>('loading')
 const [loadErrorMessage, setLoadErrorMessage] = createSignal<string | null>(null)
 const [bundle, setBundle] = createSignal<LoadedBundle | null>(null)
@@ -590,7 +602,13 @@ function resolveRuinDate(currentBundle: LoadedBundle, inputs: KernelInputs, resu
   return fromDaysSinceEpoch(days)
 }
 
-function computeDerivedMetrics(currentBundle: LoadedBundle, inputs: KernelInputs, result: KernelResult): DerivedMetrics {
+/** Exported (08-03-PLAN.md Task 1, F-07) so `scripts/compute-presets.ts` calls this exact
+ * function rather than reimplementing IRR/CAGR selection -- a preset card's figure and the app's
+ * own figure cannot then disagree about which metric is being shown. Callable from a Node
+ * context: `buildCashFlows`, `solveIrr`, `solveCagr` and `resolveRuinDate` touch no `window`,
+ * `document`, `performance` or Solid signal on this call path (verified by reading each callee
+ * plus the smoke test in `tests/app/presets.test.ts`, closing RESEARCH Assumption A3). */
+export function computeDerivedMetrics(currentBundle: LoadedBundle, inputs: KernelInputs, result: KernelResult): DerivedMetrics {
   const cashFlows = buildCashFlows(inputs.params, inputs.series, inputs.outputs, result)
   const irr = solveIrr(cashFlows)
   const calendarDays = toDaysSinceEpoch(inputs.window.lastDate) - toDaysSinceEpoch(inputs.window.firstDate)
@@ -699,6 +717,67 @@ export function openMethodologyOverlay(): void {
 export function closeMethodologyOverlay(): void {
   setMethodologyOverlayOpenSignal(false)
   writeMethodologyFlagToUrl(false)
+}
+
+/** 08-04-PLAN.md Task 1, D-14: whether the Scenarios overlay is currently open. */
+export function scenariosOverlayOpen(): boolean {
+  return scenariosOverlayOpenSignal()
+}
+
+/** 08-04-PLAN.md Task 1, D-14: opens the full-screen Scenarios overlay over whatever run is
+ * currently on screen, leaving every run parameter untouched -- mirrors
+ * `openMethodologyOverlay`'s shape exactly except for the URL write, which this deliberately
+ * omits (see `scenariosOverlayOpenSignal`'s doc comment for why). */
+export function openScenariosOverlay(): void {
+  setScenariosOverlayOpenSignal(true)
+}
+
+/** 08-04-PLAN.md Task 1, D-14: closes the Scenarios overlay, returning to the run underneath it. */
+export function closeScenariosOverlay(): void {
+  setScenariosOverlayOpenSignal(false)
+}
+
+/**
+ * 08-04-PLAN.md Task 1 (D-19/T-08-16, SHARE-06): turns a preset definition into the app's live
+ * state through the same validated setters every parameter control uses -- never the
+ * module-private store writer `setRequestStore`, which `applyPermalinkFromLocation` above uses
+ * ONLY at boot (see that function's own doc comment for why a raw signal write is safe there and
+ * only there). `applyPreset` runs at click time, mid-session, so it must go through the exported
+ * setters' validation and scheduling the same way any other parameter change does.
+ *
+ * Write order matters: `setActiveTier` first, because the tier bounds the entry date and
+ * `updateBacktestRequest`'s own entry-date write below must be validated against the correct
+ * bounds; then `setScaleMode`; then `setDisplayedMetric`; then `setResultMode`; then
+ * `updateBacktestRequest` last, which is the one call that both patches the store with the
+ * preset's full parameter set and schedules the coalesced recompute (D-03). Each of these calls
+ * its own `scheduleRun()`/`scheduleSweep()`, but `scheduleRun`'s module-level `scheduled` guard
+ * (D-03/Pattern 5) collapses any number of same-frame calls into exactly one recompute, so calling
+ * five setters here still produces exactly one `buildKernelInputs`/`runBacktest` pass.
+ *
+ * T-08-20: `setResultMode` already schedules a sweep when it switches TO sweep mode, and
+ * `updateBacktestRequest` schedules a SECOND sweep whenever `resultMode()` is already `'sweep'` --
+ * applying the one sweep-mode preset would therefore risk dispatching two sweeps for one click.
+ * `{ skipSweep: true }` is passed to `updateBacktestRequest` whenever `preset.mode === 'sweep'`:
+ * `setResultMode` has already scheduled the one sweep this click needs, against the parameters
+ * `updateBacktestRequest` is about to write, and `scheduleSweep`'s own `requestAnimationFrame`
+ * coalescing (07-05-PLAN.md) would collapse same-frame calls into one dispatch regardless --
+ * `skipSweep` makes that collapse structural rather than incidental, so a caller reading this
+ * function does not have to reason about rAF timing to know exactly one sweep fires (asserted
+ * mechanically in `tests/app/scenarios-overlay.browser.test.ts` via `sweepGeneration()`).
+ *
+ * `applyPreset` writes no `bundleVersion`: the definition carries none (D-19) -- the permalink's
+ * `bundleVersion` comes from the live `BUNDLE_VERSION` constant the same way it always has, via
+ * `writePermalinkUrl`, once this preset's own completed run reaches `storeSuccessfulRun`. Closes
+ * the Scenarios overlay on return, so applying a preset from inside it returns the user straight
+ * to the result it just computed rather than leaving the overlay open over it.
+ */
+export function applyPreset(preset: PresetDefinition): void {
+  setActiveTier(preset.tier)
+  setScaleMode(preset.scale)
+  setDisplayedMetric(preset.metric)
+  setResultMode(preset.mode)
+  updateBacktestRequest(preset.request, preset.mode === 'sweep' ? { skipSweep: true } : undefined)
+  closeScenariosOverlay()
 }
 
 export function loadStatus(): LoadStatus {
@@ -1022,6 +1101,7 @@ export function resetAppState(): void {
   setLinkBundleVersion(null)
   setTierSignal('strict')
   setMethodologyOverlayOpenSignal(false)
+  setScenariosOverlayOpenSignal(false)
   // 07-01-PLAN.md Task 2, D-18: a fresh visit (and every test's reset) seeds resultMode back to
   // 'single'. The last resolved sweepGrid/coarseSweepGrid/sweepGeneration/sweepFailedCellCount
   // are intentionally left in place -- they are a pure function of a subsequent scheduleSweep()
