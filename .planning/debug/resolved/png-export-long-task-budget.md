@@ -1,5 +1,5 @@
 ---
-status: awaiting_human_verify
+status: resolved
 trigger: "PNG export breaches the PERF-07a 50ms main-thread long-task budget on the 4-core CI baseline"
 created: 2026-08-27
 updated: 2026-08-27
@@ -108,7 +108,7 @@ breakdown" is a complete and acceptable answer to this session.
 
 ## Current Focus
 
-status: root cause confirmed by direct measurement; fix verified byte-identical; implementing.
+status: resolved. Root cause confirmed by direct measurement, fix verified byte-identical on output, confirmed fixed by the user in a real browser session.
 
 reasoning_checkpoint:
   hypothesis: "The long task is a single contiguous main-thread block inside html-to-image's
@@ -166,9 +166,8 @@ test: A/B against the real production build, driven through the real Export PNG 
   SHA-256 of the exported Blob and the longest main-thread block from a MessageChannel probe, at
   CDP CPU throttle 1x/2x/3x/4x and across both result modes and both themes.
 expecting: block falls by roughly 4x with an unchanged PNG hash.
-next_action: awaiting user confirmation that Export PNG still produces the expected image in a
-  real browser session. On "confirmed fixed", move this file to .planning/debug/resolved/ and
-  append the knowledge-base entry.
+next_action: none. Session archived to .planning/debug/resolved/ and recorded in
+  .planning/debug/knowledge-base.md.
 
 ## Evidence
 
