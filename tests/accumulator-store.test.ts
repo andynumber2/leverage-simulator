@@ -15,9 +15,13 @@ import { afterEach, beforeEach, describe, expect, test } from 'vitest'
 
 import {
   claimCalibrationScore,
+  loadAccumulatedRows,
   loadCalibrationScore,
+  persistMeasurement,
   resetAccumulatorStore,
 } from '../bench/accumulator-store.ts'
+import { tryRecordMeasurements } from '../bench/report.ts'
+import type { MeasurementRow } from '../bench/report.ts'
 
 const ORIGINAL_BENCH_RESULTS_DIR = process.env.BENCH_RESULTS_DIR
 
@@ -108,5 +112,59 @@ describe('claimCalibrationScore: broken-sample guards', () => {
   ])('rejects for a %s sample and leaves nothing stored', async (_label, sample) => {
     await expect(claimCalibrationScore(sample)).rejects.toThrow(String(sample))
     await expect(loadCalibrationScore()).resolves.toBeNull()
+  })
+})
+
+/**
+ * quick-260827-0yo: proves bench/report.ts's tryRecordMeasurements against the real
+ * persistMeasurement write-once guard, not a stub that merely throws. Mirrors the real
+ * PERF-07a/PERF-07b pairing: two distinct budgetId values, both source 'production'.
+ */
+function productionRow(overrides: Partial<MeasurementRow> = {}): MeasurementRow {
+  return {
+    budgetId: 'PERF-07a',
+    requirementId: 'PERF-07',
+    measuredMs: 10,
+    normalizedMs: 10,
+    budgetMs: 50,
+    anchorMs: 50,
+    anchorLabel: 'test anchor',
+    source: 'production',
+    verdict: 'pass',
+    ...overrides,
+  }
+}
+
+describe('tryRecordMeasurements against the real persistMeasurement guard', () => {
+  test('a lost race degrades rather than rejects, the uncontested row still reaches disk, and the winner keeps its own bytes', async () => {
+    const winnerRow = productionRow({ budgetId: 'PERF-07a', measuredMs: 40 })
+    await persistMeasurement(winnerRow)
+
+    const loserAttemptRow = productionRow({ budgetId: 'PERF-07a', measuredMs: 999 })
+    const uncontestedRow = productionRow({ budgetId: 'PERF-07b', measuredMs: 5 })
+
+    const results = await tryRecordMeasurements(persistMeasurement, [
+      loserAttemptRow,
+      uncontestedRow,
+    ])
+
+    expect(results).toHaveLength(2)
+    expect(results[0]!.persisted).toBe(false)
+    expect(results[0]!.message).not.toBeNull()
+    expect(results[0]!.message!.length).toBeGreaterThan(0)
+    expect(results[1]!.persisted).toBe(true)
+    expect(results[1]!.message).toBeNull()
+
+    const loaded = await loadAccumulatedRows()
+
+    const perf07bRow = loaded.find((r) => r.budgetId === 'PERF-07b')
+    expect(perf07bRow).toBeDefined()
+    expect(perf07bRow!.measuredMs).toBe(5)
+
+    // The already-claimed slot still holds the FIRST writer's bytes: the guard was not relaxed,
+    // and the loser's attempt did not overwrite the winner.
+    const perf07aRow = loaded.find((r) => r.budgetId === 'PERF-07a')
+    expect(perf07aRow).toBeDefined()
+    expect(perf07aRow!.measuredMs).toBe(40)
   })
 })
