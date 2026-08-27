@@ -11,7 +11,7 @@
  * Every canvas in `.screenshot-region` came out blank; the second capture happened to work.
  *
  * Why this is a separate file from `export-png.browser.test.ts`: these assertions are about
- * canvas PIXEL FIDELITY rather than the export row's wiring, and this is the one file the
+ * canvas PIXEL FIDELITY rather than the export row's wiring, and this is one of the two files the
  * `app-webkit` vitest project runs. That project exists because the defect was WebKit-only and
  * shipped past a fully green Chromium suite -- a Chromium-only gate could not have caught it, and
  * did not. The whole `app` suite cannot be run under WebKit yet (52 of 189 fail there, dominated

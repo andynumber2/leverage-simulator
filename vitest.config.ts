@@ -794,8 +794,13 @@ export default defineConfig({
           // Chromium-only browser gate structurally cannot catch an engine-specific rasterization
           // bug, so this project exists to run the canvas-fidelity invariants under WebKit too.
           //
-          // Deliberately scoped to ONE file rather than reusing the `app` include glob. Running the
-          // whole `app` suite under WebKit was measured during that session: 52 of 189 fail, and
+          // Deliberately scoped to a named list rather than reusing the `app` include glob. The
+          // second entry, export-png-style-properties, was added when the PERF-07a long-task
+          // breach was fixed by narrowing the CSS property set `html-to-image` copies into the
+          // capture: that narrowing is judged against each browser's OWN computed-property set
+          // and UA stylesheet, so a Chromium-only proof of "the exported PNG is unchanged" would
+          // certify nothing about Safari. That is the same coverage gap this project exists for.
+          // Running the whole `app` suite under WebKit was measured during that session: 52 of 189 fail, and
           // essentially none of them are app defects. The two dominant causes are WebKit's
           // `history.replaceState` rate limit ("more than 100 times per 10 seconds", which Chromium
           // does not enforce and which several files trip through their per-test permalink reset)
@@ -804,7 +809,7 @@ export default defineConfig({
           // closing the coverage gap this bug exposed, and pretending otherwise would either
           // deadlock the fix or produce a permanently red project.
           name: 'app-webkit',
-          include: ['tests/app/export-png-canvas-fidelity.browser.test.ts'],
+          include: ['tests/app/export-png-canvas-fidelity.browser.test.ts', 'tests/app/export-png-style-properties.browser.test.ts'],
           fileParallelism: false,
           browser: {
             enabled: true,

@@ -87,12 +87,20 @@ function isExcludedFromExport(node: Element, region: HTMLElement): boolean {
  * special-cases that exact value and returns `canvas.cloneNode(false)` synchronously
  * (`node_modules/html-to-image/lib/clone-node.js`), which is correct but measurably worse for
  * PERF-07a. The `<img>` path awaits `createImage` (onload, then `decode()`, then a
- * `requestAnimationFrame`) once per canvas, and those awaits are what keep the library's clone and
- * rasterization phases split across several short tasks. Taking them away fused the work into a
- * single 52ms task, over PERF-07a's 50ms long-task threshold, on a path that previously produced no
- * long task at all. Keeping the `<img>` path with a 1x1 payload keeps those task boundaries AND
- * drops the full-size PNG encode `toDataURL()` would otherwise run per canvas: measured back at
- * 0.00ms with zero long tasks, matching the pre-fix figure exactly. */
+ * `requestAnimationFrame`) once per canvas, and that await is the only thing anywhere in the
+ * library's clone that ends a main-thread task. Taking it away fused the work into a single 52ms
+ * task, over PERF-07a's 50ms long-task threshold. Keeping the `<img>` path with a 1x1 payload
+ * keeps the boundary AND drops the full-size PNG encode `toDataURL()` would otherwise run per
+ * canvas.
+ *
+ * CORRECTION, from the PERF-07a investigation that followed (see `exportStyleProperties` below,
+ * and `.planning/debug/resolved/png-export-long-task-budget.md`): an earlier revision of this
+ * comment read the follow-up "0.00ms with zero long tasks" as proof that the `<img>` path split
+ * the work into "several short tasks". It does not. In single-run mode this region holds exactly
+ * one canvas, so it produces exactly ONE boundary, about 11ms into the clone, and everything
+ * after it still runs in a single task. That 0.00ms was `PerformanceObserver`'s 50ms longtask
+ * floor reporting silence on a 9-core dev machine, not headroom; the same path measured 120ms on
+ * the 4-core CI baseline. The boundary is real and worth keeping, there is just only one of it. */
 let transparentPixelDataUrl: string | undefined
 
 function resolveTransparentPixelDataUrl(): string {
@@ -217,6 +225,135 @@ function compositeLiveCanvases(region: HTMLElement, context: CanvasRenderingCont
   }
 }
 
+/** The set of CSS property names `html-to-image` is told to copy from each live element onto its
+ * clone, in place of the library's default of EVERY computed property. THE PERF-07a FIX; see
+ * `.planning/debug/resolved/png-export-long-task-budget.md` for the full measurement.
+ *
+ * Why the default is expensive. `cloneCSSStyle` prefers `getComputedStyle(el).cssText` and only
+ * falls back to copying one property at a time. That preference never fires in practice: a
+ * computed-style declaration serializes to the EMPTY STRING per CSSOM, in Chromium and WebKit
+ * both, so the per-property branch always runs, over `getStyleProperties`'s default list of every
+ * property `document.documentElement` reports -- 495 of them in Chromium. Across this region's 84
+ * elements that is ~42,000 `getPropertyValue`/`setProperty` pairs and 674,612 characters of inline
+ * style, which then has to be XML-serialized, percent-encoded to a 928 KB `data:` URL, and parsed
+ * back by the browser. Measured on the production build: 25.7ms clone, 7.3ms serialize, 1.6ms
+ * encode, ~13ms `data:` URL parse, all inside ONE main-thread task, on a machine roughly twice as
+ * fast as the CI baseline where PERF-07a is measured.
+ *
+ * Why it is one task rather than several, which is what turns it into a long task rather than a
+ * sequence of short ones. `cloneChildren` walks the subtree with
+ * `children.reduce((deferred, child) => deferred.then(...))` -- a promise chain, and promise
+ * continuations are microtasks, which do not yield to the event loop. The only real task
+ * boundaries anywhere in the clone are `createImage`'s `onload` -> `decode()` ->
+ * `requestAnimationFrame`, reached once per canvas. `.screenshot-region` in single-run mode holds
+ * exactly ONE canvas, so there is exactly one boundary, it lands about 11ms in, and every
+ * remaining phase runs as microtask continuations inside the animation-frame callback that
+ * resolved it. Sweep mode has seven canvases, therefore seven boundaries, and its worst block
+ * measures a fifth of single-run mode's while rendering more -- same code, same library, more
+ * boundaries. This is also the correction to `resolveTransparentPixelDataUrl`'s claim above that
+ * the `<img>` path "keeps those task boundaries": it keeps ONE, which was enough to stay under a
+ * 50ms floor on a 9-core dev machine and is not enough on 4-core CI.
+ *
+ * Why narrowing the list is sound rather than a fidelity gamble. The clone is serialized into a
+ * `<foreignObject>` inside a standalone SVG document that carries none of this page's
+ * stylesheets, which is why the library inlines computed values at all. But that document does
+ * carry the browser's own UA stylesheet, and it applies the same initial values this page starts
+ * from. So a property that no stylesheet rule and no inline `style` attribute anywhere in the
+ * document declares cannot have been moved off the value the clone would compute for itself, and
+ * copying it is pure payload. Everything that CAN move it is covered: author rules (including
+ * ones inserted through CSSOM and ones nested inside `@media`/`@supports`/`@keyframes`, which the
+ * walk recurses into), `adoptedStyleSheets`, inline style attributes, and presentational
+ * attributes (which `cloneNode` copies verbatim, so they resolve identically in the clone).
+ * Custom properties are included even though every standard property is copied with its `var()`
+ * already substituted, because the cost of keeping them is small and the argument for dropping
+ * them is one more thing to be wrong about.
+ *
+ * Verified, not assumed: the exported PNG's SHA-256 is byte-identical with and without this
+ * option, across both result modes, both themes, and CPU throttle rates from 1x to 4x, while the
+ * longest main-thread block falls from 47/98/153/210ms to 14/30/40/51ms. Nothing is deferred --
+ * about 78% of the work stops happening. `tests/app/export-png-style-properties.browser.test.ts`
+ * is the standing guard.
+ *
+ * ONE array instance for the page's lifetime, deliberately. `getStyleProperties` memoizes the
+ * first `includeStyleProperties` value it is handed and holds it BY REFERENCE for the rest of the
+ * module's life, so handing it a freshly built array per capture would mean every capture after
+ * the first silently reused the first one's list. Refreshing this instance in place keeps the
+ * library's cached reference current instead -- which matters because a page can be exported in
+ * single-run mode and then in sweep mode, whose heatmap tick labels carry inline properties the
+ * first capture never saw. */
+const exportStyleProperties: string[] = []
+
+/** Adds every property name declared by any rule in `rules`, recursing into grouping rules
+ * (`@media`, `@supports`, `@layer`) and keyframe rules. Shorthands need no special handling: a
+ * declaration block enumerates its longhands, so `margin: 0` contributes all four
+ * `margin-*` names and `font: 12px serif` contributes all nineteen font longhands. */
+function collectRuleStyleProperties(rules: CSSRuleList, names: Set<string>): void {
+  for (let index = 0; index < rules.length; index += 1) {
+    const rule = rules[index]
+    if (rule === undefined) continue
+    const declarations = (rule as CSSStyleRule).style
+    if (declarations !== undefined) {
+      for (let property = 0; property < declarations.length; property += 1) {
+        const name = declarations[property]
+        if (name !== undefined) names.add(name)
+      }
+    }
+    const nested = (rule as CSSGroupingRule).cssRules
+    if (nested !== undefined) collectRuleStyleProperties(nested, names)
+  }
+}
+
+/** Brings `exportStyleProperties` up to date with everything the document currently declares, and
+ * reports whether the result is trustworthy enough to narrow the capture with.
+ *
+ * Returns false, meaning "capture with the library's full default list", whenever the set cannot
+ * be established completely: a stylesheet whose `cssRules` throws (a cross-origin sheet, which
+ * this app does not load today but a future one might) would leave the list silently short, and a
+ * short list is a wrong exported image. A slow correct export beats a fast wrong one, so an
+ * unreadable sheet gives up the optimization rather than the fidelity. */
+function refreshExportStyleProperties(): boolean {
+  const names = new Set<string>()
+  const sheets: CSSStyleSheet[] = [...document.styleSheets, ...document.adoptedStyleSheets]
+  for (const sheet of sheets) {
+    let rules: CSSRuleList
+    try {
+      rules = sheet.cssRules
+    } catch {
+      return false
+    }
+    collectRuleStyleProperties(rules, names)
+  }
+  for (const element of document.querySelectorAll('[style]')) {
+    const declarations = (element as HTMLElement).style
+    if (declarations === undefined) continue
+    for (let property = 0; property < declarations.length; property += 1) {
+      const name = declarations[property]
+      if (name !== undefined) names.add(name)
+    }
+  }
+  // An empty set means no stylesheet has been parsed yet, which is not a real answer about what
+  // the page declares -- capture with the full list rather than with nothing.
+  if (names.size === 0) return false
+  for (const name of names) {
+    if (!exportStyleProperties.includes(name)) exportStyleProperties.push(name)
+  }
+  return true
+}
+
+/** Test seam for `tests/app/export-png-style-properties.browser.test.ts`. Nothing in the app calls
+ * it.
+ *
+ * Returns the LIVE array rather than a copy, deliberately. That file's central assertion captures
+ * the same region twice in one page session, once through the derived list and once with the list
+ * widened back to the browser's full computed-property set, and asserts the two PNGs are
+ * byte-identical. Since html-to-image caches this array by reference, widening THIS instance is
+ * the only way to reach the library's default behavior after the cache is already seeded, which
+ * makes the reference capture possible at all. */
+export function exportStylePropertiesForTest(): { properties: string[]; complete: boolean } {
+  const complete = refreshExportStyleProperties()
+  return { properties: exportStyleProperties, complete }
+}
+
 /** SHARE-04/D-01/D-02/D-03: captures `region` (always `.screenshot-region`, T-08-02) at the fixed
  * export width and pixel ratio, with the frame applied as padding so the visible margin is part
  * of the exported image rather than cropped by it.
@@ -261,10 +398,14 @@ async function captureRegionAsPng(region: HTMLElement): Promise<Blob> {
       // result before it is encoded. `toBlob` is just `toCanvas` followed by an encode, so this
       // splits an existing step rather than adding one; see compositeLiveCanvases for why the
       // split is needed.
-      const canvas = await toCanvas(region, {
+      const captureOptions: NonNullable<Parameters<typeof toCanvas>[1]> = {
         pixelRatio: EXPORT_PIXEL_RATIO,
         filter: exportNodeFilter,
-      })
+      }
+      if (refreshExportStyleProperties()) {
+        captureOptions.includeStyleProperties = exportStyleProperties
+      }
+      const canvas = await toCanvas(region, captureOptions)
 
       const context = canvas.getContext('2d')
       if (context === null) {
@@ -287,8 +428,9 @@ async function captureRegionAsPng(region: HTMLElement): Promise<Blob> {
       //
       // For the record, since the measurement is counter-intuitive: that second buffer was NOT
       // what breached PERF-07a during this work. Disabling the composite and the background fill
-      // entirely left the PNG path's long task at exactly 52ms, unchanged. The cost was in how the
-      // library's canvas embedding is suppressed; see resolveTransparentPixelDataUrl.
+      // entirely left the PNG path's long task at exactly 52ms, unchanged, and direct phase
+      // instrumentation later put both at 0.0-0.1ms against a 49ms block. The cost was inside
+      // html-to-image's clone-and-serialize pipeline; see exportStyleProperties above.
       const previousOperation = context.globalCompositeOperation
       context.globalCompositeOperation = 'destination-over'
       try {
