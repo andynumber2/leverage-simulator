@@ -35,6 +35,7 @@ import {
   assertWithinBudget,
   checkBudget,
   escalationTriggered,
+  tryRecordMeasurements,
   type MeasurementRow,
 } from './report.ts'
 
@@ -118,10 +119,23 @@ test('PERF-07a/07b: max long task and max coalesced recompute during a real leve
     verdict: checkBudget({ normalizedMs: normalized07b, budgetMs: budget07b.thresholdMs }),
   }
 
+  // Recorded through the shared degrade-and-continue helper (bench/report.ts), not a bare
+  // `await commands.recordMeasurement(row)` in a loop: PERF-07a shares its (budgetId, source)
+  // slot with bench/perf-08-export.bench.test.ts, and Vitest's file execution order is not
+  // guaranteed (CI run 33026990805 ran that file first). A rejected attempt on one row must not
+  // prevent the other row in this same file from being attempted, which is exactly what the
+  // helper's per-row isolation proves.
   const rows: MeasurementRow[] = [row07a, row07b]
-  for (const row of rows) {
+  const recordAttempts = await tryRecordMeasurements(
+    (row) => commands.recordMeasurement(row),
+    rows,
+  )
+  const collisions = rows
+    .map((row, index) => ({ row, attempt: recordAttempts[index]! }))
+    .filter(({ attempt }) => !attempt.persisted)
+  for (const { row, attempt } of collisions) {
     // eslint-disable-next-line no-await-in-loop
-    await commands.recordMeasurement(row)
+    await commands.recordInfoLine(`${row.budgetId}-row-collision`, attempt.message ?? '')
   }
 
   // Per-row reproducibility disclosure, plus the drag's step count and the observed
@@ -138,7 +152,8 @@ test('PERF-07a/07b: max long task and max coalesced recompute during a real leve
       `normalizedMs=${normalized07a.toFixed(4)} calibrationScore=${score} ` +
       `longTaskCount=${timing.longTaskCount} stepCount=${timing.stepCount} ` +
       `recomputeCount=${timing.recomputeCount} ` +
-      `hardwareConcurrency=${timing.hardwareConcurrency}${perf07aZeroNote}`,
+      `hardwareConcurrency=${timing.hardwareConcurrency} ` +
+      `persisted=${recordAttempts[0]!.persisted}${perf07aZeroNote}`,
   )
   await commands.recordInfoLine(
     'PERF-07b-info',
@@ -146,6 +161,7 @@ test('PERF-07a/07b: max long task and max coalesced recompute during a real leve
       `normalizedMs=${normalized07b.toFixed(4)} calibrationScore=${score} ` +
       `stepCount=${timing.stepCount} recomputeCount=${timing.recomputeCount} ` +
       `hardwareConcurrency=${timing.hardwareConcurrency} ` +
+      `persisted=${recordAttempts[1]!.persisted} ` +
       `attributionLive=true attributionCounterfactualArmCount=${ATTRIBUTION_COUNTERFACTUAL_ARM_COUNT} ` +
       '(each recompute measured here includes computeAttribution\'s ' +
       `${ATTRIBUTION_COUNTERFACTUAL_ARM_COUNT} extra runBacktest calls, run inside the same ` +
