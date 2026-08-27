@@ -39,15 +39,16 @@ Status: All 8 roadmap phases complete. v1.0 milestone content is done.
   src/kernel/backtest.ts is byte-identical across all three measurement tasks. PERF-03 remains
   FAILED and is not claimed met. Only the two-consecutive-pass MERGE BAR was released, so the
   milestone stops blocking behind a budget no available lever can reach.
-Next: v1.0 milestone close. Outstanding: /gsd-secure-phase 8 (security enforcement active, no 08-SECURITY.md), and the branch is unpushed.
+Next: v1.0 milestone close, in progress 2026-08-27. Phase 8 is shipped and merged (PR #9, merge commit 8a4ad03); 08-SECURITY.md exists with threats_open: 0, 08-UAT.md is 26/26. Two post-merge defects were found by CI and fixed on the same branch: the PERF-07a bench recorder collision (quick-260827-0yo), which was also silently leaving PERF-07b unmeasured, and the PNG export long task (debug png-export-long-task-budget, 495 computed CSS properties copied per cloned element because getComputedStyle().cssText is empty per CSSOM; narrowed to 108 via includeStyleProperties). PERF-07a now passes on the 4-core CI baseline, so all four Phase 8 success criteria are met on real hardware rather than on a dev-sandbox reading. 07.1-VERIFICATION.md was written 2026-08-27 (it had never existed); it records 4/6, with criterion 2 (PERF-03) and criterion 5 (bench suite total runtime, 56141ms against a 30000ms cap) as measured fails.
   Requirements reconciled 2026-08-25: the eleven Phase 7 requirements that had read Pending only
   because PERF-03 held the phase open (PERF-04/05/06/09, METR-06, VIZ-01/02/03/04/06/09) are now
   marked complete against real evidence. PERF-04, 05, 06 and 09 measured verdict=pass,
   source=production, hardwareConcurrency=4 on CI run 32686531154 against the merged code; the
   rest rest on named test files, all present, with 819/819 unit and 170/170 app green.
-  v1.0 now owes exactly four requirements: SHARE-04, SHARE-05, SHARE-06 (all Phase 8), and
-  PERF-03, which stays unmet by decision.
-Last activity: 2026-08-26 — Phase 08 complete and verified; final phase of v1.0
+  Superseded 2026-08-27: SHARE-04, SHARE-05 and SHARE-06 are all Complete since the Phase 8
+  merge, so v1.0 now owes exactly ONE requirement, PERF-03, which stays unmet by decision.
+  71 of 72 requirements are Complete.
+Last activity: 2026-08-27, Phase 08 merged to main; v1.0 milestone audit underway
 
 Progress: [██████████] 100%  (8 of 8 roadmap phases complete, plus inserted phase 7.1)
 
